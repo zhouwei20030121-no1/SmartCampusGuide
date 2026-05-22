@@ -1,0 +1,2 @@
+# 公共核心区 — 统一异常处理、数据库配置、权限拦截器
+# Common: GlobalExceptionHandler, MyBatisConfig, AuthInterceptor

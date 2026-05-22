@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# UniApp
+unpackage/
+.hbuilderx/
+
+# Build output
+dist/
+build/
+target/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
