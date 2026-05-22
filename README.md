@@ -115,7 +115,7 @@ SmartCampusGuide/
 │   │   └── views/
 │   │       ├── dashboard/                          # 【贾丝楠】数据大屏
 │   │       │   └── Dashboard.vue                   #   统计卡片 + ECharts 趋势图
-│   │       ├── user/                               # 【贾丝楠】用户管理
+│   │       ├── user/                               # 【李卓尔】用户管理
 │   │       │   └── UserList.vue                    #   用户列表 CRUD
 │   │       ├── spot/                               # 【贾丝楠】景点管理
 │   │       │   └── SpotManage.vue                  #   景点 CRUD 表格
@@ -218,6 +218,8 @@ SmartCampusGuide/
             ├── vision_router.py                    #   /api/vision/recognize, /api/vision/scene-qa
             └── vision_service.py                   #   建筑识别 + 场景问答
 ```
+
+> **说明：** 以上目录结构仅供参考，具体开发中如有未考虑到的细小功能，可自行在对应模块下建立文件夹。注释中标注的负责人可能存在疏漏，请以 QQ 群中的《团队分工方案》和《功能文档》为准。
 
 ---
 
