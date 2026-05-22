@@ -54,10 +54,10 @@
 
 | 同学 | 业务域 | 负责功能模块 |
 |---|---|---|
-| **李卓尔** | 基础与LBS地图域 | 用户登录注册、地图展示、实时GPS定位、弱网离线缓存、数据大屏 |
-| **贾丝楠** | 业务内容与后台数据域 | 景点CRUD管理、多媒体讲解内容编辑、管理后台全页面、内容建设 |
-| **周玮** | 核心AI讲解与语音域 | 智能语音讲解、TTS语音合成触发、AI文案生成、打卡徽章、路线轨迹 |
-| **陈昱霖** | 智能体与创新交互域 | AI对话机器人(RAG)、AR多模态识别、智能路线规划、代码Review与合并 |
+| **李卓尔** | 基础与LBS地图域 | 用户登录注册、地图展示、实时GPS定位、弱网离线缓存 |
+| **贾丝楠** | 业务内容与后台数据域 | 管理后台全页面（数据大屏/用户管理/景点CRUD/内容编辑）、Flutter景点详情页、Java文件上传 |
+| **周玮** | 核心AI讲解与语音域 | 智能语音讲解(地理围栏触发)、AI文案生成+TTS多语种、打卡徽章、智能路线规划(寻路算法+轨迹线) |
+| **陈昱霖** | 智能体与创新交互域 | AI虚拟导游(RAG多轮对话)、AR多模态识别(CV建筑识别+AR标签)、代码Review与合并 |
 
 ---
 
@@ -95,8 +95,8 @@ SmartCampusGuide/
 │   │   │   │   └── chat_page.dart                  #   聊天 UI + RAG 接口
 │   │   │   ├── ar/                                 # 【陈昱霖】AR 识别
 │   │   │   │   └── ar_page.dart                    #   相机预览 + CV 识别
-│   │   │   ├── route/                              # 【陈昱霖】路线规划
-│   │   │   │   └── route_page.dart                 #   路线轨迹绘制
+│   │   │   ├── route/                              # 【周玮】路线规划
+│   │   │   │   └── route_page.dart                 #   寻路算法 + 轨迹绘制
 │   │   │   └── social/                             # 【周玮】打卡徽章
 │   │   │       └── checkin_page.dart               #   徽章 GridView
 │   │   └── shared/widgets/
@@ -170,7 +170,7 @@ SmartCampusGuide/
 │       │       │   ├── service/GuideContentService.java
 │       │       │   ├── service/impl/GuideContentServiceImpl.java
 │       │       │   └── controller/GuideContentController.java  # /guide/content
-│       │       ├── route/                          # 【陈昱霖】路线规划模块
+│       │       ├── route/                          # 【周玮】路线规划模块
 │       │       │   ├── entity/RoutePlan.java
 │       │       │   ├── mapper/RoutePlanMapper.java
 │       │       │   ├── service/RoutePlanService.java
@@ -236,8 +236,8 @@ SmartCampusGuide/
 | 景点 | DELETE | `/spot/{id}` | 贾丝楠 |
 | 讲解 | GET | `/guide/content/{spotId}` | 周玮 |
 | 讲解 | POST | `/guide/content` | 周玮 |
-| 路线 | POST | `/route/plan` | 陈昱霖 |
-| 路线 | GET | `/route/user/{userId}` | 陈昱霖 |
+| 路线 | POST | `/route/plan` | 周玮 |
+| 路线 | GET | `/route/user/{userId}` | 周玮 |
 | 评论 | POST | `/comment` | 周玮 |
 | 评论 | PUT | `/comment/review/{id}` | 周玮 |
 | 评论 | GET | `/comment/spot/{spotId}` | 周玮 |
