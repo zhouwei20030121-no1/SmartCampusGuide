@@ -2,10 +2,10 @@
 
 ## 一、核心技术栈
 
-### 📱 手机 APP 端 (UniApp)
-- **核心框架：** UniApp (Vue 3 语法)
-- **最终产物：** Android APP、iOS APP、微信小程序（三端合一）
-- **UI/特效：** 原生 CSS3（高斯模糊毛玻璃等科技感特效）
+### 📱 手机 APP 端 (Flutter)
+- **核心框架：** Flutter 3.44 + Dart 3.12
+- **最终产物：** Android APP、iOS APP（一套代码双端运行）
+- **UI/特效：** BackdropFilter 毛玻璃特效 + Material Design
 
 ### 💻 管理后台 Web 端 (Vue 3)
 - **核心框架：** Vue 3 + TypeScript
@@ -30,13 +30,13 @@
 
 | 角色 | 工具 | 用途 |
 |---|---|---|
-| 前端双端开发 | HBuilderX | UniApp 手机端编写与调试 |
+| 前端双端开发 | VS Code / Android Studio | Flutter 手机端编写与调试 |
 | Web 后台开发 | VS Code | Vue 3 管理后台编写 |
 | Java 后端开发 | IntelliJ IDEA | Spring Boot 核心业务逻辑 |
 | Python AI 开发 | PyCharm / VS Code | FastAPI 人工智能微服务 |
-| 团队协作 | Git | 代码版本管理（GitHub / Gitee） |
+| 团队协作 | Git | 代码版本管理（GitHub） |
 | API 联调 | Apifox | 接口文档管理与前后端联调 |
-| 基础环境 | Node.js v18+ | Vue 3 和 UniApp 运行环境 |
+| 基础环境 | JDK 17 / Node.js v18+ / Flutter 3.44 | 各端运行环境 |
 
 ---
 
@@ -61,19 +61,21 @@ SmartCampusGuide/
 ├── 团队分工方案.md
 ├── README.md
 │
-├── 📱 1_CampusApp_UniApp/                # 手机端 (HBuilderX 打开)
-│   ├── main.js                           # Vue3 启动入口
-│   ├── App.vue                           # 全局样式与生命周期
-│   ├── pages.json                        # 路由与导航栏配置
-│   ├── uni.scss                          # 全局 SCSS 变量
-│   ├── static/images/                    # 静态资源
-│   ├── components/                       # 公共组件库
-│   │   └── glass-card/                   # 磨砂玻璃卡片
-│   └── pages/
-│       ├── user_map/                     # 同学A：登录 + 地图
-│       ├── spot_content/                 # 同学B：景点详情
-│       ├── smart_guide/                  # 同学C：语音播报 + 打卡
-│       └── agent_ar/                     # 同学D：聊天 + AR
+├── 📱 1_CampusApp_Flutter/                 # 手机端 (VS Code / Android Studio 打开)
+│   ├── lib/
+│   │   ├── main.dart                       # Flutter 启动入口与路由
+│   │   ├── theme/app_theme.dart            # 全局主题色配置
+│   │   ├── widgets/glass_card.dart         # 毛玻璃卡片组件
+│   │   └── pages/
+│   │       ├── login_page.dart             # 登录页
+│   │       └── register_page.dart          # 注册页
+│   │       ├── user_map/                   # 同学A：地图 + 定位（待开发）
+│   │       ├── spot_content/               # 同学B：景点详情（待开发）
+│   │       ├── smart_guide/                # 同学C：语音播报 + 打卡（待开发）
+│   │       └── agent_ar/                   # 同学D：聊天 + AR（待开发）
+│   ├── android/                            # Android 原生配置
+│   ├── ios/                                # iOS 原生配置
+│   └── pubspec.yaml                        # Flutter 依赖管理
 │
 ├── 💻 2_AdminWeb_Vue/                    # Web后台 (VS Code 打开)
 │   └── src/views/
@@ -197,10 +199,22 @@ test: 测试相关
 
 ## 六、快速启动
 
-### 手机 APP 端
+### 手机 APP 端（Flutter）
 ```bash
-# 用 HBuilderX 打开 1_CampusApp_UniApp 目录
-# 运行 → 运行到浏览器 → Chrome
+cd 1_CampusApp_Flutter
+
+# 国内网络环境需先设置镜像（建议加入系统环境变量）
+export PUB_HOSTED_URL=https://pub.flutter-io.cn
+export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
+
+# 安装依赖
+flutter pub get
+
+# 运行到已连接的设备/模拟器
+flutter run
+
+# 或编译 Android APK
+flutter build apk --debug
 ```
 
 ### Web 管理后台
