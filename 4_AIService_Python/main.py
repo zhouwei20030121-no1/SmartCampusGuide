@@ -2,8 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from modules.dynamic_tts.tts_router import router as tts_router
-from modules.agent_vision.vision_router import router as vision_router
+from modules.tts.tts_router import router as tts_router
+from modules.rag.rag_router import router as rag_router
+from modules.vision.vision_router import router as vision_router
 
 app = FastAPI(title="智慧校园导览 - AI 微服务", version="1.0.0")
 
@@ -16,7 +17,8 @@ app.add_middleware(
 )
 
 app.include_router(tts_router, prefix="/api/tts", tags=["TTS语音合成"])
-app.include_router(vision_router, prefix="/api/vision", tags=["AI视觉与RAG"])
+app.include_router(rag_router, prefix="/api/rag", tags=["RAG知识库"])
+app.include_router(vision_router, prefix="/api/vision", tags=["AI视觉识别"])
 
 
 @app.get("/")

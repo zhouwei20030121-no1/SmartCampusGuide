@@ -23,17 +23,25 @@
           <el-icon><Location /></el-icon>
           <span>景点管理</span>
         </el-menu-item>
-        <el-menu-item index="/tts-config">
-          <el-icon><Microphone /></el-icon>
-          <span>TTS 配置</span>
+        <el-menu-item index="/content">
+          <el-icon><EditPen /></el-icon>
+          <span>内容编辑</span>
         </el-menu-item>
-        <el-menu-item index="/corpus">
-          <el-icon><Document /></el-icon>
-          <span>语料库管理</span>
+        <el-menu-item index="/guide-config">
+          <el-icon><Microphone /></el-icon>
+          <span>讲解配置</span>
+        </el-menu-item>
+        <el-menu-item index="/routes">
+          <el-icon><MapLocation /></el-icon>
+          <span>路线管理</span>
         </el-menu-item>
         <el-menu-item index="/comments">
           <el-icon><ChatLineSquare /></el-icon>
           <span>评论审核</span>
+        </el-menu-item>
+        <el-menu-item index="/corpus">
+          <el-icon><Document /></el-icon>
+          <span>语料库管理</span>
         </el-menu-item>
       </el-menu>
     </el-aside>

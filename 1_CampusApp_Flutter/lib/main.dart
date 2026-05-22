@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'theme/app_theme.dart';
-import 'pages/login_page.dart';
+import 'features/user/login_page.dart';
+import 'core/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,7 +24,8 @@ class SmartCampusApp extends StatelessWidget {
       title: '西大智能导览',
       theme: AppTheme.theme,
       debugShowCheckedModeBanner: false,
-      home: const LoginPage(),
+      initialRoute: '/login',
+      onGenerateRoute: AppRouter.generateRoute,
     );
   }
 }
