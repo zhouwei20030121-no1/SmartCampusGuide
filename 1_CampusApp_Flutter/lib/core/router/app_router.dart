@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../features/user/login_page.dart';
-import '../features/user/register_page.dart';
-import '../features/user/profile_page.dart';
-import '../features/map/map_page.dart';
-import '../features/spot/spot_detail_page.dart';
-import '../features/guide/guide_page.dart';
-import '../features/chat/chat_page.dart';
-import '../features/ar/ar_page.dart';
-import '../features/route/route_page.dart';
-import '../features/social/checkin_page.dart';
+import '../../features/user/login_page.dart';
+import '../../features/user/register_page.dart';
+import '../../features/user/profile_page.dart';
+import '../../features/map/map_page.dart';
+import '../../features/spot/spot_detail_page.dart';
+import '../../features/guide/guide_page.dart';
+import '../../features/chat/chat_page.dart';
+import '../../features/ar/ar_page.dart';
+import '../../features/route/route_page.dart';
+import '../../features/social/checkin_page.dart';
 
 class AppRouter {
   static const String login = '/login';
