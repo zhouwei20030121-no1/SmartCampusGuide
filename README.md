@@ -61,40 +61,117 @@ SmartCampusGuide/
 ├── 团队分工方案.md
 ├── README.md
 │
-├── 📱 1_CampusApp_Flutter/                 # 手机端 (VS Code / Android Studio 打开)
+├── 📱 1_CampusApp_Flutter/                         # 手机端 (VS Code / Android Studio 打开)
 │   ├── lib/
-│   │   ├── main.dart                       # Flutter 启动入口与路由
-│   │   ├── theme/app_theme.dart            # 全局主题色配置
-│   │   ├── widgets/glass_card.dart         # 毛玻璃卡片组件
+│   │   ├── main.dart                               # Flutter 启动入口与路由
+│   │   ├── theme/
+│   │   │   └── app_theme.dart                      # 全局主题色配置（智慧蓝 #4A90E2）
+│   │   ├── widgets/
+│   │   │   └── glass_card.dart                     # 毛玻璃卡片组件（BackdropFilter）
 │   │   └── pages/
-│   │       ├── login_page.dart             # 登录页
-│   │       └── register_page.dart          # 注册页
-│   │       ├── user_map/                   # 同学A：地图 + 定位（待开发）
-│   │       ├── spot_content/               # 同学B：景点详情（待开发）
-│   │       ├── smart_guide/                # 同学C：语音播报 + 打卡（待开发）
-│   │       └── agent_ar/                   # 同学D：聊天 + AR（待开发）
-│   ├── android/                            # Android 原生配置
-│   ├── ios/                                # iOS 原生配置
-│   └── pubspec.yaml                        # Flutter 依赖管理
+│   │       ├── login_page.dart                     # 登录页（账号密码 + 跳转注册）
+│   │       └── register_page.dart                  # 注册页（学号/手机号注册）
+│   ├── android/                                    # Android 原生配置（Gradle 国内镜像已配）
+│   ├── ios/                                        # iOS 原生配置
+│   ├── test/
+│   │   └── widget_test.dart                        # 基础 Widget 测试
+│   └── pubspec.yaml                                # Flutter 依赖管理
 │
-├── 💻 2_AdminWeb_Vue/                    # Web后台 (VS Code 打开)
-│   └── src/views/
-│       ├── user_sys/                     # 同学A：用户管理
-│       ├── content_sys/                  # 同学B：数据大屏 + 景点CRUD
-│       ├── ai_config/                    # 同学C：TTS配置 + 语料库
-│       └── interactive_sys/              # 同学D：评论审核
+├── 💻 2_AdminWeb_Vue/                              # Web后台 (VS Code 打开)
+│   ├── index.html                                  # HTML 入口
+│   ├── vite.config.ts                              # Vite 配置（含 /api 代理到 :8080）
+│   ├── tsconfig.json                               # TypeScript 配置
+│   ├── package.json                                # 依赖：Vue3 + Element Plus + ECharts
+│   └── src/
+│       ├── main.ts                                 # 应用入口（注册 Pinia/Router/ElementPlus）
+│       ├── App.vue                                 # 根组件
+│       ├── env.d.ts                                # TypeScript 类型声明
+│       ├── router/
+│       │   └── index.ts                            # 路由配置（Dashboard/Users/Spots 等）
+│       ├── api/
+│       │   └── request.ts                          # Axios 封装（统一拦截 + Token 注入）
+│       ├── layouts/
+│       │   └── MainLayout.vue                      # 主布局（侧边栏 + 顶栏 + 内容区）
+│       ├── styles/
+│       │   └── global.scss                         # 全局样式
+│       └── views/
+│           ├── user_sys/
+│           │   └── UserList.vue                    # 同学A：用户列表管理
+│           ├── content_sys/
+│           │   ├── Dashboard.vue                   # 同学B：数据大屏（统计卡片 + ECharts）
+│           │   └── SpotManage.vue                  # 同学B：景点 CRUD 管理
+│           ├── ai_config/
+│           │   ├── TTSConfig.vue                   # 同学C：TTS 语音引擎配置
+│           │   └── CorpusManage.vue                # 同学C：AI 语料库管理
+│           └── interactive_sys/
+│               └── CommentReview.vue               # 同学D：评论审核（通过/驳回）
 │
-├── ⚙️ 3_Backend_Java/                   # Java后端 (IDEA 打开)
-│   └── src/main/java/com/swu/guide/modules/
-│       ├── user_lbs/                     # 同学A：用户鉴权 + 坐标
-│       ├── spot_manage/                  # 同学B：景点数据 + 上传
-│       ├── trigger_event/                # 同学C：Geofence 触发
-│       └── route_social/                 # 同学D：路线规划 + 评论
+├── ⚙️ 3_Backend_Java/                              # Java后端 (IDEA 打开)
+│   ├── pom.xml                                     # Maven：Spring Boot 3 + MyBatis-Plus + Redis + JWT
+│   └── src/
+│       ├── main/
+│       │   ├── java/com/swu/guide/
+│       │   │   ├── GuideApplication.java           # Spring Boot 启动类
+│       │   │   ├── config/
+│       │   │   │   ├── CorsConfig.java             # 跨域配置
+│       │   │   │   └── MyBatisPlusConfig.java      # MyBatis-Plus 分页插件
+│       │   │   ├── common/
+│       │   │   │   ├── Result.java                 # 统一响应体 {code, message, data}
+│       │   │   │   ├── BaseEntity.java             # 实体基类（createTime, updateTime）
+│       │   │   │   └── exception/
+│       │   │   │       └── GlobalExceptionHandler.java  # 全局异常处理
+│       │   │   └── modules/
+│       │   │       ├── user_lbs/                   # 同学A：用户鉴权 + 坐标
+│       │   │       │   ├── entity/User.java
+│       │   │       │   ├── mapper/UserMapper.java
+│       │   │       │   ├── service/UserService.java
+│       │   │       │   ├── service/impl/UserServiceImpl.java
+│       │   │       │   └── controller/UserController.java  # /user/login, /user/register
+│       │   │       ├── spot_manage/                # 同学B：景点数据 + 上传
+│       │   │       │   ├── entity/Spot.java
+│       │   │       │   ├── mapper/SpotMapper.java
+│       │   │       │   ├── service/SpotService.java
+│       │   │       │   ├── service/impl/SpotServiceImpl.java
+│       │   │       │   └── controller/SpotController.java  # CRUD: /spot
+│       │   │       ├── trigger_event/              # 同学C：Geofence 触发
+│       │   │       │   ├── entity/GeofenceEvent.java
+│       │   │       │   ├── mapper/GeofenceEventMapper.java
+│       │   │       │   ├── service/GeofenceService.java
+│       │   │       │   ├── service/impl/GeofenceServiceImpl.java
+│       │   │       │   └── controller/TriggerController.java  # /trigger/check
+│       │   │       └── route_social/               # 同学D：路线规划 + 评论
+│       │   │           ├── entity/RoutePlan.java
+│       │   │           ├── entity/Comment.java
+│       │   │           ├── mapper/RoutePlanMapper.java
+│       │   │           ├── mapper/CommentMapper.java
+│       │   │           ├── service/RouteService.java
+│       │   │           ├── service/CommentService.java
+│       │   │           ├── service/impl/RouteServiceImpl.java
+│       │   │           ├── service/impl/CommentServiceImpl.java
+│       │   │           ├── controller/RouteController.java    # CRUD: /route
+│       │   │           └── controller/CommentController.java  # 审核: /comment
+│       │   └── resources/
+│       │       ├── application.yml                 # 数据源/Redis/MyBatis-Plus/AI服务地址
+│       │       └── mapper/                         # MyBatis XML（可选）
+│       └── test/java/com/swu/guide/               # 单元测试
 │
-└── 🧠 4_AIService_Python/               # AI微服务 (PyCharm 打开)
+└── 🧠 4_AIService_Python/                          # AI微服务 (PyCharm 打开)
+    ├── main.py                                     # FastAPI 入口（含 CORS 中间件）
+    ├── config.py                                   # 环境变量配置（OpenAI/Chroma/TTS密钥）
+    ├── requirements.txt                            # 依赖：FastAPI + LangChain + Chroma + OpenAI
+    ├── core_utils/
+    │   ├── __init__.py
+    │   └── response.py                             # 统一响应：ApiResponse
     └── modules/
-        ├── dynamic_tts/                  # 同学C：文案生成 + TTS
-        └── agent_vision/                 # 同学D：RAG检索 + CV
+        ├── __init__.py
+        ├── dynamic_tts/                            # 同学C：文案生成 + TTS 语音合成
+        │   ├── __init__.py
+        │   ├── tts_router.py                       # /api/tts/synthesize, /api/tts/generate-script
+        │   └── tts_service.py                      # TTS 合成 + LLM 文案生成逻辑
+        └── agent_vision/                           # 同学D：RAG 检索 + 多模态识别
+            ├── __init__.py
+            ├── vision_router.py                    # /api/vision/chat, /api/vision/recognize
+            └── rag_service.py                      # LangChain RAG + 视觉模型调用
 ```
 
 ---
