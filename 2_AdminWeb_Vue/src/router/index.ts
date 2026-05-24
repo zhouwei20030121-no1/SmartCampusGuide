@@ -3,9 +3,16 @@ import MainLayout from '@/layouts/MainLayout.vue'
 
 const routes = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/auth/LoginPage.vue'),
+    meta: { title: '登录 - SWU Guide Admin' },
+  },
+  {
     path: '/',
     component: MainLayout,
     redirect: '/dashboard',
+    meta: { requiresAuth: true },
     children: [
       {
         path: 'dashboard',
@@ -62,6 +69,17 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes,
+})
+
+// 路由守卫：未登录跳转到登录页
+router.beforeEach((to, _from) => {
+  const token = localStorage.getItem('token')
+  if (to.meta.requiresAuth && !token) {
+    return '/login'
+  }
+  if (to.path === '/login' && token) {
+    return '/dashboard'
+  }
 })
 
 export default router

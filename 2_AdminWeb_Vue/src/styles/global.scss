@@ -1,7 +1,15 @@
-body {
+* {
   margin: 0;
   padding: 0;
+  box-sizing: border-box;
+}
+body {
   font-size: 14px;
-  color: #2C3E50;
+  color: #1e293b;
   -webkit-font-smoothing: antialiased;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+#app {
+  width: 100vw;
+  height: 100vh;
 }

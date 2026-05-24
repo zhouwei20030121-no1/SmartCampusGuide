@@ -1,109 +1,197 @@
 <template>
-  <el-container class="layout">
-    <el-aside width="220px" class="sidebar">
-      <div class="logo">
-        <span>西大智能导览</span>
-      </div>
-      <el-menu
-        :default-active="activeMenu"
-        router
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#4A90E2"
-      >
-        <el-menu-item index="/dashboard">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>数据大屏</span>
-        </el-menu-item>
-        <el-menu-item index="/users">
-          <el-icon><User /></el-icon>
-          <span>用户管理</span>
-        </el-menu-item>
-        <el-menu-item index="/spots">
-          <el-icon><Location /></el-icon>
-          <span>景点管理</span>
-        </el-menu-item>
-        <el-menu-item index="/content">
-          <el-icon><EditPen /></el-icon>
-          <span>内容编辑</span>
-        </el-menu-item>
-        <el-menu-item index="/guide-config">
-          <el-icon><Microphone /></el-icon>
-          <span>讲解配置</span>
-        </el-menu-item>
-        <el-menu-item index="/routes">
-          <el-icon><MapLocation /></el-icon>
-          <span>路线管理</span>
-        </el-menu-item>
-        <el-menu-item index="/comments">
-          <el-icon><ChatLineSquare /></el-icon>
-          <span>评论审核</span>
-        </el-menu-item>
-        <el-menu-item index="/corpus">
-          <el-icon><Document /></el-icon>
-          <span>语料库管理</span>
-        </el-menu-item>
-      </el-menu>
-    </el-aside>
+  <div class="layout">
+    <!-- 背景 -->
+    <img class="global-bg" src="/images/bg.jpg" alt="bg" />
+    <div class="bg-mask"></div>
 
-    <el-container>
-      <el-header class="header">
-        <span class="page-title">{{ route.meta.title }}</span>
-        <el-dropdown>
-          <span class="user-info">
-            <el-icon><UserFilled /></el-icon> 管理员
-          </span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </el-header>
-      <el-main class="main-content">
-        <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
+    <!-- 顶部导航栏 -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="logo-circle">西大</div>
+        <span class="topbar-title">SWU Guide 管理后台</span>
+      </div>
+      <nav class="topbar-nav">
+        <router-link
+          v-for="item in navItems"
+          :key="item.path"
+          :to="item.path"
+          class="nav-item"
+          active-class="nav-active"
+        >
+          {{ item.label }}
+        </router-link>
+      </nav>
+      <div class="topbar-right">
+        <span class="admin-name">Admin_周玮</span>
+        <button class="logout-btn" @click="handleLogout">退出</button>
+      </div>
+    </header>
+
+    <!-- 内容区 -->
+    <main class="main-content">
+      <router-view />
+    </main>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRouter } from 'vue-router'
 
-const route = useRoute()
-const activeMenu = computed(() => route.path)
+const router = useRouter()
+
+const navItems = [
+  { label: '数据大屏', path: '/dashboard' },
+  { label: '景点管理', path: '/spots' },
+  { label: '用户管理', path: '/users' },
+  { label: '内容编辑', path: '/content' },
+  { label: '路线管理', path: '/routes' },
+  { label: '评论审核', path: '/comments' },
+  { label: '语料库', path: '/corpus' },
+]
 
 const handleLogout = () => {
   localStorage.removeItem('token')
-  window.location.reload()
+  router.replace('/login')
 }
 </script>
 
 <style scoped>
-.layout { height: 100vh; }
-.sidebar { background-color: #304156; overflow: hidden; }
-.logo {
-  height: 60px;
+.layout {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-size: 18px;
-  font-weight: bold;
-  letter-spacing: 2px;
-  border-bottom: 1px solid rgba(255,255,255,.1);
+  flex-direction: column;
+  overflow: hidden;
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
-.sidebar .el-menu { border-right: none; }
-.header {
-  background: #fff;
+
+/* ─── 背景 ─── */
+.global-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -2;
+}
+.bg-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(224, 242, 254, 0.5), rgba(186, 230, 253, 0.35));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: -1;
+}
+
+/* ─── 顶部导航 ─── */
+.topbar {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  box-shadow: 0 1px 4px rgba(0,0,0,.08);
-  padding: 0 20px;
+  align-items: center;
+  padding: 0 32px;
+  height: 64px;
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 2px 16px rgba(31, 38, 135, 0.06);
+  flex-shrink: 0;
+  z-index: 10;
 }
-.page-title { font-size: 16px; font-weight: 600; color: #2C3E50; }
-.user-info { cursor: pointer; display: flex; align-items: center; gap: 4px; color: #666; }
-.main-content { background: #f0f2f5; min-height: calc(100vh - 60px); }
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-circle {
+  width: 36px;
+  height: 36px;
+  background: #1A5276;
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 36px;
+  text-align: center;
+  border-radius: 50%;
+}
+
+.topbar-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1A5276;
+  letter-spacing: 1px;
+}
+
+.topbar-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-item {
+  padding: 8px 18px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #475569;
+  text-decoration: none;
+  transition: all 0.3s;
+}
+
+.nav-item:hover {
+  background: rgba(26, 82, 118, 0.08);
+  color: #1A5276;
+}
+
+.nav-active {
+  background: #1A5276;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(26, 82, 118, 0.25);
+}
+
+.nav-active:hover {
+  background: #144266;
+  color: #fff;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.admin-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.logout-btn {
+  padding: 6px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(26, 82, 118, 0.3);
+  background: rgba(255, 255, 255, 0.6);
+  color: #1A5276;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.logout-btn:hover {
+  background: #1A5276;
+  color: #fff;
+}
+
+/* ─── 主内容区 ─── */
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+}
 </style>
