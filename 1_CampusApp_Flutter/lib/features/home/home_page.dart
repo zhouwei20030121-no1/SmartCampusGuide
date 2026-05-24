@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
 
@@ -13,53 +12,47 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _currentTab = 0;
-  static const _tabLabels = ['首页', '我的行程', '智能语音', 'AR导览'];
-  static const _tabIcons = [Icons.home_rounded, Icons.map_rounded, Icons.mic_rounded, Icons.view_in_ar_rounded];
+  int _currentIndex = 0;
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
+    return Scaffold(
+      extendBody: true,
+      body: Stack(
+        children: [
+          _buildBackground(),
+          SafeArea(
+            bottom: false,
+            child: Column(
+              children: [
+                _buildTopHeader(),
+                Expanded(child: _buildBodyContent()),
+              ],
+            ),
+          ),
+        ],
       ),
-      child: Scaffold(
-        body: Stack(
-          children: [
-            _buildBackground(),
-            _buildHeader(),
-            _buildContent(),
-            _buildBottomNav(),
-          ],
-        ),
-      ),
+      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
-  // ─── 背景层：图片 + 双层模糊蒙版 ───
+  // ─── 背景层 ───
   Widget _buildBackground() {
     return Stack(
       children: [
         Positioned.fill(
-          child: Image.asset('assets/images/bg.jpg', fit: BoxFit.cover),
+          child: Image.asset(
+            'assets/images/bg.jpg',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                Container(color: AppTheme.pageBg),
+          ),
         ),
         Positioned.fill(
-          child: ClipRect(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0x72E0F2FE),
-                      Color(0x4DBAE6FD),
-                    ],
-                  ),
-                ),
-              ),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              color: const Color(0xFFE0F2FE).withValues(alpha: 0.45),
             ),
           ),
         ),
@@ -67,467 +60,279 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // ─── 顶部标题 ───
-  Widget _buildHeader() {
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 40,
-      left: 30,
-      right: 30,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+  // ─── 顶部：校徽 + 搜索框 ───
+  Widget _buildTopHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
         children: [
-          Text('SWU Guide',
-              style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.darkBlue,
-                  letterSpacing: 1)),
-          const SizedBox(height: 4),
-          Text('Smart Campus Guide',
-              style: TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.darkBlue.withValues(alpha: 0.6),
-                  letterSpacing: 3)),
-        ],
-      ),
-    );
-  }
-
-  // ─── 中间内容区（根据标签切换） ──
-  Widget _buildContent() {
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 160,
-      left: 0,
-      right: 0,
-      bottom: 130,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 300),
-        child: KeyedSubtree(
-          key: ValueKey(_currentTab),
-          child: _buildTabContent(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTabContent() {
-    switch (_currentTab) {
-      case 0:
-        return _TabHome();
-      case 1:
-        return _TabTrip();
-      case 2:
-        return _TabVoice();
-      case 3:
-        return _TabAR();
-      default:
-        return _TabHome();
-    }
-  }
-
-  // ─── 底部毛玻璃导航栏 ───
-  Widget _buildBottomNav() {
-    return Positioned(
-      bottom: 30,
-      left: 30,
-      right: 30,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            height: 90,
+          // 左侧校徽
+          Container(
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.4),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
-              borderRadius: BorderRadius.circular(28),
+              color: Colors.white.withValues(alpha: 0.9),
+              shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 20,
-                    offset: const Offset(0, 5)),
+                    blurRadius: 8),
               ],
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(4, (i) {
-                final active = _currentTab == i;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() => _currentTab = i);
-                    HapticFeedback.lightImpact();
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(_tabIcons[i],
-                            size: 26,
-                            color: active
-                                ? AppTheme.primary
-                                : AppTheme.textSub.withValues(alpha: 0.6)),
-                        const SizedBox(height: 4),
-                        Text(_tabLabels[i],
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight:
-                                    active ? FontWeight.w700 : FontWeight.w500,
-                                color: active
-                                    ? AppTheme.primary
-                                    : AppTheme.textSub.withValues(alpha: 0.6))),
-                      ],
-                    ),
-                  ),
-                );
-              }),
+            child: const Center(
+              child: Text('西大',
+                  style: TextStyle(
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════
-//  标签页 0：首页
-// ══════════════════════════════════════════════
-class _TabHome extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 30),
-      child: Column(
-        children: [
-          _GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('欢迎来到西南大学',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text('晴 26℃ | 校园空气质量：优',
-                    style: TextStyle(fontSize: 13, color: AppTheme.textSub)),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          _GlassCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('热门景点推荐',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.darkBlue)),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: ['樟树林', '三号运动场', '东方红广场']
-                      .map((s) => Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 18, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: Text(s,
-                                style: const TextStyle(
-                                    color: AppTheme.primary,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13)),
-                          ))
-                      .toList(),
-                ),
-                const SizedBox(height: 16),
-                Text('点击下方导航标签，开启全方位智慧校园探索体验。',
-                    style: TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.darkBlue.withValues(alpha: 0.8),
-                        height: 1.5)),
-              ],
+          const SizedBox(width: 12),
+          // 搜索框
+          Expanded(
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.75),
+                borderRadius: BorderRadius.circular(20),
+                border:
+                    Border.all(color: Colors.white.withValues(alpha: 0.8)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.search,
+                      color: Colors.black54.withValues(alpha: 0.7),
+                      size: 20),
+                  const SizedBox(width: 8),
+                  Text('搜索校园景点、服务...',
+                      style: TextStyle(
+                          color: Colors.black54.withValues(alpha: 0.7),
+                          fontSize: 14)),
+                ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
-}
 
-// ══════════════════════════════════════════════
-//  标签页 1：我的行程
-// ══════════════════════════════════════════════
-class _TabTrip extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 30),
-      child: _GlassCard(
+  // ─── 主体内容 ───
+  Widget _buildBodyContent() {
+    if (_currentIndex != 0) {
+      return Center(
+        child: Text('正在开发中...',
+            style: TextStyle(
+                fontSize: 18,
+                color: AppTheme.darkBlue.withValues(alpha: 0.6))),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.only(
+          left: 16, right: 16, top: 10, bottom: 120),
+      children: [
+        // Banner
+        _buildBanner(),
+        const SizedBox(height: 24),
+        // 金刚区
+        _buildGridNav(),
+        const SizedBox(height: 24),
+        // 热门推荐
+        _buildHotSpots(),
+      ],
+    );
+  }
+
+  // ─── Banner 轮播占位 ───
+  Widget _buildBanner() {
+    return Container(
+      height: 150,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.primary.withValues(alpha: 0.85),
+            AppTheme.lightBlue.withValues(alpha: 0.85),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+              color: AppTheme.primary.withValues(alpha: 0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 4)),
+        ],
+      ),
+      child: const Center(
+        child: Text('西大风光 Banner',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold)),
+      ),
+    );
+  }
+
+  // ─── 金刚区（小程序风格宫格导航） ──
+  Widget _buildGridNav() {
+    final items = [
+      (_GridItem(Icons.map_outlined, '校园地图')),
+      (_GridItem(Icons.camera_alt_outlined, '景点打卡')),
+      (_GridItem(Icons.directions_bus_outlined, '校车时刻')),
+      (_GridItem(Icons.restaurant_outlined, '食堂服务')),
+      (_GridItem(Icons.menu_book_outlined, '图书馆')),
+      (_GridItem(Icons.event_outlined, '校园活动')),
+      (_GridItem(Icons.support_agent_outlined, '智能导览')),
+      (_GridItem(Icons.qr_code_scanner_outlined, 'AR扫一扫')),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
+      ),
+      child: Wrap(
+        spacing: 20,
+        runSpacing: 24,
+        alignment: WrapAlignment.spaceAround,
+        children: items.map((item) => _buildGridButton(item)).toList(),
+      ),
+    );
+  }
+
+  Widget _buildGridButton(_GridItem item) {
+    return SizedBox(
+      width: 64,
+      child: InkWell(
+        onTap: () {},
+        borderRadius: BorderRadius.circular(12),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('今日游览路线',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.darkBlue)),
-            const SizedBox(height: 20),
-            _timeline('09:30', '校门出发 → 乘校车前往物理学院'),
-            _timeline('11:00', '中心图书馆 → 借阅学术期刊'),
-            _timeline('14:30', '东方红广场 → 参加校园文化节'),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(item.icon, color: AppTheme.primary, size: 28),
+            ),
+            const SizedBox(height: 8),
+            Text(item.label,
+                style: const TextStyle(
+                    fontSize: 12, color: AppTheme.textMain)),
           ],
         ),
       ),
     );
   }
 
-  Widget _timeline(String time, String info) {
+  // ─── 热门推荐 ───
+  Widget _buildHotSpots() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('📍 热门推荐',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textMain)),
+          const SizedBox(height: 16),
+          _buildSpotTile('樟树林', '漫步天然氧吧，感受百年学府底蕴'),
+          _buildSpotTile('三号运动场', '挥洒汗水，体验活力校园风情'),
+          _buildSpotTile('东方红广场', '学校核心地标，伟人雕像前打卡'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSpotTile(String title, String subtitle) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         children: [
-          SizedBox(
+          Container(
             width: 60,
-            child: Text(time,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.primary,
-                    fontSize: 15)),
+            height: 60,
+            decoration: BoxDecoration(
+              color: AppTheme.lightBlue.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.landscape, color: AppTheme.primary),
           ),
+          const SizedBox(width: 12),
           Expanded(
-              child: Text(info,
-                  style: const TextStyle(
-                      color: AppTheme.textMain, fontSize: 15))),
-        ],
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════
-//  标签页 2：智能语音
-// ══════════════════════════════════════════════
-class _TabVoice extends StatefulWidget {
-  @override
-  State<_TabVoice> createState() => _TabVoiceState();
-}
-
-class _TabVoiceState extends State<_TabVoice>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 800),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 30),
-      child: _GlassCard(
-        child: Column(
-          children: [
-            const Text('西小导 智能播报',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.darkBlue)),
-            const SizedBox(height: 24),
-            // 音频波形动画
-            AnimatedBuilder(
-              animation: _ctrl,
-              builder: (_, child) {
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [0, 0.2, 0.4, 0.1].map((delay) {
-                    final h = 20 +
-                        (_ctrl.value *
-                            (40 + delay * 40) *
-                            (1 - delay).clamp(0.3, 1.0));
-                    return Container(
-                      width: 5,
-                      height: h,
-                      margin: const EdgeInsets.symmetric(horizontal: 5),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: AppTheme.textMain)),
+                const SizedBox(height: 6),
+                Text(subtitle,
+                    style: const TextStyle(
+                        fontSize: 13, color: AppTheme.textSub),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ],
             ),
-            const SizedBox(height: 20),
-            Text('正在实时检索知识库，准备为您播报当前建筑历史...',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.darkBlue.withValues(alpha: 0.8))),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ══════════════════════════════════════════════
-//  标签页 3：AR导览
-// ══════════════════════════════════════════════
-class _TabAR extends StatefulWidget {
-  @override
-  State<_TabAR> createState() => _TabARState();
-}
-
-class _TabARState extends State<_TabAR>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _scanCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _scanCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _scanCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 30),
-      child: _GlassCard(
-        child: Column(
-          children: [
-            const Text('AR 实景透视模式',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.darkBlue)),
-            const SizedBox(height: 24),
-            // AR 扫描线
-            Container(
-              height: 100,
-              decoration: BoxDecoration(
-                color: AppTheme.darkBlue.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: AnimatedBuilder(
-                  animation: _scanCtrl,
-                  builder: (_, child) {
-                    return CustomPaint(
-                      painter: _ScanLinePainter(_scanCtrl.value),
-                      size: const Size(double.infinity, 100),
-                    );
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text('请将摄像头对准校园建筑物以识别故事。',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 13,
-                    color: AppTheme.darkBlue.withValues(alpha: 0.8))),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ScanLinePainter extends CustomPainter {
-  final double progress;
-  _ScanLinePainter(this.progress);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          AppTheme.primary.withValues(alpha: 0),
-          AppTheme.primary.withValues(alpha: 0.6),
-          AppTheme.primary.withValues(alpha: 0),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-
-    final y = progress * size.height;
-    canvas.drawRect(
-        Rect.fromLTWH(0, y - 1, size.width, 2), paint);
-    canvas.drawRect(
-        Rect.fromLTWH(0, y - 8, size.width, 16),
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppTheme.primary.withValues(alpha: 0),
-              AppTheme.primary.withValues(alpha: 0.15),
-              AppTheme.primary.withValues(alpha: 0),
-            ],
-          ).createShader(Rect.fromLTWH(0, y - 8, size.width, 16)));
-  }
-
-  @override
-  bool shouldRepaint(covariant _ScanLinePainter old) =>
-      old.progress != progress;
-}
-
-// ══════════════════════════════════════════════
-//  共享毛玻璃卡片
-// ══════════════════════════════════════════════
-class _GlassCard extends StatelessWidget {
-  final Widget child;
-  const _GlassCard({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.38),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.55)),
-            borderRadius: BorderRadius.circular(22),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4)),
-            ],
           ),
-          child: child,
+        ],
+      ),
+    );
+  }
+
+  // ─── 底部导航栏（吸底 + 加白） ───
+  Widget _buildBottomNav() {
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          color: Colors.white.withValues(alpha: 0.92),
+          child: SafeArea(
+            child: BottomNavigationBar(
+              currentIndex: _currentIndex,
+              onTap: (index) => setState(() => _currentIndex = index),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: AppTheme.primary,
+              unselectedItemColor: Colors.black45,
+              selectedFontSize: 12,
+              unselectedFontSize: 12,
+              items: const [
+                BottomNavigationBarItem(
+                    icon: Icon(Icons.home_rounded), label: '首页'),
+                BottomNavigationBarItem(
+                    icon: Icon(Icons.map_rounded), label: '我的行程'),
+                BottomNavigationBarItem(
+                    icon: Icon(Icons.record_voice_over), label: '智能语音'),
+                BottomNavigationBarItem(
+                    icon: Icon(Icons.view_in_ar), label: 'AR导览'),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+class _GridItem {
+  final IconData icon;
+  final String label;
+  const _GridItem(this.icon, this.label);
 }
