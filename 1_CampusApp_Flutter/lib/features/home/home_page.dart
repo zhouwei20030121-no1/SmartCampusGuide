@@ -284,7 +284,7 @@ class _TabHome extends StatelessWidget {
 
   Widget _buildBanner() {
     return Container(
-      height: 150,
+      height: 200,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
