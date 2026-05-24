@@ -21,10 +21,10 @@ class SmartCampusApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '西大智能导览',
+      title: 'SWU Guide - AI沉浸式智慧校园导览',
       theme: AppTheme.theme,
       debugShowCheckedModeBanner: false,
-      initialRoute: '/login',
+      initialRoute: '/home',
       onGenerateRoute: AppRouter.generateRoute,
     );
   }
