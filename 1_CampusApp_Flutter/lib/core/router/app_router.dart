@@ -10,8 +10,10 @@ import '../../features/chat/chat_page.dart';
 import '../../features/ar/ar_page.dart';
 import '../../features/route/route_page.dart';
 import '../../features/social/checkin_page.dart';
+import '../../features/home/home_page.dart';
 
 class AppRouter {
+  static const String home = '/home';
   static const String login = '/login';
   static const String register = '/register';
   static const String profile = '/profile';
@@ -25,6 +27,8 @@ class AppRouter {
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
+      case home:
+        return MaterialPageRoute(builder: (_) => const HomePage());
       case login:
         return MaterialPageRoute(builder: (_) => const LoginPage());
       case register:

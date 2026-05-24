@@ -24,7 +24,7 @@ class SmartCampusApp extends StatelessWidget {
       title: '西大智能导览',
       theme: AppTheme.theme,
       debugShowCheckedModeBanner: false,
-      initialRoute: '/login',
+      initialRoute: '/home',
       onGenerateRoute: AppRouter.generateRoute,
     );
   }
