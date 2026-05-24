@@ -139,7 +139,7 @@ class _HomePageState extends State<HomePage> {
                 const Expanded(
                   child: Center(
                     child: Text(
-                      '负责同学(陈昱霖)在此对接大模型多轮连续对话\n与语音语义转译库。\n\n输入上下文语义可自动关联历史对话。',
+                      '在此对接大模型多轮连续对话\n与语音语义转译库。\n\n输入上下文语义可自动关联历史对话。',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                           color: AppTheme.textSub,
@@ -354,8 +354,8 @@ class _TabHome extends StatelessWidget {
               label: '离线下载',
               onTap: () {}),
           _GridButton(
-              icon: Icons.widgets_outlined,
-              label: '更多服务',
+              icon: Icons.campaign_outlined,
+              label: '校园公告',
               onTap: () {}),
         ],
       ),
@@ -465,7 +465,7 @@ class _TabMapGuide extends StatelessWidget {
               color: AppTheme.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Text('负责同学(李卓尔/周玮)：配置高德地图+全局路径重绘',
+            child: const Text('配置高德地图 + 全局路径重绘',
                 style: TextStyle(
                     fontSize: 12,
                     color: AppTheme.primary,
@@ -697,7 +697,7 @@ class _TabProfile extends StatelessWidget {
               color: AppTheme.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Text('负责同学(李卓尔/周玮)：打卡记录 + 校园徽章墙',
+            child: const Text('打卡记录 + 校园徽章墙',
                 style: TextStyle(
                     fontSize: 12,
                     color: AppTheme.primary,
