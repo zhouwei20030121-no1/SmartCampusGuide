@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/network/network_client.dart';
 import '../../shared/widgets/glass_card.dart';
 import '../../core/router/app_router.dart';
 
@@ -23,30 +22,9 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
-    if (_accountCtrl.text.isEmpty || _passwordCtrl.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入账号和密码')),
-      );
-      return;
-    }
-    try {
-      final res = await NetworkClient.post('/user/login', body: {
-        'phone': _accountCtrl.text,
-        'password': _passwordCtrl.text,
-      });
-      if (res['code'] == 200) {
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed(AppRouter.map);
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('登录失败: $e')),
-        );
-      }
-    }
+  void _handleLogin() {
+    // TODO: 接入真实登录接口后恢复账号密码校验
+    Navigator.of(context).pushReplacementNamed(AppRouter.home);
   }
 
   @override
