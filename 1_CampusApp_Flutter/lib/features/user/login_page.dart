@@ -55,20 +55,32 @@ class _LoginPageState extends State<LoginPage> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        color: AppTheme.pageBg,
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/login_bg.jpg'),
+            fit: BoxFit.cover,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Container(color: Colors.black.withValues(alpha: 0.35)),
+            SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 30),
               child: GlassCard(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('西大智能导览',
+                    const Text('SWU Guide',
                         style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.primary)),
+                            color: AppTheme.darkBlue)),
+                    const Text('AI沉浸式智慧校园导览系统',
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.darkBlue)),
                     const SizedBox(height: 48),
                     _buildInput(controller: _accountCtrl, hint: '校园网账号/手机号'),
                     const SizedBox(height: 20),
@@ -114,6 +126,8 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
+          ),
+          ],
         ),
       ),
     );
