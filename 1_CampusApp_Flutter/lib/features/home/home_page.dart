@@ -287,11 +287,6 @@ class _TabHome extends StatelessWidget {
       height: 150,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF73B4E9), Color(0xFF3A86C5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
         boxShadow: [
           BoxShadow(
               color: AppTheme.primary.withValues(alpha: 0.2),
@@ -299,13 +294,22 @@ class _TabHome extends StatelessWidget {
               offset: const Offset(0, 4)),
         ],
       ),
-      child: const Center(
-        child: Text('西大风光智能看板 Banner',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.asset(
+          'assets/images/shouye.jpg',
+          fit: BoxFit.cover,
+          width: double.infinity,
+          errorBuilder: (_, __, _) => Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF73B4E9), Color(0xFF3A86C5)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
