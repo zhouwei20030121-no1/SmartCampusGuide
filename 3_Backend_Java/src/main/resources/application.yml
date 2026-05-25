@@ -25,6 +25,15 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 
+# DeepSeek 大模型配置
+deepseek:
+  api-key: ${DEEPSEEK_API_KEY:sk-your-deepseek-key}
+  api-url: https://api.deepseek.com/chat/completions
+  default-model: deepseek-chat
+  temperature: 0.7
+  max-tokens: 2048
+  context-window: 10
+
 # AI 服务地址（Python 微服务）
 ai-service:
   url: http://localhost:5000
