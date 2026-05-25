@@ -36,6 +36,8 @@ class RAGService:
                         str(doc.get("question", "")),
                         str(doc.get("answer", "")),
                         " ".join(doc.get("keywords", [])),
+                        str(doc.get("category", "")),
+                        str(doc.get("section", "")),
                     ]
                 )
             )
@@ -59,6 +61,7 @@ class RAGService:
                 "reply": "你还没有输入问题。可以问我校园建筑、路线、校史或服务设施相关内容。",
                 "sources": [],
                 "fallback": True,
+                "model": "local-knowledge",
             }
 
         sources = self.search(clean_query, top_k)
@@ -69,6 +72,7 @@ class RAGService:
                 "reply": fallback_reply,
                 "sources": sources,
                 "fallback": True,
+                "model": "local-knowledge",
                 "reason": "OPENAI_API_KEY 未配置，已使用本地知识库兜底回答。",
             }
 
@@ -78,12 +82,14 @@ class RAGService:
                 "reply": reply or fallback_reply,
                 "sources": sources,
                 "fallback": not bool(reply),
+                "model": settings.OPENAI_MODEL,
             }
         except Exception as exc:
             return {
                 "reply": fallback_reply,
                 "sources": sources,
                 "fallback": True,
+                "model": "local-knowledge",
                 "reason": f"大模型调用失败，已使用本地知识库兜底回答：{exc}",
             }
 
@@ -101,6 +107,7 @@ class RAGService:
                     "你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。"
                     "请优先依据给定知识库回答，语气亲切、准确、简洁。"
                     "如果知识库不足，请明确说明不确定，并给出合理的校园导览建议。"
+                    "请直接使用普通文本回答，不要输出 Markdown 加粗、列表星号等格式符号。"
                 ),
             }
         ]
@@ -119,8 +126,8 @@ class RAGService:
                 json={
                     "model": settings.OPENAI_MODEL,
                     "messages": messages,
-                    "temperature": 0.4,
-                    "max_tokens": 700,
+                    "temperature": settings.OPENAI_TEMPERATURE,
+                    "max_tokens": settings.OPENAI_MAX_TOKENS,
                 },
             )
             resp.raise_for_status()
@@ -128,13 +135,17 @@ class RAGService:
             return data["choices"][0]["message"]["content"].strip()
 
     def _load_default_corpus(self) -> None:
-        corpus_path = Path(__file__).resolve().parents[2] / "data" / "campus_corpus.json"
-        if not corpus_path.exists():
-            self._documents = []
-            return
-
-        with corpus_path.open("r", encoding="utf-8") as file:
-            entries = json.load(file)
+        data_dir = Path(__file__).resolve().parents[2] / "data"
+        corpus_paths = [
+            data_dir / "knowledge_chunks.json",
+            data_dir / "campus_corpus.json",
+        ]
+        entries: list[dict] = []
+        for corpus_path in corpus_paths:
+            if not corpus_path.exists():
+                continue
+            with corpus_path.open("r", encoding="utf-8") as file:
+                entries.extend(json.load(file))
         self.load_corpus(entries)
 
     def _normalize_doc(self, doc: dict) -> dict[str, Any]:
@@ -148,6 +159,8 @@ class RAGService:
             "answer": str(doc.get("answer", "")),
             "keywords": keywords,
             "category": str(doc.get("category", "campus")),
+            "source": str(doc.get("source", "")),
+            "section": str(doc.get("section", "")),
         }
 
     def _public_doc(self, doc: dict[str, Any]) -> dict[str, Any]:
@@ -158,6 +171,8 @@ class RAGService:
             "answer": doc.get("answer", ""),
             "keywords": doc.get("keywords", []),
             "category": doc.get("category", ""),
+            "source": doc.get("source", ""),
+            "section": doc.get("section", ""),
         }
 
     def _build_fallback_reply(self, query: str, sources: list[dict[str, Any]]) -> str:
@@ -177,7 +192,11 @@ class RAGService:
             return "暂无命中的本地知识库内容。"
         return "\n\n".join(
             [
-                f"资料{i + 1}：{doc.get('title', '')}\n问：{doc.get('question', '')}\n答：{doc.get('answer', '')}"
+                (
+                    f"资料{i + 1}：{doc.get('title', '')}"
+                    f"（{doc.get('category', '')}/{doc.get('section', '')}）\n"
+                    f"问：{doc.get('question', '')}\n答：{doc.get('answer', '')}"
+                )
                 for i, doc in enumerate(sources[:5])
             ]
         )

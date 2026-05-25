@@ -3,8 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../../core/network/network_client.dart';
 
 class LocationService extends ChangeNotifier {
-  double _latitude = 0.0;
-  double _longitude = 0.0;
+  final double _latitude = 0.0;
+  final double _longitude = 0.0;
   bool _isTracking = false;
 
   double get latitude => _latitude;
@@ -24,10 +24,10 @@ class LocationService extends ChangeNotifier {
   Future<void> uploadLocation() async {
     if (!_isTracking) return;
     try {
-      await NetworkClient.post('/map/location/upload', body: {
-        'longitude': _longitude,
-        'latitude': _latitude,
-      });
+      await NetworkClient.post(
+        '/map/location/upload',
+        body: {'longitude': _longitude, 'latitude': _latitude},
+      );
     } catch (_) {}
   }
 }

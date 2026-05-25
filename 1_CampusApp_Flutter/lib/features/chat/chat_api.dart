@@ -1,0 +1,100 @@
+import 'dart:convert';
+import 'dart:io';
+
+class ChatApi {
+  static const String _baseUrl = String.fromEnvironment(
+    'AI_SERVICE_BASE_URL',
+    defaultValue: 'http://127.0.0.1:5050',
+  );
+
+  static List<String> get _baseUrls {
+    final urls = <String>[
+      _baseUrl,
+      'http://127.0.0.1:5050',
+      'http://localhost:5050',
+    ];
+    return urls.toSet().toList();
+  }
+
+  static Future<ChatReply> sendMessage({
+    required String query,
+    required List<Map<String, String>> history,
+  }) async {
+    Object? lastError;
+    for (final baseUrl in _baseUrls) {
+      try {
+        return await _sendTo(baseUrl: baseUrl, query: query, history: history);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    throw ChatApiException('无法连接 AI 服务，请确认 127.0.0.1:5050 已启动。最后错误：$lastError');
+  }
+
+  static Future<ChatReply> _sendTo({
+    required String baseUrl,
+    required String query,
+    required List<Map<String, String>> history,
+  }) async {
+    final client = HttpClient();
+    try {
+      final req = await client.postUrl(Uri.parse('$baseUrl/api/rag/chat'));
+      req.headers.set('Content-Type', 'application/json');
+      req.add(utf8.encode(json.encode({'query': query, 'history': history})));
+
+      final res = await req.close();
+      final body = await res.transform(utf8.decoder).join();
+      final decoded = json.decode(body) as Map<String, dynamic>;
+
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw ChatApiException('AI 服务异常：HTTP ${res.statusCode}');
+      }
+
+      if (decoded['code'] != 200) {
+        throw ChatApiException(decoded['message']?.toString() ?? 'AI 服务返回失败');
+      }
+
+      final data = decoded['data'] as Map<String, dynamic>? ?? {};
+      return ChatReply(
+        reply: data['reply']?.toString() ?? '西小导暂时没有生成回答。',
+        fallback: data['fallback'] == true,
+        model: data['model']?.toString() ?? '',
+        sources: (data['sources'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map((item) => item['title']?.toString() ?? '')
+            .where((title) => title.isNotEmpty)
+            .toList(),
+      );
+    } on SocketException catch (e) {
+      throw ChatApiException('$baseUrl 连接失败：${e.message}');
+    } on FormatException catch (e) {
+      throw ChatApiException('$baseUrl 返回格式异常：${e.message}');
+    } finally {
+      client.close();
+    }
+  }
+}
+
+class ChatReply {
+  final String reply;
+  final bool fallback;
+  final String model;
+  final List<String> sources;
+
+  const ChatReply({
+    required this.reply,
+    required this.fallback,
+    required this.model,
+    required this.sources,
+  });
+}
+
+class ChatApiException implements Exception {
+  final String message;
+
+  const ChatApiException(this.message);
+
+  @override
+  String toString() => message;
+}

@@ -45,7 +45,10 @@ class AppRouter {
       case guide:
         return MaterialPageRoute(builder: (_) => const GuidePage());
       case chat:
-        return MaterialPageRoute(builder: (_) => const ChatPage());
+        final args = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => ChatPage(initialPrompt: args?['prompt']?.toString()),
+        );
       case ar:
         return MaterialPageRoute(builder: (_) => const ARPage());
       case routePlan:
