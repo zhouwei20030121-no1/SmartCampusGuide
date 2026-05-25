@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 class NetworkClient {
-  static const String _baseUrl = 'http://10.0.2.2:8080';
+  static const String _baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8080',
+  );
 
   static Future<Map<String, dynamic>> get(String path,
       {Map<String, String>? headers}) async {

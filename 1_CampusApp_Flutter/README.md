@@ -1,6 +1,6 @@
 # smart_campus_guide
 
-A new Flutter project.
+西南大学智能导览系统 Flutter 客户端。
 
 ## Getting Started
 
@@ -15,3 +15,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## iOS IPA
+
+查看 [docs/ios_ipa_build.md](docs/ios_ipa_build.md) 获取 IPA 构建清单、签名说明和构建前检查命令。

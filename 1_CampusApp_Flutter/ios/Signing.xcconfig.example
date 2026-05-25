@@ -1,0 +1,6 @@
+// Copy this file to ios/Signing.xcconfig and fill in your Apple Developer values.
+// Do not commit the filled file if it contains private team/profile details.
+
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+PRODUCT_BUNDLE_IDENTIFIER = com.yourcompany.smartCampusGuide
+CODE_SIGN_STYLE = Automatic

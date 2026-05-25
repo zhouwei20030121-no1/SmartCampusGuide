@@ -33,6 +33,10 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Local iOS signing/export files.
+/ios/Signing.xcconfig
+/ios/ExportOptions.plist
+
 # Symbolication related
 app.*.symbols
 
