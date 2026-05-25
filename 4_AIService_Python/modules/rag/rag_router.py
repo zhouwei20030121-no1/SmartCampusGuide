@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
 from core_utils.response import ApiResponse
 from modules.rag.rag_service import rag_service
 
@@ -8,7 +9,8 @@ router = APIRouter()
 
 class ChatRequest(BaseModel):
     query: str
-    history: list[dict] = []
+    history: list[dict] = Field(default_factory=list)
+    top_k: int = 5
 
 
 class CorpusLoadRequest(BaseModel):
@@ -18,9 +20,8 @@ class CorpusLoadRequest(BaseModel):
 @router.post("/chat")
 async def chat(req: ChatRequest):
     try:
-        context = rag_service.search(req.query)
-        reply = await rag_service.chat(req.query, context)
-        return ApiResponse.ok({"reply": reply, "sources": context})
+        result = await rag_service.chat(req.query, req.history, req.top_k)
+        return ApiResponse.ok(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

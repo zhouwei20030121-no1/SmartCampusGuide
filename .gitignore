@@ -23,7 +23,12 @@ target/
 .env
 .env.local
 .env.*.local
+.venv/
+venv/
 
 # Logs
 *.log
 npm-debug.log*
+
+# Python
+__pycache__/
