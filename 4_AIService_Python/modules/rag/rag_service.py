@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from config import settings
+from modules.rag.vector_store import vector_store
 
 
 class RAGService:
@@ -21,6 +22,10 @@ class RAGService:
 
     def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
         """Score local corpus entries by token overlap and keyword hits."""
+        vector_results = vector_store.search(query, top_k)
+        if vector_results:
+            return vector_results
+
         normalized_query = self._normalize_text(query)
         if not normalized_query:
             return []
@@ -173,6 +178,11 @@ class RAGService:
             "category": doc.get("category", ""),
             "source": doc.get("source", ""),
             "section": doc.get("section", ""),
+            "source_file": doc.get("source_file", ""),
+            "source_url": doc.get("source_url", ""),
+            "entity_id": doc.get("entity_id", ""),
+            "score": doc.get("score", ""),
+            "retrieval": doc.get("retrieval", "keyword"),
         }
 
     def _build_fallback_reply(self, query: str, sources: list[dict[str, Any]]) -> str:
@@ -194,7 +204,8 @@ class RAGService:
             [
                 (
                     f"资料{i + 1}：{doc.get('title', '')}"
-                    f"（{doc.get('category', '')}/{doc.get('section', '')}）\n"
+                    f"（{doc.get('category', '')}/{doc.get('section', '')}"
+                    f"/{doc.get('retrieval', 'keyword')}）\n"
                     f"问：{doc.get('question', '')}\n答：{doc.get('answer', '')}"
                 )
                 for i, doc in enumerate(sources[:5])

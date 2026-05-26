@@ -32,3 +32,11 @@ npm-debug.log*
 
 # Python
 __pycache__/
+
+# Local vector indexes
+chroma_db/
+4_AIService_Python/chroma_db/
+
+# Local raw knowledge drafts
+知识库.txt
+知识库设计方案.txt
