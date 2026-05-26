@@ -24,7 +24,7 @@ class SmartCampusApp extends StatelessWidget {
       title: 'SWU Guide - AI沉浸式智慧校园导览',
       theme: AppTheme.theme,
       debugShowCheckedModeBanner: false,
-      initialRoute: '/home',
+      initialRoute: '/login',
       onGenerateRoute: AppRouter.generateRoute,
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -53,7 +54,7 @@ class _HomePageState extends State<HomePage> {
                 _TabHome(),
                 _TabMapGuide(),
                 _TabSmartAudio(),
-                _TabProfile(),
+                ProfilePage(), // 💡 修改：这里替换为了真实的个人中心页面
               ],
             ),
           ),
@@ -110,7 +111,7 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => ClipRRect(
         borderRadius:
-            const BorderRadius.vertical(top: Radius.circular(30)),
+        const BorderRadius.vertical(top: Radius.circular(30)),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
@@ -228,7 +229,7 @@ class _TabHome extends StatelessWidget {
   Widget _buildTopSearchBar() {
     return Padding(
       padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
           Container(
@@ -317,7 +318,7 @@ class _TabHome extends StatelessWidget {
   Widget _buildGridNav(BuildContext context) {
     return Container(
       padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
+      const EdgeInsets.symmetric(horizontal: 12, vertical: 20),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(24),
@@ -541,7 +542,7 @@ class _TabSmartAudio extends StatelessWidget {
                 ),
                 child: const Row(
                   mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
+                  MainAxisAlignment.spaceBetween,
                   children: [
                     Row(
                       children: [
@@ -583,7 +584,7 @@ class _TabSmartAudio extends StatelessWidget {
                   boxShadow: [
                     BoxShadow(
                         color:
-                            Colors.black.withValues(alpha: 0.04),
+                        Colors.black.withValues(alpha: 0.04),
                         blurRadius: 16),
                   ],
                 ),
@@ -610,7 +611,7 @@ class _TabSmartAudio extends StatelessWidget {
                     const Expanded(
                       child: Column(
                         crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                        CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text('正在感知：西南大学博物馆',
@@ -668,46 +669,6 @@ class _GeoSwitchState extends State<_GeoSwitch> {
         value: _on,
         activeColor: AppTheme.primary,
         onChanged: (v) => setState(() => _on = v),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════
-//  TAB 3：我的 — 个人中心+徽章 (3.1.1 + 3.2.5)
-// ═══════════════════════════════════════════════════
-class _TabProfile extends StatelessWidget {
-  const _TabProfile();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.verified_user_outlined,
-              size: 70,
-              color: AppTheme.primary.withValues(alpha: 0.3)),
-          const SizedBox(height: 12),
-          const Text('管理员与普通用户个人面板',
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textSub)),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text('打卡记录 + 校园徽章墙',
-                style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w600)),
-          ),
-        ],
       ),
     );
   }
