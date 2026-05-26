@@ -35,6 +35,8 @@ public class CheckinServiceImpl extends ServiceImpl<CheckinMapper, Checkin> impl
     public int getCheckinCount(Long userId) {
         LambdaQueryWrapper<Checkin> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Checkin::getUserId, userId);
-        return (int) baseMapper.selectCount(wrapper);
+        // 已修改：处理 Long 到 int 的转换
+        Long count = baseMapper.selectCount(wrapper);
+        return count == null ? 0 : count.intValue();
     }
 }

@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-
 import '../../core/network/network_client.dart';
 
 class LocationService extends ChangeNotifier {
@@ -24,10 +23,13 @@ class LocationService extends ChangeNotifier {
   Future<void> uploadLocation() async {
     if (!_isTracking) return;
     try {
-      await NetworkClient.post('/map/location/upload', body: {
+      // 关键修改：将原来的 body: 替换为了 Dio 专属的 data:
+      await NetworkClient.post('/map/location/upload', data: {
         'longitude': _longitude,
         'latitude': _latitude,
       });
-    } catch (_) {}
+    } catch (_) {
+      // 可以在这里加上 print 方便调试，比如：print('位置上传失败: $_');
+    }
   }
 }

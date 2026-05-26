@@ -1,30 +1,21 @@
 server:
   port: 8080
+  address: 0.0.0.0  # 核心修改：开放监听电脑的所有网卡，允许安卓模拟器访问
 
 spring:
-  application:
-    name: campus-guide
   datasource:
-    url: jdbc:mysql://localhost:3306/campus_guide?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
-    username: root
-    password: ${DB_PASSWORD:root}
+    # 修改了 host(mysql6.sqlpub.com), 端口(3311) 以及 数据库名称(smart_campus_guide)
+    url: jdbc:mysql://mysql6.sqlpub.com:3311/smart_campus_guide?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    # 修改了数据库账号
+    username: scg_user
+    # 修改了数据库密码
+    password: GkwrbnAAU5cUpcTg
     driver-class-name: com.mysql.cj.jdbc.Driver
-  redis:
-    host: localhost
-    port: 6379
-  servlet:
-    multipart:
-      max-file-size: 50MB
-      max-request-size: 100MB
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
 
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  global-config:
-    db-config:
-      id-type: auto
-  configuration:
-    map-underscore-to-camel-case: true
-
-# AI 服务地址（Python 微服务）
-ai-service:
-  url: http://localhost:5000
+logging:
+  level:
+    root: info
