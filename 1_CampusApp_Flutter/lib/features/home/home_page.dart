@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
+import '../map/map_page.dart';      // 🌟 新增：引入真实的高德地图页面
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -52,7 +53,7 @@ class _HomePageState extends State<HomePage> {
               index: _currentIndex,
               children: const [
                 _TabHome(),
-                _TabMapGuide(),
+                MapPage(),      // 🌟 修改：这里替换为了真实的地图页面
                 _TabSmartAudio(),
                 ProfilePage(), // 💡 修改：这里替换为了真实的个人中心页面
               ],
