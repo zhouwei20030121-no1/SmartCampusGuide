@@ -16,6 +16,21 @@ spring:
       host: 127.0.0.1
       port: 6379
 
+mybatis-plus:
+  global-config:
+    db-config:
+      logic-delete-field: deleted      # 指定逻辑删除字段
+      logic-delete-value: 1            # 删除时该字段的值
+      logic-not-delete-value: 0        # 未删除时该字段的值
+      id-type: auto                    # 主键自增
+
+  # ==================== 文件上传配置（新增） ====================
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 5MB
+      max-request-size: 10MB
+
 logging:
   level:
     root: info
