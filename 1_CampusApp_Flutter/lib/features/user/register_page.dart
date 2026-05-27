@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import '../../core/network/network_client.dart';
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({Key? key}) : super(key: key);
+  const RegisterPage({super.key});
 
   @override
   State<RegisterPage> createState() => _RegisterPageState();
@@ -34,6 +33,7 @@ class _RegisterPageState extends State<RegisterPage> {
         },
       );
 
+      if (!mounted) return;
       if (response.data['code'] == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('注册成功，请登录！'), backgroundColor: Colors.green),
@@ -61,7 +61,7 @@ class _RegisterPageState extends State<RegisterPage> {
         fit: StackFit.expand,
         children: [
           Image.asset('assets/images/login_bg.jpg', fit: BoxFit.cover),
-          Container(color: Colors.black.withOpacity(0.3)),
+          Container(color: Colors.black.withValues(alpha: 0.3)),
 
           Center(
             child: SingleChildScrollView(
@@ -69,7 +69,7 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Container(
                 padding: const EdgeInsets.all(30),
                 decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.85), // 统一透明度
+                    color: Colors.white.withValues(alpha: 0.85), // 统一透明度
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: const [ // 统一添加阴影
                       BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 5)

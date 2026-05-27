@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -35,8 +33,7 @@ class _GuidePageState extends State<GuidePage> {
           children: [
             const Icon(Icons.headphones, size: 64, color: AppTheme.primary),
             const SizedBox(height: 16),
-            const Text('智能讲解播放中...',
-                style: TextStyle(color: AppTheme.textSub)),
+            const Text('智能讲解播放中...', style: TextStyle(color: AppTheme.textSub)),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _togglePlay,

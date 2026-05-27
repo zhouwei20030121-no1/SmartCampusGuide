@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:dio/dio.dart';
 import '../../core/network/network_client.dart';
 import '../../core/router/app_router.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({Key? key}) : super(key: key);
+  const LoginPage({super.key});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -30,6 +29,7 @@ class _LoginPageState extends State<LoginPage> {
         },
       );
 
+      if (!mounted) return;
       if (response.data['code'] == 200) {
         // 💡 新增：登录成功时，将账号暂存到内存中
         NetworkClient.currentAccount = _accountController.text.trim();
@@ -59,7 +59,7 @@ class _LoginPageState extends State<LoginPage> {
         fit: StackFit.expand,
         children: [
           Image.asset('assets/images/login_bg.jpg', fit: BoxFit.cover),
-          Container(color: Colors.black.withOpacity(0.3)),
+          Container(color: Colors.black.withValues(alpha: 0.3)),
 
           Center(
             child: SingleChildScrollView(
@@ -67,7 +67,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Container(
                 padding: const EdgeInsets.all(30),
                 decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.85),
+                    color: Colors.white.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: const [
                       BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 5)

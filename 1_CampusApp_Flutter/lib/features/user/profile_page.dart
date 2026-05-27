@@ -1,9 +1,7 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/router/app_router.dart';
-import '../../shared/widgets/glass_card.dart';
 import '../../core/network/network_client.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -18,7 +16,6 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isAdmin = false;
   String _userName = '加载中...';
   String _campusId = '--';
-  String _phone = '--';
 
   @override
   void initState() {
@@ -40,7 +37,6 @@ class _ProfilePageState extends State<ProfilePage> {
           setState(() {
             _userName = data['username'] ?? '未知用户';
             _campusId = data['campusId'] ?? '暂未绑定';
-            _phone = data['phone'] ?? '无';
             _isAdmin = (data['role'] == 1);
             _isLoading = false;
           });
