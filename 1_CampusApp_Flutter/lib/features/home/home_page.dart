@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
+import '../map/map_page.dart';      // 🌟 新增：引入真实的高德地图页面
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -55,9 +57,9 @@ class _HomePageState extends State<HomePage> {
                   onTabSelected: (index) =>
                       setState(() => _currentIndex = index),
                 ),
-                const _TabMapGuide(),
+                const MapPage(),
                 const _TabSmartAudio(),
-                const _TabProfile(),
+                const ProfilePage(),
               ],
             ),
           ),
@@ -441,53 +443,6 @@ class _TabHome extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════
-//  TAB 1：地图导览 — 空间检索+路线规划 (3.1.2 + 3.2.4)
-// ═══════════════════════════════════════════════════
-class _TabMapGuide extends StatelessWidget {
-  const _TabMapGuide();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.alt_route_rounded,
-            size: 70,
-            color: AppTheme.primary.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            '全局智能路线规划大地图',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textSub,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              '配置高德地图 + 全局路径重绘',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════
 //  TAB 2：智能讲解 — LBS地理围栏 + 音频 (3.1.3+3.1.4+3.1.5)
 // ═══════════════════════════════════════════════════
 class _TabSmartAudio extends StatelessWidget {
@@ -701,53 +656,6 @@ class _GeoSwitchState extends State<_GeoSwitch> {
         value: _on,
         activeThumbColor: AppTheme.primary,
         onChanged: (v) => setState(() => _on = v),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════
-//  TAB 3：我的 — 个人中心+徽章 (3.1.1 + 3.2.5)
-// ═══════════════════════════════════════════════════
-class _TabProfile extends StatelessWidget {
-  const _TabProfile();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.verified_user_outlined,
-            size: 70,
-            color: AppTheme.primary.withValues(alpha: 0.3),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            '管理员与普通用户个人面板',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textSub,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              '打卡记录 + 校园徽章墙',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
