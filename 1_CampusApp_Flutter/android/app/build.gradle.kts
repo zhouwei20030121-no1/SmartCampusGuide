@@ -6,7 +6,8 @@ plugins {
 
 android {
     namespace = "com.swu.smart_campus_guide"
-    compileSdk = flutter.compileSdkVersion
+
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -42,4 +43,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// 🌟 新增：高德地图 3D 核心依赖包，解决闪退问题
+dependencies {
+    implementation("com.amap.api:3dmap:8.1.0")
 }
