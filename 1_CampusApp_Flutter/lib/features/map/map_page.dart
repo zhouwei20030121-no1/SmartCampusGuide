@@ -31,8 +31,7 @@ class _MapPageState extends State<MapPage> {
     _initCampusMarkers();
   }
 
-  // 1. 初始化西南大学海量建筑标记 (采用你的全量精确数据)
-// 1. 初始化西南大学海量建筑标记（高德地图 GCJ-02 真实坐标）
+  // 1. 初始化西南大学海量建筑标记（高德地图 GCJ-02 真实坐标）
   void _initCampusMarkers() {
     final List<Map<String, dynamic>> pois = [
       // ================= 一、北区（文科类学院）=================
@@ -147,6 +146,21 @@ class _MapPageState extends State<MapPage> {
             markers: Set<Marker>.of(_markers.values),
             myLocationStyleOptions: MyLocationStyleOptions(true),
             compassEnabled: true,
+
+            // 🌟 优化 1：限制地图显示边界 (西南大学周边坐标)
+            // 防止用户滑动到区域外，减少非必要地图瓦片的网络请求和内存加载
+            limitBounds: LatLngBounds(
+              southwest: const LatLng(29.80649, 106.402434),
+              northeast: const LatLng(29.835163, 106.436554),
+            ),
+
+            // 🌟 优化 2：限制缩放级别
+            // 防止地图缩得太小（视野过大），导致瞬间渲染海量瓦片导致卡顿
+            minMaxZoomPreference: const MinMaxZoomPreference(14.0, 20.0),
+
+            // 🌟 优化 3：关闭 3D 建筑物渲染
+            // 极大减轻虚拟机的 GPU 渲染压力
+            buildingsEnabled: false,
 
             // 🌟 核心魔法：关闭高德底图自带文字！
             labelsEnabled: false,
