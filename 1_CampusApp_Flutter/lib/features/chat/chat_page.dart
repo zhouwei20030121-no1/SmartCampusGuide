@@ -175,58 +175,63 @@ class _ChatPageState extends State<ChatPage> {
               itemBuilder: (ctx, i) => _ChatBubble(msg: _messages[i]),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 4,
-                  offset: Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: '语音输入',
-                  onPressed: _sending ? null : _showVoiceInputSheet,
-                  icon: const Icon(Icons.mic_none_rounded),
-                  color: AppTheme.primary,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _msgCtrl,
-                    enabled: !_sending,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
-                    decoration: InputDecoration(
-                      hintText: '问西小导任何问题...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
+          SafeArea(
+            top: false,
+            minimum: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 4,
+                    offset: Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: '语音输入',
+                    onPressed: _sending ? null : _showVoiceInputSheet,
+                    icon: const Icon(Icons.mic_none_rounded),
+                    color: AppTheme.primary,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _msgCtrl,
+                      enabled: !_sending,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: InputDecoration(
+                        hintText: '问西小导任何问题...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                CircleAvatar(
-                  backgroundColor: _sending
-                      ? Colors.grey.shade400
-                      : AppTheme.primary,
-                  child: IconButton(
-                    icon: Icon(
-                      _sending ? Icons.hourglass_top_rounded : Icons.send,
-                      color: Colors.white,
-                      size: 18,
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: _sending
+                        ? Colors.grey.shade400
+                        : AppTheme.primary,
+                    child: IconButton(
+                      icon: Icon(
+                        _sending ? Icons.hourglass_top_rounded : Icons.send,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      onPressed: _sending ? null : _send,
                     ),
-                    onPressed: _sending ? null : _send,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
