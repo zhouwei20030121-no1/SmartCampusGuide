@@ -21,7 +21,7 @@ public class MyMetaObjectHandler implements MetaObjectHandler {
         // 如果deleted字段为空，设置默认值
         Object deleted = this.getFieldValByName("deleted", metaObject);
         if (deleted == null) {
-            this.setFieldValByName("deleted", false, metaObject);
+            this.setFieldValByName("deleted", 0, metaObject);
         }
 
         // 如果status字段为空，设置默认值
