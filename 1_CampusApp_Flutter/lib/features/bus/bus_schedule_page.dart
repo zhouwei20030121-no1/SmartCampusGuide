@@ -120,7 +120,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         child: Container(
           margin: const EdgeInsets.only(bottom: 14),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.45),
+            color: Colors.white.withValues(alpha: 0.65),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
             boxShadow: [
@@ -153,12 +153,12 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
                           Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textMain)),
                           const SizedBox(height: 4),
                           Text('$start - $end | 约${interval}分钟/班',
-                              style: const TextStyle(fontSize: 12, color: AppTheme.textSub)),
-                          Text(fare, style: const TextStyle(fontSize: 11, color: AppTheme.textSub)),
+                              style: const TextStyle(fontSize: 12, color: AppTheme.darkBlue)),
+                          Text(fare, style: const TextStyle(fontSize: 11, color: AppTheme.darkBlue)),
                         ]),
                       ),
                       Icon(expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                          color: AppTheme.textSub),
+                          color: AppTheme.darkBlue),
                     ],
                   ),
                 ),
