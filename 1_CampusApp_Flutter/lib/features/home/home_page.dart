@@ -343,7 +343,7 @@ class _TabHome extends StatelessWidget {
           _GridButton(
             icon: Icons.directions_bus_filled_outlined,
             label: '校车时刻',
-            onTap: () {},
+            onTap: () => _navTo(context, '/bus'),
           ),
           _GridButton(
             icon: Icons.cloud_download_outlined,
