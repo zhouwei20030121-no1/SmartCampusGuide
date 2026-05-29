@@ -1,35 +1,62 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 class NetworkClient {
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8080',
-  );
+  static const String _baseUrl = 'http://10.0.2.2:8080';
 
-  // 保存当前登录账号，方便个人中心页面拉取后端信息。
-  static String currentAccount = '';
-
+  // ── Dio 实例（新 API，供 login/profile/bus 等页面使用）──
   static final Dio dio = Dio(
     BaseOptions(
-      baseUrl: baseUrl,
+      baseUrl: _baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ),
   );
 
-  static Future<Response> get(
+  // ── 当前登录账号（供个人中心等页面使用）──
+  static String currentAccount = '';
+
+  // ── 旧版静态方法（供 cache_service 等兼容）──
+  static Future<Map<String, dynamic>> get(
     String path, {
-    Object? data,
-    Map<String, dynamic>? queryParameters,
-  }) {
-    return dio.get(path, data: data, queryParameters: queryParameters);
+    Map<String, String>? headers,
+  }) async {
+    final client = HttpClient();
+    try {
+      final req = await client.getUrl(Uri.parse('$_baseUrl$path'));
+      _setHeaders(req, headers);
+      final res = await req.close();
+      final body = await res.transform(utf8.decoder).join();
+      return json.decode(body) as Map<String, dynamic>;
+    } finally {
+      client.close();
+    }
   }
 
-  static Future<Response> post(
+  static Future<Map<String, dynamic>> post(
     String path, {
-    Object? data,
-    Map<String, dynamic>? queryParameters,
-  }) {
-    return dio.post(path, data: data, queryParameters: queryParameters);
+    Map<String, dynamic>? body,
+    Map<String, String>? headers,
+  }) async {
+    final client = HttpClient();
+    try {
+      final req = await client.postUrl(Uri.parse('$_baseUrl$path'));
+      _setHeaders(req, headers);
+      if (body != null) {
+        req.write(json.encode(body));
+      }
+      final res = await req.close();
+      final responseBody = await res.transform(utf8.decoder).join();
+      return json.decode(responseBody) as Map<String, dynamic>;
+    } finally {
+      client.close();
+    }
+  }
+
+  static void _setHeaders(HttpClientRequest req, Map<String, String>? extra) {
+    req.headers.set('Content-Type', 'application/json');
+    extra?.forEach((k, v) => req.headers.set(k, v));
   }
 }

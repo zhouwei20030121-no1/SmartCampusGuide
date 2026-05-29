@@ -6,9 +6,7 @@ class CacheService {
     try {
       final res = await NetworkClient.get('/spot/page?current=1&size=200');
 
-      // 关键修改点：先通过 res.data 获取真正的 JSON 响应体，再提取里面的 'data' 字段
-      final responseData = res.data;
-      final data = responseData['data'] as Map<String, dynamic>?;
+      final data = res['data'] as Map<String, dynamic>?;
 
       final records = data?['records'] as List<dynamic>?;
       if (records != null) {
