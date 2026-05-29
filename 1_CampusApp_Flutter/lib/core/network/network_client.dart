@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 class NetworkClient {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8080',
+    defaultValue: 'http://10.0.2.2:8088',
   );
 
   // 保存当前登录账号，方便个人中心页面拉取后端信息。
