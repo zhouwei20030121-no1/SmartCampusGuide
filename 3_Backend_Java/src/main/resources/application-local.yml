@@ -1,0 +1,5 @@
+# ⚠️ 本地开发配置 - 已加入 .gitignore，不会提交到 GitHub
+# 使用方式: 启动时指定 --spring.profiles.active=local
+
+deepseek:
+  api-key: sk-a3ac8956117f4464b5148a92501c591b
