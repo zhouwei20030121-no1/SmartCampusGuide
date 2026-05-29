@@ -20,7 +20,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
   // 换乘查询
   final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
-  List<Map<String, String>> _planResults = [];
+  List<_RoutePlan> _planResults = [];
 
   @override
   void initState() {
@@ -55,13 +55,13 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       return;
     }
     if (from == to) {
-      setState(() => _planResults = [{'type': 'info', 'desc': '始发地和目的地相同，无需乘车'}]);
+      setState(() => _planResults = [_RoutePlan('info', '始发地和目的地相同，无需乘车')]);
       return;
     }
 
-    final results = <Map<String, String>>[];
-    final fromLines = <int>[];  // 包含from站点的线路
-    final toLines = <int>[];    // 包含to站点的线路
+    final results = <_RoutePlan>[];
+    final fromLines = <int>[];
+    final toLines = <int>[];
 
     for (final line in _lines) {
       final lineId = line['lineId'] as int;
@@ -79,13 +79,12 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       if (hasFrom) fromLines.add(lineId);
       if (hasTo) toLines.add(lineId);
 
-      // 直达：同一条线路同时包含from和to
       if (hasFrom && hasTo) {
-        results.add({'type': 'direct', 'desc': '直达：乘坐【$lineName】即可到达'});
+        final path = _extractPathSegment(lineId, lineName, from, to);
+        results.add(_RoutePlan('direct', '直达：乘坐【$lineName】', lineName: lineName, stations: path));
       }
     }
 
-    // 换乘：找fromLines和toLines的交集站点
     if (results.isEmpty) {
       for (final fid in fromLines) {
         for (final tid in toLines) {
@@ -95,7 +94,13 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
           final tName = _lineName(tid);
           for (final ts in transferStations) {
             if (ts != from && ts != to) {
-              results.add({'type': 'transfer', 'desc': '换乘：先乘【$fName】到「$ts」，换乘【$tName】到达'});
+              final seg1 = _extractPathSegment(fid, fName, from, ts);
+              final seg2 = _extractPathSegment(tid, tName, ts, to);
+              results.add(_RoutePlan('transfer', '换乘：先乘【$fName】到「$ts」，换乘【$tName】',
+                  lineName: '$fName → $tName',
+                  stations: [...seg1, ...seg2.skip(1)],
+                  transferAt: ts));
+              break; // 只需要第一个换乘方案
             }
           }
         }
@@ -103,10 +108,27 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
     }
 
     if (results.isEmpty) {
-      results.add({'type': 'none', 'desc': '未找到可达路线，建议步行或骑行前往'});
+      results.add(_RoutePlan('none', '未找到可达路线，建议步行或骑行前往'));
     }
 
     setState(() => _planResults = results);
+  }
+
+  List<String> _extractPathSegment(int lineId, String lineName, String from, String to) {
+    for (final line in _lines) {
+      if (line['lineId'] != lineId) continue;
+      final stations = line['stations'] as Map<String, dynamic>? ?? {};
+      for (final sts in stations.values) {
+        final list = (sts as List).map((s) => s['station_name']?.toString() ?? '').toList();
+        final i1 = list.indexOf(from);
+        final i2 = list.indexOf(to);
+        if (i1 != -1 && i2 != -1) {
+          if (i1 <= i2) return list.sublist(i1, i2 + 1);
+          return list.sublist(i2, i1 + 1).reversed.toList();
+        }
+      }
+    }
+    return [from, to];
   }
 
   List<String> _findCommonStations(int lineId1, int lineId2) {
@@ -511,8 +533,8 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
     );
   }
 
-  void _showStationPicker(String label, TextEditingController ctrl, List<String> stations) {
-    showModalBottomSheet(
+  Future<void> _showStationPicker(String label, TextEditingController ctrl, List<String> stations) async {
+    final picked = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => ClipRRect(
@@ -531,10 +553,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
                   itemCount: stations.length,
                   itemBuilder: (_, i) => ListTile(
                     title: Text(stations[i], style: const TextStyle(fontSize: 15)),
-                    onTap: () {
-                      ctrl.text = stations[i];
-                      Navigator.pop(ctx);
-                    },
+                    onTap: () => Navigator.pop(ctx, stations[i]),
                   ),
                 ),
               ),
@@ -543,10 +562,13 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         ),
       ),
     );
+    if (picked != null) {
+      setState(() => ctrl.text = picked);
+    }
   }
 
-  Widget _resultCard(Map<String, String> r) {
-    final type = r['type'] ?? '';
+  Widget _resultCard(_RoutePlan r) {
+    final type = r.type;
     IconData icon;
     Color color;
     switch (type) {
@@ -556,24 +578,77 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       default:        icon = Icons.error;          color = AppTheme.danger;  break;
     }
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(18),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
         child: Container(
           width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.65),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: Colors.white.withValues(alpha: 0.7)),
           ),
-          child: Row(children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(r['desc'] ?? '', style: const TextStyle(fontSize: 14, color: AppTheme.textMain, height: 1.5)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                Icon(icon, color: color, size: 24),
+                const SizedBox(width: 12),
+                Expanded(child: Text(r.desc, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textMain))),
+              ]),
             ),
+            // 站点时间线
+            if (r.stations != null && r.stations!.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.fromLTRB(28, 0, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (type == 'transfer' && r.transferAt != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text('在「${r.transferAt}」换乘',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.warning)),
+                      ),
+                    ],
+                    ...r.stations!.asMap().entries.map((e) {
+                      final idx = e.key;
+                      final name = e.value;
+                      final isLast = idx == r.stations!.length - 1;
+                      final isFirst = idx == 0;
+                      return SizedBox(
+                        height: 44,
+                        child: Row(children: [
+                          SizedBox(width: 26, child: Column(children: [
+                            Container(
+                              width: 22, height: 22,
+                              decoration: BoxDecoration(
+                                color: isFirst ? AppTheme.success : (isLast ? AppTheme.primary : AppTheme.primary.withValues(alpha: 0.7)),
+                                borderRadius: BorderRadius.circular(11),
+                              ),
+                              child: Center(child: Text('${idx + 1}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
+                            ),
+                            if (!isLast) Expanded(child: Container(width: 2, color: AppTheme.primary.withValues(alpha: 0.2))),
+                          ])),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Text(name, style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: isFirst || isLast ? FontWeight.w600 : FontWeight.normal,
+                                color: isFirst || isLast ? AppTheme.primary : AppTheme.textMain)),
+                          ),
+                        ]),
+                      );
+                    }),
+                  ],
+                ),
+              ),
           ]),
         ),
       ),
@@ -625,4 +700,14 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
   static List<Map<String, dynamic>> _s(List<String> names) {
     return [for (var i = 0; i < names.length; i++) {'stop_order': i + 1, 'station_name': names[i]}];
   }
+}
+
+class _RoutePlan {
+  final String type;       // direct / transfer / info / none
+  final String desc;
+  final String? lineName;
+  final List<String>? stations;
+  final String? transferAt;
+
+  _RoutePlan(this.type, this.desc, {this.lineName, this.stations, this.transferAt});
 }
