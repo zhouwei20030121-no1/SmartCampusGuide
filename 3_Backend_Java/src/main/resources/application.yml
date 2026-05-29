@@ -45,6 +45,12 @@ deepseek:
 ai-service:
   url: http://localhost:5000
 
+# 高德地图配置
+amap:
+  key: 1d921c69b95aefac2762632babd9cf09
+  # 步行路径规划API地址
+  direction-url: https://restapi.amap.com/v3/direction/walking
+
 logging:
   level:
     root: info
