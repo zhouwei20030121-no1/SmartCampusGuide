@@ -70,7 +70,7 @@ class _ChatPageState extends State<ChatPage> {
 
     try {
       final result = await ChatApi.sendMessage(
-        query: '用户身份：$_persona。用户问题：$text',
+        query: text,
         history: history,
       );
       if (!mounted) return;
