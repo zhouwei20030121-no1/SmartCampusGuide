@@ -4,6 +4,13 @@ server:
 
 spring:
   datasource:
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 1
+      idle-timeout: 30000
+      max-lifetime: 600000
+      connection-timeout: 30000
+      leak-detection-threshold: 60000
     # 修改了 host(mysql6.sqlpub.com), 端口(3311) 以及 数据库名称(smart_campus_guide)
     url: jdbc:mysql://mysql6.sqlpub.com:3311/smart_campus_guide?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     # 修改了数据库账号
@@ -11,6 +18,7 @@ spring:
     # 修改了数据库密码
     password: GkwrbnAAU5cUpcTg
     driver-class-name: com.mysql.cj.jdbc.Driver
+
   data:
     redis:
       host: 127.0.0.1
