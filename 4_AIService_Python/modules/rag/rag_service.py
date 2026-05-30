@@ -189,7 +189,14 @@ class RAGService:
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
+            reply_text = data["choices"][0]["message"]["content"].strip()
+            
+            # 后处理：强力擦除大模型惯性生成的 Markdown 加粗和斜体符号
+            import re
+            reply_text = re.sub(r'\*\*(.*?)\*\*', r'\1', reply_text)
+            reply_text = re.sub(r'\*(.*?)\*', r'\1', reply_text)
+            
+            return reply_text
 
     def _load_default_corpus(self) -> None:
         data_dir = Path(__file__).resolve().parents[2] / "data"
