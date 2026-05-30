@@ -11,3 +11,4 @@ numpy>=1.26
 requests>=2.31
 python-dotenv>=1.0
 python-multipart>=0.0.9
+duckduckgo-search>=5.0.0

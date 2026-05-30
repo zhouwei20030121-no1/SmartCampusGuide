@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from duckduckgo_search import AsyncDDGS
 
 from config import settings
 from modules.rag.vector_store import vector_store
@@ -62,6 +63,17 @@ class RAGService:
                 
         return merged[: max(1, top_k)]
 
+    async def _web_search(self, query: str, max_results: int = 3) -> list[dict[str, Any]]:
+        """Perform a web search using DuckDuckGo."""
+        results = []
+        try:
+            async with AsyncDDGS() as ddgs:
+                async for r in ddgs.text(query, max_results=max_results):
+                    results.append(r)
+        except Exception as exc:
+            print(f"Web search failed: {exc}")
+        return results
+
     async def chat(
         self,
         query: str,
@@ -81,6 +93,14 @@ class RAGService:
         sources = self.search(clean_query, top_k)
         fallback_reply = self._build_fallback_reply(clean_query, sources)
 
+        web_results_text = ""
+        # 如果本地知识库没有找到结果，则进行网络搜索补充
+        if not sources:
+            web_results = await self._web_search(clean_query)
+            if web_results:
+                web_context = "\n".join([f"【网络来源】 {r.get('title', '')}：{r.get('body', '')}" for r in web_results])
+                web_results_text = f"\n\n以下是通过网络搜索获取的补充参考信息（可能包含校外内容）：\n{web_context}"
+
         if not settings.OPENAI_API_KEY:
             return {
                 "reply": fallback_reply,
@@ -91,7 +111,10 @@ class RAGService:
             }
 
         try:
-            reply = await self._chat_with_llm(clean_query, sources, history or [])
+            enhanced_query = clean_query
+            if web_results_text:
+                enhanced_query = f"{clean_query}{web_results_text}"
+            reply = await self._chat_with_llm(enhanced_query, sources, history or [])
             return {
                 "reply": reply or fallback_reply,
                 "sources": sources,
