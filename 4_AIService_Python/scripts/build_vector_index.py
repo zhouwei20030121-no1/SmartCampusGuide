@@ -24,8 +24,17 @@ MODEL_NAME = os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5")
 def main() -> None:
     os.environ.setdefault("HF_ENDPOINT", "https://huggingface.co")
     chunks = json.loads(CHUNKS_PATH.read_text(encoding="utf-8"))
+    
+    corpus_path = AI_ROOT / "data" / "campus_corpus.json"
+    if corpus_path.exists():
+        corpus_chunks = json.loads(corpus_path.read_text(encoding="utf-8"))
+        for item in corpus_chunks:
+            item["source"] = "campus_corpus"
+            item["source_file"] = "campus_corpus.json"
+        chunks.extend(corpus_chunks)
+        
     if not chunks:
-        raise SystemExit("knowledge_chunks.json is empty")
+        raise SystemExit("No knowledge chunks or corpus data found.")
 
     print(f"loading embedding model: {MODEL_NAME}")
     model = SentenceTransformer(MODEL_NAME)

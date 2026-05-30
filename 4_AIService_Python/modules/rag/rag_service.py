@@ -21,37 +21,46 @@ class RAGService:
         self._documents = [self._normalize_doc(entry) for entry in entries]
 
     def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
-        """Score local corpus entries by token overlap and keyword hits."""
-        vector_results = vector_store.search(query, top_k)
-        if vector_results:
-            return vector_results
-
+        """Hybrid search combining vector similarity and keyword overlap score."""
+        vector_results = vector_store.search(query, top_k=max(top_k, 5), threshold=0.35)
+        
         normalized_query = self._normalize_text(query)
-        if not normalized_query:
-            return []
-
-        query_tokens = self._tokenize(normalized_query)
-        ranked: list[tuple[int, dict[str, Any]]] = []
-
-        for doc in self._documents:
-            searchable = self._normalize_text(
-                " ".join(
-                    [
-                        str(doc.get("title", "")),
-                        str(doc.get("question", "")),
-                        str(doc.get("answer", "")),
-                        " ".join(doc.get("keywords", [])),
-                        str(doc.get("category", "")),
-                        str(doc.get("section", "")),
-                    ]
+        keyword_results: list[dict[str, Any]] = []
+        if normalized_query:
+            query_tokens = self._tokenize(normalized_query)
+            ranked: list[tuple[int, dict[str, Any]]] = []
+            for doc in self._documents:
+                searchable = self._normalize_text(
+                    " ".join(
+                        [
+                            str(doc.get("title", "")),
+                            str(doc.get("question", "")),
+                            str(doc.get("answer", "")),
+                            " ".join(doc.get("keywords", [])),
+                            str(doc.get("category", "")),
+                            str(doc.get("section", "")),
+                        ]
+                    )
                 )
-            )
-            score = self._score(searchable, query_tokens, normalized_query)
-            if score > 0:
-                ranked.append((score, doc))
+                score = self._score(searchable, query_tokens, normalized_query)
+                if score > 0:
+                    ranked.append((score, doc))
+            ranked.sort(key=lambda item: item[0], reverse=True)
+            keyword_results = [self._public_doc(doc) for _, doc in ranked[: max(1, top_k)]]
 
-        ranked.sort(key=lambda item: item[0], reverse=True)
-        return [self._public_doc(doc) for _, doc in ranked[: max(1, top_k)]]
+        merged = []
+        seen_ids = set()
+        for doc in vector_results:
+            if doc["id"] not in seen_ids:
+                merged.append(doc)
+                seen_ids.add(doc["id"])
+                
+        for doc in keyword_results:
+            if doc["id"] not in seen_ids:
+                merged.append(doc)
+                seen_ids.add(doc["id"])
+                
+        return merged[: max(1, top_k)]
 
     async def chat(
         self,
@@ -110,8 +119,8 @@ class RAGService:
                 "role": "system",
                 "content": (
                     "你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。"
-                    "请优先依据给定知识库回答，语气亲切、准确、简洁。"
-                    "如果知识库不足，请明确说明不确定，并给出合理的校园导览建议。"
+                    "处理问题时，请优先提取并依据提供的【知识库内容】回答，确保针对本校信息的准确性。"
+                    "如果【知识库内容】不足以回答该问题（例如关于学科概况、通用常识、日常闲聊等），你可以利用自身的通用知识来进行友好、自然的解答，但请注意不要编造具体的本校独有数据。"
                     "请直接使用普通文本回答，不要输出 Markdown 加粗、列表星号等格式符号。"
                 ),
             }
