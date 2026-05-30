@@ -1,16 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ChatApi {
-  static const String _baseUrl = String.fromEnvironment(
-    'AI_SERVICE_BASE_URL',
-    defaultValue: 'http://127.0.0.1:5050',
-  );
+  static String get _baseUrl {
+    const envUrl = String.fromEnvironment('AI_SERVICE_BASE_URL');
+    if (envUrl.isNotEmpty) return envUrl;
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5050';
+    return 'http://127.0.0.1:5050';
+  }
 
   static List<String> get _baseUrls {
     final urls = <String>[
       _baseUrl,
       'http://127.0.0.1:5050',
+      'http://10.0.2.2:5050',
       'http://localhost:5050',
     ];
     return urls.toSet().toList();
