@@ -152,11 +152,13 @@ class RAGService:
         history: list[dict],
     ) -> str:
         context_text = self._format_context(sources)
+        import datetime
+        current_date = datetime.datetime.now().strftime("%Y年%m月%d日")
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。"
+                    f"你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。当前系统时间是：{current_date}。\n"
                     "处理问题时，请遵循以下原则：\n"
                     "1. 优先结合当前的【聊天历史上下文】来理解用户的意图，尤其是当用户使用“他/她/这/那”等代词时。\n"
                     "2. 参考下方提供的【知识库内容】和【网络来源】。但是，如果检索到的这些资料与用户的【最新问题】和【聊天历史】毫无关系（即可能是垃圾检索结果），请**果断完全忽略它们**。\n"
