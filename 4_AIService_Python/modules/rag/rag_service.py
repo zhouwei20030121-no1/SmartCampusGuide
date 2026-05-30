@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from duckduckgo_search import AsyncDDGS
+from duckduckgo_search import DDGS
 
 from config import settings
 from modules.rag.vector_store import vector_store
@@ -64,12 +64,21 @@ class RAGService:
         return merged[: max(1, top_k)]
 
     async def _web_search(self, query: str, max_results: int = 3) -> list[dict[str, Any]]:
-        """Perform a web search using DuckDuckGo."""
+        """Perform a web search using DuckDuckGo with timeout protection."""
         results = []
+        import asyncio
         try:
-            async with AsyncDDGS() as ddgs:
-                async for r in ddgs.text(query, max_results=max_results):
-                    results.append(r)
+            def do_search():
+                res = []
+                with DDGS() as ddgs:
+                    for r in ddgs.text(query, max_results=max_results):
+                        res.append(r)
+                return res
+            
+            # 增加 3 秒超时保护并使用后台线程以防阻塞
+            results = await asyncio.wait_for(asyncio.to_thread(do_search), timeout=3.0)
+        except asyncio.TimeoutError:
+            print("Web search timed out after 3 seconds.")
         except Exception as exc:
             print(f"Web search failed: {exc}")
         return results
@@ -94,8 +103,8 @@ class RAGService:
         fallback_reply = self._build_fallback_reply(clean_query, sources)
 
         web_results_text = ""
-        # 如果本地知识库没有找到结果，则进行网络搜索补充
-        if not sources:
+        # 如果本地知识库找出的结果过少（低于或等于2条），说明匹配度可能不高，启动网络搜索兜底
+        if len(sources) <= 2:
             web_results = await self._web_search(clean_query)
             if web_results:
                 web_context = "\n".join([f"【网络来源】 {r.get('title', '')}：{r.get('body', '')}" for r in web_results])
@@ -142,8 +151,9 @@ class RAGService:
                 "role": "system",
                 "content": (
                     "你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。"
-                    "处理问题时，请优先提取并依据提供的【知识库内容】回答，确保针对本校信息的准确性。"
-                    "如果【知识库内容】不足以回答该问题（例如关于学科概况、通用常识、日常闲聊等），你可以利用自身的通用知识来进行友好、自然的解答，但请注意不要编造具体的本校独有数据。"
+                    "处理问题时，请优先参考提供的【知识库内容】和【网络来源】。"
+                    "如果两者都无法回答用户的问题，请直接利用你自身的丰富知识来进行友好、自然的解答（例如解释学科、提供常识、回答公众人物信息等）。"
+                    "请注意：千万不要在回答中说“根据知识库内容，我没有找到...”或“知识库没有专门收录...”这类死板的话。直接给出你的答案或建议即可。"
                     "请直接使用普通文本回答，不要输出 Markdown 加粗、列表星号等格式符号。"
                 ),
             }
