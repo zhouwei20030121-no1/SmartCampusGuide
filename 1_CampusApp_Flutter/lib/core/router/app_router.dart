@@ -11,8 +11,10 @@ import '../../features/ar/ar_page.dart';
 import '../../features/route/route_page.dart';
 import '../../features/social/checkin_page.dart';
 import '../../features/home/home_page.dart';
+import '../../features/bus/bus_schedule_page.dart';
 
 class AppRouter {
+  static const String busSchedule = '/bus';
   static const String home = '/home';
   static const String login = '/login';
   static const String register = '/register';
@@ -55,6 +57,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const RoutePage());
       case checkin:
         return MaterialPageRoute(builder: (_) => const CheckinPage());
+      case busSchedule:
+        return MaterialPageRoute(builder: (_) => const BusSchedulePage());
       default:
         return MaterialPageRoute(builder: (_) => const LoginPage());
     }

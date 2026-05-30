@@ -142,6 +142,8 @@ class _MapPageState extends State<MapPage> {
           // 🌏 地图主体
           AMapWidget(
             mapType: MapType.normal,
+            privacyStatement: const AMapPrivacyStatement(
+                hasContains: true, hasShow: true, hasAgree: true),
             initialCameraPosition: _currentCameraPosition,
             markers: Set<Marker>.of(_markers.values),
             myLocationStyleOptions: MyLocationStyleOptions(true),
