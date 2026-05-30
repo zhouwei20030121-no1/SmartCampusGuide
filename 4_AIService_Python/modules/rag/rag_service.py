@@ -98,8 +98,14 @@ class RAGService:
                 "fallback": True,
                 "model": "local-knowledge",
             }
+            
+        # 简单指代消解：如果问题包含代词且有历史记录，将上一轮的回答片段拼接作为搜索词，以提高检索质量
+        search_query = clean_query
+        if history and len(clean_query) < 15 and any(word in clean_query for word in ["他", "她", "它", "这", "那"]):
+            last_reply = history[-1].get("content", "")[:30] if history else ""
+            search_query = f"{last_reply} {clean_query}"
 
-        sources = self.search(clean_query, top_k)
+        sources = self.search(search_query, top_k)
         fallback_reply = self._build_fallback_reply(clean_query, sources)
 
         web_results_text = ""
@@ -151,10 +157,11 @@ class RAGService:
                 "role": "system",
                 "content": (
                     "你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。"
-                    "处理问题时，请优先参考提供的【知识库内容】和【网络来源】。"
-                    "如果两者都无法回答用户的问题，请直接利用你自身的丰富知识来进行友好、自然的解答（例如解释学科、提供常识、回答公众人物信息等）。"
-                    "请注意：千万不要在回答中说“根据知识库内容，我没有找到...”或“知识库没有专门收录...”这类死板的话。直接给出你的答案或建议即可。"
-                    "请直接使用普通文本回答，不要输出 Markdown 加粗、列表星号等格式符号。"
+                    "处理问题时，请遵循以下原则：\n"
+                    "1. 优先结合当前的【聊天历史上下文】来理解用户的意图，尤其是当用户使用“他/她/这/那”等代词时。\n"
+                    "2. 参考下方提供的【知识库内容】和【网络来源】。但是，如果检索到的这些资料与用户的【最新问题】和【聊天历史】毫无关系（即可能是垃圾检索结果），请**果断完全忽略它们**。\n"
+                    "3. 如果提供的资料都无法回答问题，请直接利用你自身的丰富知识库（常识、公众人物信息等）进行解答。\n"
+                    "请注意：千万不要在回答中说“根据知识库内容，我没有找到...”这类死板的话。直接自然地给出你的答案即可。"
                 ),
             }
         ]
@@ -162,7 +169,7 @@ class RAGService:
         messages.append(
             {
                 "role": "user",
-                "content": f"知识库内容：\n{context_text}\n\n用户问题：{query}",
+                "content": f"=== 检索到的参考资料 ===\n{context_text}\n========================\n\n[请结合上面的聊天历史和参考资料回答我的最新问题]：{query}",
             }
         )
 
