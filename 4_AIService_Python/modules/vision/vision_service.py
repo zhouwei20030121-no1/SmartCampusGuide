@@ -97,14 +97,14 @@ class VisionService:
                     
                     # 适当放宽阈值至 0.45，因为 Android 相册选择器可能会压缩图片导致像素变化
                     if dist < 0.45:
-                        print(f"[Vision] 🟢 距离小于 0.45，判定为同一建筑！")
+                        print(f"[Vision] [MATCH] 距离小于 0.45，判定为同一建筑！")
                         return {
                             "recognized": True,
                             "building_name": metadata["title"],
                             "description": metadata["answer"],
                         }
                     else:
-                        print(f"[Vision] 🔴 距离大于 0.45，转交 Qwen-VL 进行识别...")
+                        print(f"[Vision] [MISS] 距离大于 0.45，转交 Qwen-VL 进行识别...")
             except Exception as e:
                 print(f"[Vision] CLIP 匹配异常: {e}")
 
