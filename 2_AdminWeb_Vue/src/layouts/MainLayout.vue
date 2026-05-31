@@ -22,7 +22,7 @@
         </router-link>
       </nav>
       <div class="topbar-right">
-        <span class="admin-name">Admin_周玮</span>
+        <span class="admin-name">{{ username }}</span>
         <button class="logout-btn" @click="handleLogout">退出</button>
       </div>
     </header>
@@ -35,9 +35,12 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+
+const username = ref('管理员')
 
 const navItems = [
   { label: '数据大屏', path: '/dashboard' },
@@ -49,10 +52,25 @@ const navItems = [
   { label: '语料库', path: '/corpus' },
 ]
 
+// 获取用户名
+const getUsername = () => {
+  const name = localStorage.getItem('username') 
+    || localStorage.getItem('realName') 
+    || localStorage.getItem('real_name')
+  if (name) {
+    username.value = name
+  }
+}
+
 const handleLogout = () => {
   localStorage.removeItem('token')
+  localStorage.removeItem('username')
   router.replace('/login')
 }
+
+onMounted(() => {
+  getUsername()
+})
 </script>
 
 <style scoped>
