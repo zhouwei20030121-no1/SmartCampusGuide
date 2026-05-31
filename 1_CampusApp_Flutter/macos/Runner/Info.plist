@@ -28,5 +28,7 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>需要使用摄像头来识别校园建筑，提供AR导览体验</string>
 </dict>
 </plist>
