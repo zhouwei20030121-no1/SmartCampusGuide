@@ -10,6 +10,13 @@ class NetworkClient {
     return 'http://127.0.0.1:8080';
   }
 
+  static String get aiBaseUrl {
+    const envUrl = String.fromEnvironment('AI_SERVICE_BASE_URL');
+    if (envUrl.isNotEmpty) return envUrl;
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5051';
+    return 'http://127.0.0.1:5051';
+  }
+
   // 保存当前登录账号，方便个人中心页面拉取后端信息。
   static String currentAccount = '';
 
@@ -18,6 +25,14 @@ class NetworkClient {
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
+    ),
+  );
+
+  static final Dio aiDio = Dio(
+    BaseOptions(
+      baseUrl: aiBaseUrl,
+      connectTimeout: const Duration(seconds: 30), // AI takes longer
+      receiveTimeout: const Duration(seconds: 30),
     ),
   );
 

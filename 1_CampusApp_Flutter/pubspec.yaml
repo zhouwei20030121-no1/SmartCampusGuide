@@ -21,6 +21,7 @@ dependencies:
   amap_flutter_base: ^3.0.0
   # 摄像头
   camera: ^0.11.1
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

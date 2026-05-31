@@ -46,21 +46,68 @@ _MOCK_BUILDINGS = [
 
 
 class VisionService:
-    """多模态视觉识别服务 — 基于 DeepSeek VL 模型"""
+    """多模态视觉识别服务 — 基于 Qwen VL 和 CLIP Image RAG"""
 
     def __init__(self) -> None:
         self._model = settings.VISION_MODEL
-        self._base_url = settings.OPENAI_BASE_URL.rstrip("/")
-        self._api_key = settings.OPENAI_API_KEY
+        self._base_url = settings.VISION_BASE_URL.rstrip("/")
+        self._api_key = settings.VISION_API_KEY
+        self._clip_model = None
+        self._image_collection = None
+        
+        try:
+            import chromadb
+            from sentence_transformers import SentenceTransformer
+            persist_dir = Path(settings.CHROMA_PERSIST_DIR)
+            if not persist_dir.is_absolute():
+                persist_dir = Path(__file__).resolve().parents[2] / persist_dir
+            client = chromadb.PersistentClient(path=str(persist_dir))
+            self._image_collection = client.get_collection("smart_campus_images")
+            cache_dir = Path(__file__).resolve().parents[2] / 'models_cache'
+            self._clip_model = SentenceTransformer('clip-ViT-B-32', cache_folder=str(cache_dir))
+            print("[Vision] CLIP 模型与 Image RAG 加载成功")
+        except Exception as e:
+            print(f"[Vision] CLIP 模型加载失败，将仅使用 Qwen-VL: {e}")
 
     async def recognize_building(self, image_base64: str) -> dict[str, Any]:
-        """识别校园建筑图片，优先调用 DeepSeek VL，无 Key 时回退 mock"""
+        """识别校园建筑图片，优先调用 CLIP 图像匹配，再调用 Qwen VL，无 Key 时回退 mock"""
 
+        # 1. 真正的 Visual RAG: 图像向量直接匹配
+        if self._clip_model and self._image_collection:
+            try:
+                import io
+                from PIL import Image
+                image_bytes = base64.b64decode(image_base64)
+                img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                
+                # 提取用户上传图片的视觉特征向量
+                img_embedding = self._clip_model.encode(img, normalize_embeddings=True).tolist()
+                
+                # 在 ChromaDB 中进行视觉相似度检索
+                results = self._image_collection.query(
+                    query_embeddings=[img_embedding],
+                    n_results=1,
+                    include=["metadatas", "distances"]
+                )
+                
+                # 如果匹配度极高（距离 < 0.25，即极其相似或完全一致的图片）
+                if results['distances'] and results['distances'][0] and results['distances'][0][0] < 0.25:
+                    metadata = results['metadatas'][0][0]
+                    print(f"[Vision] CLIP 视觉 RAG 命中: {metadata['title']} (距离: {results['distances'][0][0]})")
+                    return {
+                        "recognized": True,
+                        "building_name": metadata["title"],
+                        "description": metadata["answer"],
+                    }
+            except Exception as e:
+                print(f"[Vision] CLIP 匹配异常: {e}")
+
+        # 2. 如果没有高度匹配的原图，则退化使用 Qwen-VL 大模型“裸眼”识别
         if self._api_key:
             try:
-                return await self._recognize_with_deepseek_vl(image_base64)
+                return await self._recognize_with_qwen_vl(image_base64)
             except Exception as exc:
-                print(f"[Vision] DeepSeek VL 调用失败，回退 mock：{exc}")
+                print(f"[Vision] Qwen VL 调用失败，回退 mock：{exc}")
 
         return self._mock_recognize()
 
@@ -69,14 +116,37 @@ class VisionService:
 
         if self._api_key:
             try:
-                return await self._qa_with_deepseek_vl(image_base64, question)
+                return await self._qa_with_qwen_vl(image_base64, question)
             except Exception as exc:
-                print(f"[Vision] DeepSeek VL 问答失败：{exc}")
+                print(f"[Vision] Qwen VL 问答失败：{exc}")
 
         return self._mock_scene_qa(question)
 
-    async def _recognize_with_deepseek_vl(self, image_base64: str) -> dict[str, Any]:
-        """调用 DeepSeek VL 识别建筑"""
+    async def _recognize_with_qwen_vl(self, image_base64: str) -> dict[str, Any]:
+        """调用 Qwen VL 识别建筑"""
+
+        # 动态加载所有合法建筑名作为候选库
+        candidates_str = ""
+        try:
+            dataset_path = Path(__file__).resolve().parents[2] / 'data' / 'rag_dataset' / 'dataset.json'
+            if dataset_path.exists():
+                with open(dataset_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    candidate_names = list(set(d.get("building_name", "") for d in data if d.get("building_name")))
+                    candidates_str = "、".join(candidate_names)
+        except Exception as e:
+            print(f"[Vision] 无法加载候选建筑列表: {e}")
+
+        prompt_text = (
+            '请识别这张图片中的西南大学校园建筑。\n'
+            + (f'【重要提示】以下是所有西南大学合法的建筑名称（候选库）：{candidates_str}\n\n' if candidates_str else '') +
+            '要求：\n'
+            '1. 请必须从上述【候选库】中挑出一个最匹配的建筑名称（比如照片里写着书楠楼，不要错认成书斋楼）。\n'
+            '2. 给出一段50-100字的简要介绍\n'
+            '3. 【极其重要】如果图片中没有明显的建筑，或者候选库中完全没有能对上号的建筑，必须严格回答"未能识别"\n'
+            '请严格按以下JSON格式回复，不要输出其他内容：\n'
+            '{"building_name": "建筑名称", "description": "建筑介绍"}'
+        )
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
@@ -90,15 +160,7 @@ class VisionService:
                             "content": [
                                 {
                                     "type": "text",
-                                    "text": (
-                                        '请识别这张图片中的西南大学校园建筑。\n'
-                                        '要求：\n'
-                                        '1. 给出建筑名称（如图书馆、25教、光华楼等）\n'
-                                        '2. 给出一段50-100字的简要介绍\n'
-                                        '3. 如果无法确定建筑名称，回答"未能识别"\n'
-                                        '请严格按以下JSON格式回复，不要输出其他内容：\n'
-                                        '{"building_name": "建筑名称", "description": "建筑介绍"}'
-                                    ),
+                                    "text": prompt_text,
                                 },
                                 {
                                     "type": "image_url",
@@ -116,23 +178,64 @@ class VisionService:
             data = resp.json()
             text = data["choices"][0]["message"]["content"].strip()
 
+            # 清理 Markdown 代码块包裹
+            if text.startswith("```json"):
+                text = text[7:]
+            elif text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+
             # 尝试解析 JSON，容错处理
             try:
                 result = json.loads(text)
+                b_name = result.get("building_name", "未知建筑")
+                description = result.get("description", text)
+                
+                # --- Visual RAG 结合：去伪存真 ---
+                if b_name not in ["未知建筑", "未能识别", "未识别"]:
+                    try:
+                        from modules.rag.vector_store import vector_store
+                        # 拿着大模型识别出来的名字，去向量库找“官方身份证”
+                        search_results = vector_store.search(b_name, top_k=1, threshold=0.4)
+                        if search_results:
+                            # 如果找到官方档案，强行覆盖大模型自己瞎编的介绍，彻底消灭幻觉！
+                            b_name = search_results[0].get("title", b_name)
+                            description = search_results[0].get("answer", description)
+                    except Exception as e:
+                        print(f"[Vision] 检索视觉 RAG 失败: {e}")
+                        
+                is_recognized = b_name not in ["未知建筑", "未能识别", "未识别"]
                 return {
-                    "recognized": True,
-                    "building_name": result.get("building_name", "未知建筑"),
-                    "description": result.get("description", text),
+                    "recognized": is_recognized,
+                    "building_name": b_name,
+                    "description": description,
                 }
             except json.JSONDecodeError:
+                b_name = self._extract_building_name(text)
+                description = text
+                
+                # --- Visual RAG 结合：去伪存真 ---
+                if b_name not in ["未知建筑", "未能识别", "未识别"]:
+                    try:
+                        from modules.rag.vector_store import vector_store
+                        search_results = vector_store.search(b_name, top_k=1, threshold=0.4)
+                        if search_results:
+                            b_name = search_results[0].get("title", b_name)
+                            description = search_results[0].get("answer", description)
+                    except Exception as e:
+                        print(f"[Vision] 检索视觉 RAG 失败: {e}")
+                        
+                is_recognized = b_name not in ["未知建筑", "未能识别", "未识别"]
                 return {
-                    "recognized": True,
-                    "building_name": self._extract_building_name(text),
-                    "description": text,
+                    "recognized": is_recognized,
+                    "building_name": b_name,
+                    "description": description,
                 }
 
-    async def _qa_with_deepseek_vl(self, image_base64: str, question: str) -> str:
-        """调用 DeepSeek VL 进行场景问答"""
+    async def _qa_with_qwen_vl(self, image_base64: str, question: str) -> str:
+        """调用 Qwen VL 进行场景问答"""
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
@@ -169,7 +272,7 @@ class VisionService:
             "building_name": building["building_name"],
             "description": building["description"],
             "fallback": True,
-            "reason": "未配置 DeepSeek API Key 或 API 调用失败，返回本地模拟识别结果",
+            "reason": "未配置 Vision API Key 或 API 调用失败，返回本地模拟识别结果",
         }
 
     def _mock_scene_qa(self, question: str) -> str:

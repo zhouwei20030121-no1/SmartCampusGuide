@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'ar_api.dart';
@@ -23,6 +24,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
   ArRecognizeResult? _result;
   String? _errorMsg;
   String? _statusMsg;
+  File? _selectedImage;
 
   @override
   void initState() {
@@ -99,8 +101,14 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
     );
   }
 
-  /// 摄像头预览
+  /// 摄像头或图片预览
   Widget _buildPreview() {
+    if (_selectedImage != null) {
+      return SizedBox.expand(
+        child: Image.file(_selectedImage!, fit: BoxFit.cover),
+      );
+    }
+
     if (!_cameraReady || _cameraCtrl == null) {
       return Container(
         decoration: const BoxDecoration(
@@ -297,6 +305,12 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // 从相册选择
+              IconButton(
+                icon: const Icon(Icons.photo_library_rounded, color: Colors.white, size: 30),
+                onPressed: _recognizing ? null : _pickFromGallery,
+              ),
+              const SizedBox(width: 24),
               // 拍照识别按钮
               GestureDetector(
                 onTap: _recognizing ? null : _captureAndRecognize,
@@ -352,6 +366,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                     setState(() {
                       _result = null;
                       _errorMsg = null;
+                      _selectedImage = null;
                     });
                   },
                 ),
@@ -434,37 +449,69 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                 ),
               ),
               const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    icon:
-                        const Icon(Icons.headphones_rounded, size: 16),
-                    label: const Text('语音讲解'),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('语音讲解功能开发中')),
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.psychology_alt_rounded, size: 16),
-                    label: const Text('问问西小导'),
-                    onPressed: () {
-                      Navigator.pushNamed(context, '/chat',
-                          arguments: {
-                            'prompt': '给我讲讲${result.buildingName}'
-                          });
-                    },
-                  ),
-                ],
-              ),
+              if (result.recognized)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.headphones_rounded, size: 16),
+                      label: const Text('语音讲解'),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('语音讲解功能开发中')),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      icon: const Icon(Icons.psychology_alt_rounded, size: 16),
+                      label: const Text('问问西小导'),
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/chat', arguments: {
+                          'prompt': '给我讲讲${result.buildingName}'
+                        });
+                      },
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// 从相册选择照片 + 识别
+  Future<void> _pickFromGallery() async {
+    final picker = ImagePicker();
+    final xFile = await picker.pickImage(source: ImageSource.gallery);
+    if (xFile == null) return;
+    
+    setState(() {
+      _recognizing = true;
+      _errorMsg = null;
+      _result = null;
+      _selectedImage = File(xFile.path);
+    });
+
+    try {
+      final bytes = await File(xFile.path).readAsBytes();
+      final base64Image = base64.encode(bytes);
+
+      final result = await ArApi.recognize(base64Image);
+      if (!mounted) return;
+
+      setState(() {
+        _result = result;
+        _recognizing = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMsg = '识别失败：$e';
+        _recognizing = false;
+      });
+    }
   }
 
   /// 拍照 + 识别
@@ -476,6 +523,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
       _recognizing = true;
       _errorMsg = null;
       _result = null;
+      _selectedImage = null;
     });
 
     try {

@@ -6,16 +6,16 @@ class ChatApi {
   static String get _baseUrl {
     const envUrl = String.fromEnvironment('AI_SERVICE_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5050';
-    return 'http://127.0.0.1:5050';
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5051';
+    return 'http://127.0.0.1:5051';
   }
 
   static List<String> get _baseUrls {
     final urls = <String>[
       _baseUrl,
-      'http://127.0.0.1:5050',
-      'http://10.0.2.2:5050',
-      'http://localhost:5050',
+      'http://127.0.0.1:5051',
+      'http://10.0.2.2:5051',
+      'http://localhost:5051',
     ];
     return urls.toSet().toList();
   }
@@ -33,7 +33,7 @@ class ChatApi {
       }
     }
 
-    throw ChatApiException('无法连接 AI 服务，请确认 127.0.0.1:5050 已启动。最后错误：$lastError');
+    throw ChatApiException('无法连接 AI 服务，请确认 127.0.0.1:5051 已启动。最后错误：$lastError');
   }
 
   static Future<ChatReply> _sendTo({
