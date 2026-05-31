@@ -72,6 +72,7 @@ class _ChatPageState extends State<ChatPage> {
       final result = await ChatApi.sendMessage(
         query: text,
         history: history,
+        persona: _persona,
       );
       if (!mounted) return;
       setState(() {
@@ -99,7 +100,11 @@ class _ChatPageState extends State<ChatPage> {
       setState(() {
         _messages.removeWhere((msg) => msg.isLoading);
         _messages.add(
-          _ChatMsg(text: '西小导暂时开小差了：$e', isMe: false, isError: true),
+          const _ChatMsg(
+            text: '西小导暂时开小差了，请稍后重试。',
+            isMe: false,
+            isError: true,
+          ),
         );
         _sending = false;
       });

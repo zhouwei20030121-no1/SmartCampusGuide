@@ -6,16 +6,16 @@ class ChatApi {
   static String get _baseUrl {
     const envUrl = String.fromEnvironment('AI_SERVICE_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5051';
-    return 'http://127.0.0.1:5051';
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5050';
+    return 'http://127.0.0.1:5050';
   }
 
   static List<String> get _baseUrls {
     final urls = <String>[
       _baseUrl,
-      'http://127.0.0.1:5051',
-      'http://10.0.2.2:5051',
-      'http://localhost:5051',
+      'http://127.0.0.1:5050',
+      'http://10.0.2.2:5050',
+      'http://localhost:5050',
     ];
     return urls.toSet().toList();
   }
@@ -23,29 +23,36 @@ class ChatApi {
   static Future<ChatReply> sendMessage({
     required String query,
     required List<Map<String, String>> history,
+    String persona = '新生',
   }) async {
     Object? lastError;
     for (final baseUrl in _baseUrls) {
       try {
-        return await _sendTo(baseUrl: baseUrl, query: query, history: history);
+        return await _sendTo(baseUrl: baseUrl, query: query, history: history, persona: persona);
       } catch (e) {
         lastError = e;
       }
     }
 
-    throw ChatApiException('无法连接 AI 服务，请确认 127.0.0.1:5051 已启动。最后错误：$lastError');
+    throw ChatApiException('无法连接 AI 服务，请确认 127.0.0.1:5050 已启动。最后错误：$lastError');
   }
 
   static Future<ChatReply> _sendTo({
     required String baseUrl,
     required String query,
     required List<Map<String, String>> history,
+    required String persona,
   }) async {
     final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 5);
     try {
       final req = await client.postUrl(Uri.parse('$baseUrl/api/rag/chat'));
       req.headers.set('Content-Type', 'application/json');
-      req.add(utf8.encode(json.encode({'query': query, 'history': history})));
+      req.add(utf8.encode(json.encode({
+        'query': query,
+        'history': history,
+        'persona': persona,
+      })));
 
       final res = await req.close();
       final body = await res.transform(utf8.decoder).join();
