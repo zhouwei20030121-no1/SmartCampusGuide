@@ -177,7 +177,7 @@ class _TabHome extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildTopSearchBar(),
+        _buildTopSearchBar(context),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.only(
@@ -202,7 +202,7 @@ class _TabHome extends StatelessWidget {
     );
   }
 
-  Widget _buildTopSearchBar() {
+  Widget _buildTopSearchBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
@@ -234,30 +234,33 @@ class _TabHome extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.search_rounded,
-                    color: Colors.black45.withValues(alpha: 0.6),
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '搜索校园景点、服务设施...',
-                    style: TextStyle(
-                      color: Colors.black38.withValues(alpha: 0.6),
-                      fontSize: 13,
+            child: GestureDetector(
+              onTap: () => Navigator.pushNamed(context, '/search'),
+              child: Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.search_rounded,
+                      color: Colors.black45.withValues(alpha: 0.6),
+                      size: 18,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Text(
+                      '搜索校园景点、服务设施...',
+                      style: TextStyle(
+                        color: Colors.black38.withValues(alpha: 0.6),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

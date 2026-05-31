@@ -1,0 +1,5 @@
+models_cache/
+chroma_db/
+.venv/
+__pycache__/
+*.pyc

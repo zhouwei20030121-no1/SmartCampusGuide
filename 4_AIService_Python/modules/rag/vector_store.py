@@ -24,7 +24,7 @@ class VectorStore:
     def error(self) -> str:
         return self._error
 
-    def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+    def search(self, query: str, top_k: int = 5, threshold: float = 0.35) -> list[dict[str, Any]]:
         if not self.available:
             return []
         embedding = self._model.encode([query], normalize_embeddings=True)[0].tolist()
@@ -39,6 +39,9 @@ class VectorStore:
         metadatas = results.get("metadatas", [[]])[0]
         distances = results.get("distances", [[]])[0]
         for item_id, metadata, distance in zip(ids, metadatas, distances):
+            score = round(1 - float(distance), 4)
+            if score < threshold:
+                continue
             metadata = metadata or {}
             documents.append(
                 {
@@ -57,7 +60,7 @@ class VectorStore:
                     "source_url": metadata.get("source_url", ""),
                     "entity_id": metadata.get("entity_id", ""),
                     "section": metadata.get("section", ""),
-                    "score": round(1 - float(distance), 4),
+                    "score": score,
                     "retrieval": "vector",
                 }
             )

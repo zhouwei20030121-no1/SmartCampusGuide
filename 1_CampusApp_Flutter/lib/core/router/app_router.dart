@@ -11,6 +11,7 @@ import '../../features/ar/ar_page.dart';
 import '../../features/route/route_page.dart';
 import '../../features/social/checkin_page.dart';
 import '../../features/home/home_page.dart';
+import '../../features/home/search_page.dart';
 import '../../features/bus/bus_schedule_page.dart';
 
 class AppRouter {
@@ -26,6 +27,7 @@ class AppRouter {
   static const String ar = '/ar';
   static const String routePlan = '/route';
   static const String checkin = '/checkin';
+  static const String search = '/search';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -59,6 +61,13 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const CheckinPage());
       case busSchedule:
         return MaterialPageRoute(builder: (_) => const BusSchedulePage());
+      case search:
+        return PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => const SearchPage(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+        );
       default:
         return MaterialPageRoute(builder: (_) => const LoginPage());
     }

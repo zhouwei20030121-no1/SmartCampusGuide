@@ -9,6 +9,9 @@ class Settings:
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "deepseek-chat")
+    VISION_MODEL: str = os.getenv("VISION_MODEL", "qwen-vl-max")
+    VISION_API_KEY: str = os.getenv("VISION_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+    VISION_BASE_URL: str = os.getenv("VISION_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
     OPENAI_TEMPERATURE: float = float(os.getenv("OPENAI_TEMPERATURE", 0.3))
     OPENAI_MAX_TOKENS: int = int(os.getenv("OPENAI_MAX_TOKENS", 500))
     VECTOR_SEARCH_ENABLED: bool = os.getenv("VECTOR_SEARCH_ENABLED", "true").lower() == "true"

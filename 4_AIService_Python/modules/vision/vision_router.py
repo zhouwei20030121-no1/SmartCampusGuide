@@ -21,7 +21,10 @@ async def recognize(req: RecognizeRequest):
         result = await vision_service.recognize_building(req.image_base64)
         return ApiResponse.ok(result)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # 异常时回退到本地模拟识别，保证接口不崩
+        result = vision_service._mock_recognize()
+        result["reason"] = f"识别异常（{e}），已回退本地模拟结果"
+        return ApiResponse.ok(result)
 
 
 @router.post("/scene-qa")
@@ -30,4 +33,6 @@ async def scene_qa(req: SceneQARequest):
         answer = await vision_service.scene_qa(req.image_base64, req.question)
         return ApiResponse.ok({"answer": answer})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return ApiResponse.ok({
+            "answer": f"视觉问答暂不可用：{e}。建议使用文字版西小导问答。"
+        })

@@ -1,16 +1,33 @@
 PODS:
+  - AMap3DMap (11.1.200):
+    - AMapFoundation (>= 1.8.7)
+  - amap_flutter_map (0.0.1):
+    - AMap3DMap
+    - Flutter
+  - AMapFoundation (1.8.7)
   - Flutter (1.0.0)
 
 DEPENDENCIES:
+  - amap_flutter_map (from `.symlinks/plugins/amap_flutter_map/ios`)
   - Flutter (from `Flutter`)
 
+SPEC REPOS:
+  trunk:
+    - AMap3DMap
+    - AMapFoundation
+
 EXTERNAL SOURCES:
+  amap_flutter_map:
+    :path: ".symlinks/plugins/amap_flutter_map/ios"
   Flutter:
     :path: Flutter
 
 SPEC CHECKSUMS:
+  AMap3DMap: 89c17fdbca2f25e4b46d6a45a8e50346980fc799
+  amap_flutter_map: 6cde084007a3ed06235383d46bc73c6c9a80c1e6
+  AMapFoundation: e99da1cc722528c60b39340b4763a95305f6c55e
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
 
-PODFILE CHECKSUM: 6ce95ca747f7c5a53e3590fff73a513cf338fc72
+PODFILE CHECKSUM: 6510203299236426e6e9c9ad849773e980971186
 
 COCOAPODS: 1.16.2
