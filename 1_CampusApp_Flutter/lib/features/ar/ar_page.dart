@@ -381,7 +381,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
   Widget _buildArOverlay() {
     final result = _result!;
     return Positioned(
-      bottom: 140, // 悬浮在底部操作栏上方
+      bottom: 180, // 悬浮在底部操作栏上方，考虑到 SafeArea 的高度
       left: 32,
       right: 32,
       child: AnimatedOpacity(
