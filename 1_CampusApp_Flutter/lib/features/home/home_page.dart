@@ -326,7 +326,8 @@ class _TabHome extends StatelessWidget {
           _GridButton(
             icon: Icons.route_outlined,
             label: '路线规划',
-            onTap: () => onTabSelected(1),
+// 🌟 核心修改：点击这里，跳转到我们刚刚写的独立路线规划页面 RoutePage
+            onTap: () => _navTo(context, '/route'),
           ),
           _GridButton(
             icon: Icons.view_in_ar_rounded,

@@ -16,19 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Service
 public class RoutePlanServiceImpl
         extends ServiceImpl<RoutePlanMapper, RoutePlan>
         implements RoutePlanService {
 
-    /** 步行速度：米/分钟（Haversine备用方案使用） */
     private static final double WALK_SPEED = 80.0;
-    /** 每个景点停留时间：分钟 */
     private static final int STAY_TIME_PER_SPOT = 10;
-    /** 地球半径：米 */
     private static final double EARTH_RADIUS = 6371000.0;
 
     private final RouteSpotNodeMapper nodeMapper;
@@ -66,9 +62,6 @@ public class RoutePlanServiceImpl
 
         this.save(routePlan);
         saveSpotNodes(routePlan.getId(), spotIds);
-
-        // 打印缓存统计
-        System.out.println("📊 " + amapUtil.getCacheStats());
     }
 
     @Override
@@ -79,16 +72,11 @@ public class RoutePlanServiceImpl
 
         this.updateById(routePlan);
 
-        // 删除旧节点
         LambdaQueryWrapper<RouteSpotNode> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RouteSpotNode::getRouteId, routePlan.getId());
         nodeMapper.delete(wrapper);
 
-        // 保存新节点
         saveSpotNodes(routePlan.getId(), spotIds);
-
-        // 打印缓存统计
-        System.out.println("📊 " + amapUtil.getCacheStats());
     }
 
     @Override
@@ -100,9 +88,6 @@ public class RoutePlanServiceImpl
         return routePlan;
     }
 
-    /**
-     * 保存景点节点
-     */
     private void saveSpotNodes(Long routeId, String spotIds) {
         if (!StringUtils.hasText(spotIds)) return;
 
@@ -119,9 +104,6 @@ public class RoutePlanServiceImpl
         }
     }
 
-    /**
-     * 填充路线的景点信息
-     */
     private void fillSpotInfo(RoutePlan routePlan) {
         LambdaQueryWrapper<RouteSpotNode> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RouteSpotNode::getRouteId, routePlan.getId())
@@ -137,7 +119,6 @@ public class RoutePlanServiceImpl
                 node.setSpotCoverImage(spot.getCoverImage());
             }
         }
-
         routePlan.setSpots(nodes);
 
         StringBuilder sb = new StringBuilder();
@@ -148,10 +129,6 @@ public class RoutePlanServiceImpl
         routePlan.setSpotIds(sb.toString());
     }
 
-    /**
-     * 根据景点ID列表计算预计耗时（仅在保存时调用一次）
-     * 优先使用高德API（带缓存），失败降级为Haversine公式
-     */
     private int calculateEstimatedTime(String spotIds) {
         if (!StringUtils.hasText(spotIds)) return 0;
 
@@ -167,47 +144,23 @@ public class RoutePlanServiceImpl
         if (spots.isEmpty()) return 0;
         if (spots.size() == 1) return STAY_TIME_PER_SPOT;
 
-        // 优先使用高德API（带缓存）
         Integer amapTime = calculateByAmap(spots);
-        if (amapTime != null) {
-            System.out.println("✅ 路线耗时计算完成(高德API): " + amapTime + " 分钟");
-            return amapTime;
-        }
-
-        // 降级为Haversine公式
-        int haversineTime = calculateByHaversine(spots);
-        System.out.println("✅ 路线耗时计算完成(Haversine): " + haversineTime + " 分钟");
-        return haversineTime;
+        if (amapTime != null) return amapTime;
+        return calculateByHaversine(spots);
     }
 
-    /**
-     * 使用高德API计算总耗时（带缓存）
-     * 同一段路径24小时内不重复请求API
-     * 返回总分钟数，失败返回null
-     */
     private Integer calculateByAmap(List<Spot> spots) {
-        // 检查高德Key是否配置
-        if (!amapUtil.isConfigured()) {
-            System.out.println("⚠️ 高德Key未配置，跳过API调用");
-            return null;
-        }
+        if (!amapUtil.isConfigured()) return null;
 
         try {
             double totalWalkSeconds = 0;
             int segmentCount = 0;
-            int cacheHits = 0;
 
             for (int i = 0; i < spots.size() - 1; i++) {
                 Spot s1 = spots.get(i);
                 Spot s2 = spots.get(i + 1);
 
-                if (!hasCoordinates(s1) || !hasCoordinates(s2)) {
-                    System.out.println("⚠️ 景点缺少坐标，跳过: " + s1.getName() + " → " + s2.getName());
-                    continue;
-                }
-
-                System.out.printf("📍 计算路径 %d/%d: %s → %s%n",
-                        i + 1, spots.size() - 1, s1.getName(), s2.getName());
+                if (!hasCoordinates(s1) || !hasCoordinates(s2)) continue;
 
                 double[] result = amapUtil.getWalkingDistanceAndTime(
                         s1.getLatitude(), s1.getLongitude(),
@@ -217,10 +170,7 @@ public class RoutePlanServiceImpl
                 if (result != null) {
                     totalWalkSeconds += result[1];
                     segmentCount++;
-                    // 检查是否是缓存命中（距离和时间与之前完全相同）
-                    // 简单判断：如果日志没有"高德API请求"字样就是缓存命中
                 } else {
-                    System.out.println("❌ 路径计算失败，降级为Haversine公式");
                     return null;
                 }
             }
@@ -229,21 +179,12 @@ public class RoutePlanServiceImpl
 
             int walkMinutes = (int) Math.ceil(totalWalkSeconds / 60);
             int stayMinutes = spots.size() * STAY_TIME_PER_SPOT;
-            int totalMinutes = Math.max(walkMinutes + stayMinutes, 10);
-
-            System.out.printf("📊 计算结果 - 步行: %d分钟, 景点停留: %d分钟, 总计: %d分钟%n",
-                    walkMinutes, stayMinutes, totalMinutes);
-
-            return totalMinutes;
+            return Math.max(walkMinutes + stayMinutes, 10);
         } catch (Exception e) {
-            System.err.println("❌ 高德API计算异常: " + e.getMessage());
             return null;
         }
     }
 
-    /**
-     * 使用Haversine公式计算总耗时（备用方案）
-     */
     private int calculateByHaversine(List<Spot> spots) {
         double totalDistance = 0;
         int segmentCount = 0;
@@ -253,14 +194,11 @@ public class RoutePlanServiceImpl
             Spot s2 = spots.get(i + 1);
 
             if (hasCoordinates(s1) && hasCoordinates(s2)) {
-                double distance = haversineDistance(
+                totalDistance += haversineDistance(
                         s1.getLatitude(), s1.getLongitude(),
                         s2.getLatitude(), s2.getLongitude()
                 );
-                totalDistance += distance;
                 segmentCount++;
-                System.out.printf("📏 Haversine: %s → %s = %.0f米%n",
-                        s1.getName(), s2.getName(), distance);
             }
         }
 
@@ -268,24 +206,13 @@ public class RoutePlanServiceImpl
 
         int walkMinutes = (int) (totalDistance / WALK_SPEED);
         int stayMinutes = spots.size() * STAY_TIME_PER_SPOT;
-        int totalMinutes = Math.max(walkMinutes + stayMinutes, 10);
-
-        System.out.printf("📊 Haversine结果 - 总距离: %.0f米, 步行: %d分钟, 停留: %d分钟, 总计: %d分钟%n",
-                totalDistance, walkMinutes, stayMinutes, totalMinutes);
-
-        return totalMinutes;
+        return Math.max(walkMinutes + stayMinutes, 10);
     }
 
-    /**
-     * 判断景点是否有坐标
-     */
     private boolean hasCoordinates(Spot spot) {
-        return spot.getLatitude() != null && spot.getLongitude() != null;
+        return spot != null && spot.getLatitude() != null && spot.getLongitude() != null;
     }
 
-    /**
-     * Haversine公式计算两点间直线距离（米）
-     */
     private double haversineDistance(BigDecimal lat1, BigDecimal lng1,
                                      BigDecimal lat2, BigDecimal lng2) {
         double dLat = Math.toRadians(lat2.doubleValue() - lat1.doubleValue());
@@ -296,5 +223,137 @@ public class RoutePlanServiceImpl
                         Math.sin(dLng / 2) * Math.sin(dLng / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return EARTH_RADIUS * c;
+    }
+
+
+    // ================= 以下为深度修复后的最优路线算法 =================
+
+    private static class Node implements Comparable<Node> {
+        Spot spot;
+        double gCost; 
+        double hCost; 
+        Node parent;
+
+        public Node(Spot spot) {
+            this.spot = spot;
+        }
+
+        public double getFCost() { return gCost + hCost; }
+
+        @Override
+        public int compareTo(Node other) {
+            return Double.compare(this.getFCost(), other.getFCost());
+        }
+    }
+
+    @Override
+    public List<Spot> calculateOptimalRoute(Long startId, Long endId, boolean isPopularityFirst) {
+        Spot startSpot = spotService.getById(startId);
+        Spot endSpot = spotService.getById(endId);
+        
+        if (startSpot == null || endSpot == null || !hasCoordinates(startSpot) || !hasCoordinates(endSpot)) {
+            return new ArrayList<>();
+        }
+
+        // 🌟 修复一：如果是“最短路线”，直接返回起止点！让高德底层路网接管规划，绝对不会有乱绕路的叠加！
+        if (!isPopularityFirst) {
+            return Arrays.asList(startSpot, endSpot);
+        }
+
+        // ==========================================
+        // 下面是“体验最佳（热度打卡优先）”的专属 A* 算法
+        // ==========================================
+        List<Spot> allSpots = spotService.list();
+        Map<Long, Spot> spotMap = new HashMap<>();
+        Map<Long, Node> nodeMap = new HashMap<>();
+        
+        // 动态探测真实最高热度
+        int maxVisitCount = 1;
+        for (Spot s : allSpots) {
+            spotMap.put(s.getId(), s);
+            Node n = new Node(s);
+            // 🌟 修复二：初始代价必须设为正无穷，否则探索失效
+            n.gCost = Double.MAX_VALUE; 
+            nodeMap.put(s.getId(), n);
+            if (s.getVisitCount() != null && s.getVisitCount() > maxVisitCount) {
+                maxVisitCount = s.getVisitCount();
+            }
+        }
+
+        Map<Long, List<Node>> graph = new HashMap<>();
+        for (Spot s1 : allSpots) {
+            List<Node> neighbors = new ArrayList<>();
+            for (Spot s2 : allSpots) {
+                if (!s1.getId().equals(s2.getId()) && hasCoordinates(s1) && hasCoordinates(s2)) {
+                    double dist = haversineDistance(s1.getLatitude(), s1.getLongitude(), s2.getLatitude(), s2.getLongitude());
+                    if (dist < 500.0) { // 校园连通半径 500米
+                        neighbors.add(nodeMap.get(s2.getId()));
+                    }
+                }
+            }
+            graph.put(s1.getId(), neighbors);
+        }
+
+        PriorityQueue<Node> openSet = new PriorityQueue<>();
+        Set<Long> closedSet = new HashSet<>();
+        
+        Node startNode = nodeMap.get(startId);
+        startNode.gCost = 0;
+        double initialH = haversineDistance(startSpot.getLatitude(), startSpot.getLongitude(), endSpot.getLatitude(), endSpot.getLongitude());
+        // 🌟 修复三：削弱终点方向的目的性，让算法更愿意在校园里乱逛打卡
+        startNode.hCost = initialH * 0.2; 
+        openSet.add(startNode);
+
+        while (!openSet.isEmpty()) {
+            Node current = openSet.poll();
+
+            if (current.spot.getId().equals(endId)) {
+                return reconstructPath(current);
+            }
+
+            closedSet.add(current.spot.getId());
+
+            for (Node neighbor : graph.getOrDefault(current.spot.getId(), new ArrayList<>())) {
+                if (closedSet.contains(neighbor.spot.getId())) continue;
+
+                double physicalDistance = haversineDistance(current.spot.getLatitude(), current.spot.getLongitude(), neighbor.spot.getLatitude(), neighbor.spot.getLongitude());
+                
+                Integer visitCount = neighbor.spot.getVisitCount();
+                if (visitCount == null) visitCount = 0;
+                
+                // 热门景点的代价急剧缩小（最多打 1 折），极度吸引路径偏移
+                double discount = Math.max(0.1, 1.0 - ((double) visitCount / maxVisitCount));
+                double moveCost = physicalDistance * discount;
+
+                double tentativeGCost = current.gCost + moveCost;
+
+                if (tentativeGCost < neighbor.gCost) {
+                    neighbor.parent = current;
+                    neighbor.gCost = tentativeGCost;
+                    
+                    double nextH = haversineDistance(neighbor.spot.getLatitude(), neighbor.spot.getLongitude(), endSpot.getLatitude(), endSpot.getLongitude());
+                    neighbor.hCost = nextH * 0.2;
+                    
+                    // 🌟 修复四：Java 的优先队列修改属性后，必须重新插拔才能排序！
+                    if (openSet.contains(neighbor)) {
+                        openSet.remove(neighbor);
+                    }
+                    openSet.add(neighbor);
+                }
+            }
+        }
+        
+        return Arrays.asList(startSpot, endSpot);
+    }
+
+    private List<Spot> reconstructPath(Node endNode) {
+        List<Spot> path = new ArrayList<>();
+        Node curr = endNode;
+        while (curr != null) {
+            path.add(curr.spot);
+            curr = curr.parent;
+        }
+        Collections.reverse(path);
+        return path;
     }
 }
