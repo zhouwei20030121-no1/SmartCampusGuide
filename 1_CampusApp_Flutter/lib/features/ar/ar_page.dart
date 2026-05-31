@@ -404,29 +404,6 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // AR 悬浮指示线和小圆点
-              Positioned(
-                top: -30,
-                left: MediaQuery.of(context).size.width / 2 - 32 - 2, // 居中对齐
-                child: Column(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                    Container(
-                      width: 2,
-                      height: 22,
-                      color: AppTheme.primary.withValues(alpha: 0.8),
-                    ),
-                  ],
-                ),
-              ),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
