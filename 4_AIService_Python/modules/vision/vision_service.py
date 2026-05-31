@@ -90,15 +90,21 @@ class VisionService:
                     include=["metadatas", "distances"]
                 )
                 
-                # 如果匹配度极高（距离 < 0.25，即极其相似或完全一致的图片）
-                if results['distances'] and results['distances'][0] and results['distances'][0][0] < 0.25:
+                if results['distances'] and results['distances'][0]:
+                    dist = results['distances'][0][0]
                     metadata = results['metadatas'][0][0]
-                    print(f"[Vision] CLIP 视觉 RAG 命中: {metadata['title']} (距离: {results['distances'][0][0]})")
-                    return {
-                        "recognized": True,
-                        "building_name": metadata["title"],
-                        "description": metadata["answer"],
-                    }
+                    print(f"[Vision] CLIP Top-1 匹配: {metadata['title']} (距离: {dist})")
+                    
+                    # 适当放宽阈值至 0.45，因为 Android 相册选择器可能会压缩图片导致像素变化
+                    if dist < 0.45:
+                        print(f"[Vision] 🟢 距离小于 0.45，判定为同一建筑！")
+                        return {
+                            "recognized": True,
+                            "building_name": metadata["title"],
+                            "description": metadata["answer"],
+                        }
+                    else:
+                        print(f"[Vision] 🔴 距离大于 0.45，转交 Qwen-VL 进行识别...")
             except Exception as e:
                 print(f"[Vision] CLIP 匹配异常: {e}")
 

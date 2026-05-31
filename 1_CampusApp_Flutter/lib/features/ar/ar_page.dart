@@ -377,13 +377,13 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
     );
   }
 
-  /// AR 识别结果卡片
+  /// AR 识别结果卡片 (悬浮 AR 标签)
   Widget _buildArOverlay() {
     final result = _result!;
     return Positioned(
-      bottom: 140,
-      left: 16,
-      right: 16,
+      top: MediaQuery.of(context).size.height / 2 + 150, // 悬浮在扫描框正下方
+      left: 32,
+      right: 32,
       child: AnimatedOpacity(
         opacity: 1,
         duration: const Duration(milliseconds: 400),
@@ -401,10 +401,36 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
+            clipBehavior: Clip.none,
             children: [
+              // AR 悬浮指示线和小圆点
+              Positioned(
+                top: -30,
+                left: MediaQuery.of(context).size.width / 2 - 32 - 2, // 居中对齐
+                child: Column(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                    Container(
+                      width: 2,
+                      height: 22,
+                      color: AppTheme.primary.withValues(alpha: 0.8),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Row(
                 children: [
                   const Icon(Icons.location_on_rounded,
@@ -474,7 +500,8 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                     ),
                   ],
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
