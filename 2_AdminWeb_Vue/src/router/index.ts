@@ -62,6 +62,11 @@ const routes = [
         component: () => import('@/views/ai/CorpusManage.vue'),
         meta: { title: '语料库管理' },
       },
+      {
+        path: '/bus',
+        name: 'Bus',
+        component: () => import('@/views/bus/BusManage.vue'),
+      }
     ],
   },
 ]

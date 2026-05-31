@@ -18,7 +18,7 @@ public class BusLine {
     private Integer directionType;
     private String fareInfo;
     private String remark;
-    private Boolean enabled;
+    private Integer enabled;
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE)
