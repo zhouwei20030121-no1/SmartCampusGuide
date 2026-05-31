@@ -381,7 +381,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
   Widget _buildArOverlay() {
     final result = _result!;
     return Positioned(
-      top: MediaQuery.of(context).size.height / 2 + 150, // 悬浮在扫描框正下方
+      bottom: 140, // 悬浮在底部操作栏上方
       left: 32,
       right: 32,
       child: AnimatedOpacity(
@@ -502,6 +502,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                 ),
               ],
             ),
+            ],
           ),
         ),
       ),
