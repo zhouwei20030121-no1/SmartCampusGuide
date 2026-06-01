@@ -10,6 +10,7 @@ public class DeepSeekProperties {
     private double temperature = 0.7;
     private int maxTokens = 2048;
     private int contextWindow = 10;
+    private int sessionTtlMinutes = 30;
 
     public String getApiKey() { return apiKey; }
     public void setApiKey(String apiKey) { this.apiKey = apiKey; }
@@ -23,4 +24,6 @@ public class DeepSeekProperties {
     public void setMaxTokens(int maxTokens) { this.maxTokens = maxTokens; }
     public int getContextWindow() { return contextWindow; }
     public void setContextWindow(int contextWindow) { this.contextWindow = contextWindow; }
+    public int getSessionTtlMinutes() { return sessionTtlMinutes; }
+    public void setSessionTtlMinutes(int sessionTtlMinutes) { this.sessionTtlMinutes = sessionTtlMinutes; }
 }

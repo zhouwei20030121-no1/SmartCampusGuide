@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -266,17 +265,20 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                   shadows: [Shadow(color: Colors.black45, blurRadius: 4)],
                 ),
               ),
-              if (_result != null && _result!.fallback) ...[
+              if (_result != null && _result!.recognized && _result!.fallback) ...[
                 const SizedBox(width: 8),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.8),
+                    color: Colors.orange
+                        .withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Text('离线模式',
-                      style: TextStyle(color: Colors.white, fontSize: 11)),
+                  child: const Text(
+                    '兜底模式',
+                    style: TextStyle(color: Colors.white, fontSize: 11),
+                  ),
                 ),
               ],
               const Spacer(),
@@ -401,101 +403,178 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
               ),
             ],
           ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-              Row(
-                children: [
-                  const Icon(Icons.location_on_rounded,
-                      color: AppTheme.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      result.buildingName,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: result.recognized
-                          ? Colors.green.withValues(alpha: 0.15)
-                          : Colors.orange.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      result.recognized ? '已识别' : '推测',
-                      style: TextStyle(
-                        color: result.recognized ? Colors.green : Colors.orange,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                result.description,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.textSub,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (result.recognized)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton.icon(
-                      icon: const Icon(Icons.headphones_rounded, size: 16),
-                      label: const Text('语音讲解'),
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('语音讲解功能开发中')),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.psychology_alt_rounded, size: 16),
-                      label: const Text('问问西小导'),
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/chat', arguments: {
-                          'prompt': '给我讲讲${result.buildingName}'
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            ],
-          ),
+          child: result.recognized
+              ? _buildRecognizedCard(result)
+              : _buildUnrecognizedCard(),
         ),
       ),
     );
   }
 
-  /// 从相册选择照片 + 识别
+  /// 识别成功卡片
+  Widget _buildRecognizedCard(ArRecognizeResult result) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.location_on_rounded,
+                color: AppTheme.primary, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                result.buildingName,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Text(
+                '已识别',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          result.description.isNotEmpty
+              ? result.description
+              : '这是${result.buildingName}，点击下方按钮了解更多。',
+          style: const TextStyle(
+            fontSize: 14,
+            color: AppTheme.textSub,
+            height: 1.5,
+          ),
+        ),
+        if (result.fallback) ...[
+          const SizedBox(height: 6),
+          Text(
+            '本地模式识别，结果仅供参考',
+            style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
+          ),
+        ],
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            alignment: WrapAlignment.end,
+            children: [
+              TextButton.icon(
+                icon: const Icon(Icons.photo_library_rounded, size: 16),
+                label: const Text('换图片'),
+                onPressed: _recognizing ? null : _pickFromGallery,
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.auto_stories_outlined, size: 16),
+                label: const Text('讲讲它的历史'),
+                onPressed: () {
+                  Navigator.pushNamed(context, '/chat', arguments: {
+                    'prompt': '我刚通过 AR 识别到【${result.buildingName}】，请用新生视角介绍它的历史，并告诉我附近还可以看什么。'
+                  });
+                },
+              ),
+              FilledButton.icon(
+                icon: const Icon(Icons.psychology_alt_rounded, size: 16),
+                label: const Text('问问西小导'),
+                onPressed: () {
+                  Navigator.pushNamed(context, '/chat', arguments: {
+                    'prompt': '我刚通过 AR 识别到【${result.buildingName}】，请用新生视角介绍它，并告诉我附近还可以看什么。'
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 识别失败卡片
+  Widget _buildUnrecognizedCard() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const Icon(Icons.help_outline_rounded,
+            color: Colors.orange, size: 36),
+        const SizedBox(height: 10),
+        const Text(
+          '未能识别',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.orange,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          '当前图片未能匹配到校园建筑，请尝试对准建筑主体重新拍摄，或选择更清晰的建筑照片。',
+          style: TextStyle(
+            fontSize: 14,
+            color: AppTheme.textSub,
+            height: 1.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 14),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('重新识别'),
+              onPressed: () {
+                setState(() {
+                  _result = null;
+                  _errorMsg = null;
+                  _selectedImage = null;
+                });
+              },
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              icon: const Icon(Icons.photo_library_rounded, size: 16),
+              label: const Text('换图片'),
+              onPressed: _recognizing ? null : _pickFromGallery,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// 从相册选择照片 + 识别（自动压缩到 1024px 以内）
   Future<void> _pickFromGallery() async {
     final picker = ImagePicker();
-    final xFile = await picker.pickImage(source: ImageSource.gallery);
+    final xFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
     if (xFile == null) return;
     
     setState(() {
       _recognizing = true;
       _errorMsg = null;
       _result = null;
+      _statusMsg = null;
       _selectedImage = File(xFile.path);
     });
 
@@ -625,6 +704,21 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
             style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
           const SizedBox(height: 24),
+          FilledButton.icon(
+            icon: _recognizing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.photo_library_rounded),
+            label: Text(_recognizing ? '识别中...' : '选择图片识别'),
+            onPressed: _recognizing ? null : _pickFromGallery,
+          ),
+          const SizedBox(height: 12),
           OutlinedButton.icon(
             icon: const Icon(Icons.refresh, color: Colors.white),
             label: const Text('重试', style: TextStyle(color: Colors.white)),

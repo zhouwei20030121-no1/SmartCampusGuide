@@ -1,0 +1,14 @@
+启动：
+
+brew services start redis
+
+cd 3_Backend_Java && mvn spring-boot:run &
+
+cd 4_AIService_Python && HF_ENDPOINT=https://hf-mirror.com .venv/bin/uvicorn main:app --reload --port 5000 &
+
+cd 2_AdminWeb_Vue && npm run dev &
+
+
+关闭：
+
+brew services stop redis ; pkill -f "spring-boot:run" ; pkill -f "uvicorn main:app" ; pkill -f "vite"

@@ -1,5 +1,7 @@
 import json
+import logging
 import re
+import datetime
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +10,20 @@ from duckduckgo_search import DDGS
 
 from config import settings
 from modules.rag.vector_store import vector_store
+
+logger = logging.getLogger(__name__)
+
+
+# ──────────────── 角色提示词映射 ────────────────
+_PERSONA_HINTS: dict[str, str] = {
+    "新生": "你正在为一名西南大学新生服务。用热情、详细的语气介绍校园，帮助新生快速熟悉环境，多提及教学楼、宿舍、食堂等实用信息。",
+    "游客": "你正在为一名来西南大学参观的游客服务。用生动、有感染力的语言介绍校园历史文化和标志性建筑，突出校园的观赏价值和人文底蕴。",
+    "校友": "你正在为一名西南大学校友服务。用温暖、回忆感十足的语气，多提及校园变迁、老建筑的故事，激发怀旧情感。",
+}
+
+
+def _current_date() -> str:
+    return datetime.datetime.now().strftime("%Y年%m月%d日")
 
 
 class RAGService:
@@ -78,9 +94,9 @@ class RAGService:
             # 增加 3 秒超时保护并使用后台线程以防阻塞
             results = await asyncio.wait_for(asyncio.to_thread(do_search), timeout=3.0)
         except asyncio.TimeoutError:
-            print("Web search timed out after 3 seconds.")
+            logger.warning("Web search timed out after 3 seconds.")
         except Exception as exc:
-            print(f"Web search failed: {exc}")
+            logger.warning("Web search failed: %s", exc)
         return results
 
     async def chat(
@@ -88,6 +104,7 @@ class RAGService:
         query: str,
         history: list[dict] | None = None,
         top_k: int = 5,
+        persona: str = "新生",
     ) -> dict[str, Any]:
         """Answer a user question with local retrieval and optional LLM generation."""
         clean_query = query.strip()
@@ -99,11 +116,14 @@ class RAGService:
                 "model": "local-knowledge",
             }
             
-        # 简单指代消解：如果问题包含代词且有历史记录，将上一轮的回答片段拼接作为搜索词，以提高检索质量
+        # 简单指代消解：如果问题包含代词且有历史记录，将上一轮回答的**第一句话**拼接作为搜索词
         search_query = clean_query
         if history and len(clean_query) < 15 and any(word in clean_query for word in ["他", "她", "它", "这", "那"]):
-            last_reply = history[-1].get("content", "")[:30] if history else ""
-            search_query = f"{last_reply} {clean_query}"
+            last_reply = history[-1].get("content", "") if history else ""
+            # 取第一句完整的话（不超过 80 字），避免截断在词中间
+            first_sentence = re.split(r"[。！？\n]", last_reply)[0].strip()
+            if first_sentence and len(first_sentence) <= 80:
+                search_query = f"{first_sentence} {clean_query}"
 
         sources = self.search(search_query, top_k)
         fallback_reply = self._build_fallback_reply(clean_query, sources)
@@ -129,7 +149,7 @@ class RAGService:
             enhanced_query = clean_query
             if web_results_text:
                 enhanced_query = f"{clean_query}{web_results_text}"
-            reply = await self._chat_with_llm(enhanced_query, sources, history or [])
+            reply = await self._chat_with_llm(enhanced_query, sources, history or [], persona)
             return {
                 "reply": reply or fallback_reply,
                 "sources": sources,
@@ -150,15 +170,16 @@ class RAGService:
         query: str,
         sources: list[dict[str, Any]],
         history: list[dict],
+        persona: str = "新生",
     ) -> str:
         context_text = self._format_context(sources)
-        import datetime
-        current_date = datetime.datetime.now().strftime("%Y年%m月%d日")
+        persona_hint = _PERSONA_HINTS.get(persona, _PERSONA_HINTS["新生"])
         messages = [
             {
                 "role": "system",
                 "content": (
-                    f"你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。当前系统时间是：{current_date}。\n"
+                    f"你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。当前系统时间是：{_current_date()}。\n"
+                    f"当前角色设定：{persona_hint}\n\n"
                     "处理问题时，请遵循以下原则：\n"
                     "1. 优先结合当前的【聊天历史上下文】来理解用户的意图，尤其是当用户使用“他/她/这/那”等代词时。\n"
                     "2. 参考下方提供的【知识库内容】和【网络来源】。但是，如果检索到的这些资料与用户的【最新问题】和【聊天历史】毫无关系（即可能是垃圾检索结果），请**果断完全忽略它们**。\n"

@@ -1,0 +1,14 @@
+启动（每条命令在单独的CMD窗口中运行）：
+
+redis-server
+
+cd 3_Backend_Java && mvn spring-boot:run
+
+cd 4_AIService_Python && set HF_ENDPOINT=https://hf-mirror.com && .venv\Scripts\uvicorn main:app --reload --port 5000
+
+cd 2_AdminWeb_Vue && npm run dev
+
+
+关闭：
+
+各窗口按 Ctrl+C 停止服务

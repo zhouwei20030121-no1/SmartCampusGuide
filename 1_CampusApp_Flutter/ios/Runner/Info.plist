@@ -44,6 +44,10 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>用于拍摄校园建筑并进行 AR 识别讲解。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于从相册选择校园建筑图片进行识别。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
