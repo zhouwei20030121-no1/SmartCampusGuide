@@ -6,16 +6,16 @@ class ArApi {
   static String get _baseUrl {
     const envUrl = String.fromEnvironment('AI_SERVICE_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5050';
-    return 'http://127.0.0.1:5050';
+    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5051';
+    return 'http://127.0.0.1:5051';
   }
 
   static List<String> get _baseUrls {
     final urls = <String>[
       _baseUrl,
-      'http://127.0.0.1:5050',
-      'http://10.0.2.2:5050',
-      'http://localhost:5050',
+      'http://127.0.0.1:5051',
+      'http://10.0.2.2:5051',
+      'http://localhost:5051',
     ];
     return urls.toSet().toList();
   }
@@ -30,7 +30,7 @@ class ArApi {
         lastError = e;
       }
     }
-    throw ArApiException('无法连接 AI 视觉服务，请确认服务已启动。错误：$lastError');
+    throw ArApiException('无法连接 AI 视觉服务，请确认 Python AI 服务已在 5051 端口启动。错误：$lastError');
   }
 
   static Future<ArRecognizeResult> _recognizeWith(

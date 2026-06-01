@@ -14,25 +14,28 @@ class _SearchPageState extends State<SearchPage> {
   final FocusNode _focus = FocusNode();
   String _query = '';
 
-  // 模拟全站功能与景点数据
-  final List<Map<String, String>> _allData = [
-    {'title': 'AR 扫一扫', 'type': '功能', 'route': '/ar', 'desc': '扫描校园建筑获取 AR 介绍标签'},
-    {'title': '智能讲解', 'type': '功能', 'route': '/guide', 'desc': '基于 LBS 的多语种语音讲解'},
-    {'title': '问问西小导', 'type': '功能', 'route': '/chat', 'desc': 'AI 虚拟导游，多轮问答'},
-    {'title': '路线规划', 'type': '功能', 'route': '/route', 'desc': '校园内智能导航与路线生成'},
-    {'title': '景点打卡', 'type': '功能', 'route': '/checkin', 'desc': '点亮地图徽章，记录足迹'},
-    {'title': '校园地图', 'type': '功能', 'route': '/map', 'desc': '全局高德地图导览'},
-    {'title': '第一教学楼', 'type': '景点', 'route': '/spot/1', 'desc': '历史悠久的红砖建筑'},
-    {'title': '中心图书馆', 'type': '景点', 'route': '/spot/2', 'desc': '藏书丰富的现代化学习中心'},
-    {'title': '含弘门', 'type': '景点', 'route': '/spot/3', 'desc': '西南大学一号门标志建筑'},
-    {'title': '校车时刻表', 'type': '服务', 'route': '/bus', 'desc': '查询校园小黄车发车时间'},
+  // 全站功能与景点数据，keywords 字段用于模糊匹配
+  final List<Map<String, dynamic>> _allData = [
+    {'title': '西小导 AI 对话', 'type': '功能', 'route': '/chat', 'desc': 'AI 虚拟导游，RAG 多轮问答', 'keywords': '西小导 AI 问答 聊天 RAG 导游 虚拟导游 智能体'},
+    {'title': 'AR 扫一扫', 'type': '功能', 'route': '/ar', 'desc': '扫描校园建筑获取 AR 介绍标签', 'keywords': 'AR 扫一扫 识别 建筑识别 相机 拍照 视觉'},
+    {'title': '智能讲解', 'type': '功能', 'route': '/guide', 'desc': '基于 LBS 的多语种语音讲解', 'keywords': '讲解 语音 TTS 多语种 播报'},
+    {'title': '路线规划', 'type': '功能', 'route': '/route', 'desc': '校园内智能导航与路线生成', 'keywords': '路线 规划 导航 寻路 步行'},
+    {'title': '景点打卡', 'type': '功能', 'route': '/checkin', 'desc': '点亮地图徽章，记录足迹', 'keywords': '打卡 徽章 足迹 成就'},
+    {'title': '校园地图', 'type': '功能', 'route': '/map', 'desc': '全局高德地图导览', 'keywords': '地图 导览 定位 GPS 高德'},
+    {'title': '中心图书馆', 'type': '景点', 'route': '/spot/2', 'desc': '藏书丰富的现代化学习中心', 'keywords': '图书馆 学习 自习 借书'},
+    {'title': '含弘门', 'type': '景点', 'route': '/spot/3', 'desc': '西南大学一号门标志建筑', 'keywords': '含弘门 一号门 校门 入口'},
+    {'title': '雨僧楼（第1教学楼）', 'type': '景点', 'route': '/spot/1', 'desc': '历史悠久的红砖建筑', 'keywords': '雨僧楼 1教 第一教学楼 吴宓 文学院'},
+    {'title': '校车时刻表', 'type': '服务', 'route': '/bus', 'desc': '查询校园小黄车发车时间', 'keywords': '校车 小黄车 时刻表 班车'},
   ];
 
-  List<Map<String, String>> get _results {
+  List<Map<String, dynamic>> get _results {
     if (_query.trim().isEmpty) return [];
+    final q = _query.toLowerCase();
     return _allData.where((item) {
-      return item['title']!.toLowerCase().contains(_query.toLowerCase()) ||
-          item['desc']!.toLowerCase().contains(_query.toLowerCase());
+      final title = item['title']!.toString().toLowerCase();
+      final desc = item['desc']!.toString().toLowerCase();
+      final keywords = (item['keywords'] ?? '').toString().toLowerCase();
+      return title.contains(q) || desc.contains(q) || keywords.contains(q);
     }).toList();
   }
 
@@ -112,9 +115,11 @@ class _SearchPageState extends State<SearchPage> {
             spacing: 12,
             runSpacing: 12,
             children: [
-              _tag('AR 扫一扫', '/ar'),
               _tag('西小导', '/chat'),
+              _tag('AR 扫一扫', '/ar'),
               _tag('路线规划', '/route'),
+              _tag('建筑识别', '/ar'),
+              _tag('智能讲解', '/guide'),
               _tag('图书馆', ''),
             ],
           ),

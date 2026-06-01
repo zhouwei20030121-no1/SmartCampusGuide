@@ -90,9 +90,18 @@ class _ChatPageState extends State<ChatPage> {
       });
     } on ChatApiException catch (e) {
       if (!mounted) return;
+      final msg = e.message;
+      String friendlyMsg;
+      if (msg.contains('连接失败') || msg.contains('Connection refused') || msg.contains('5051')) {
+        friendlyMsg = '无法连接西小导服务，请确认 Python AI 服务已在 5051 端口启动。';
+      } else if (msg.contains('格式异常') || msg.contains('Format')) {
+        friendlyMsg = '西小导服务返回格式异常，请检查 AI 服务日志。';
+      } else {
+        friendlyMsg = msg;
+      }
       setState(() {
         _messages.removeWhere((msg) => msg.isLoading);
-        _messages.add(_ChatMsg(text: e.message, isMe: false, isError: true));
+        _messages.add(_ChatMsg(text: friendlyMsg, isMe: false, isError: true));
         _sending = false;
       });
     } catch (e) {
@@ -101,7 +110,7 @@ class _ChatPageState extends State<ChatPage> {
         _messages.removeWhere((msg) => msg.isLoading);
         _messages.add(
           const _ChatMsg(
-            text: '西小导暂时开小差了，请稍后重试。',
+            text: '当前使用本地知识库兜底回答，部分生成式能力可能受限，请稍后重试。',
             isMe: false,
             isError: true,
           ),
@@ -113,7 +122,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _showVoiceInputSheet() {
-    final voiceSamples = ['附近有什么适合新生先熟悉的地方？', '我在二号门，我该怎么去图书馆？', '这个建筑是干什么的？'];
+    final voiceSamples = ['图书馆在哪里？', '我是新生，推荐一条参观路线', 'AR识别到建筑后怎么讲解？'];
     showModalBottomSheet<void>(
       context: context,
       builder: (context) => SafeArea(
@@ -260,7 +269,7 @@ class _ChatStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final prompts = ['附近有什么景点？', '我在二号门，怎么去图书馆？', '讲讲光华楼'];
+    final prompts = ['西小导是谁？', '图书馆在哪里？', '它有什么特点？', '我是新生，推荐参观路线', 'AR识别后怎么讲解？'];
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
