@@ -92,8 +92,8 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted) return;
       final msg = e.message;
       String friendlyMsg;
-      if (msg.contains('连接失败') || msg.contains('Connection refused') || msg.contains('5051')) {
-        friendlyMsg = '无法连接西小导服务，请确认 Python AI 服务已在 5051 端口启动。';
+      if (msg.contains('连接失败') || msg.contains('Connection refused') || msg.contains('5000')) {
+        friendlyMsg = '无法连接西小导服务，请确认 Python AI 服务已在 5000 端口启动。';
       } else if (msg.contains('格式异常') || msg.contains('Format')) {
         friendlyMsg = '西小导服务返回格式异常，请检查 AI 服务日志。';
       } else {
