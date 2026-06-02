@@ -37,3 +37,19 @@ async def load_corpus(req: CorpusLoadRequest):
 async def search(q: str, top_k: int = 5):
     results = rag_service.search(q, top_k)
     return ApiResponse.ok(results)
+
+
+class GuideGenerateRequest(BaseModel):
+    spot_name: str
+    user_id: str = "anonymous"
+    persona: str = "新生"
+
+
+@router.post("/guide/generate")
+async def generate_guide(req: GuideGenerateRequest):
+    """Java后端触发：根据景点名+用户画像生成AI讲解词"""
+    try:
+        result = await rag_service.generate_guide(req.spot_name, req.persona)
+        return ApiResponse.ok(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

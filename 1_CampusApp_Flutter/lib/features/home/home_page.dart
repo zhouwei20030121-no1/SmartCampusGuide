@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
-import '../map/map_page.dart';      // 🌟 新增：引入真实的高德地图页面
+import '../user/profile_page.dart';
+import '../map/map_page.dart';
+import '../location/location_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -52,14 +53,11 @@ class _HomePageState extends State<HomePage> {
             bottom: false,
             child: IndexedStack(
               index: _currentIndex,
-              children: [
-                _TabHome(
-                  onTabSelected: (index) =>
-                      setState(() => _currentIndex = index),
-                ),
-                const MapPage(),
-                const _TabSmartAudio(),
-                const ProfilePage(),
+              children: const [
+                _TabHome(),
+                _TabMapGuide(),
+                _TabSmartAudio(),
+                _TabProfile(),
               ],
             ),
           ),
@@ -116,7 +114,58 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showChatSheet(BuildContext context) {
-    Navigator.pushNamed(context, '/chat');
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.55,
+            color: Colors.white.withValues(alpha: 0.85),
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '西小导 · AI 智能体',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.darkBlue,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.pop(ctx),
+                      child: const Icon(Icons.close, color: AppTheme.textSub),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      '在此对接大模型多轮连续对话\n与语音语义转译库。\n\n输入上下文语义可自动关联历史对话。',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: AppTheme.textSub,
+                        fontSize: 13,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // ═══════════════════════════════════════════
@@ -169,15 +218,13 @@ class _HomePageState extends State<HomePage> {
 //  TAB 0：首页 — 全局聚合入口
 // ═══════════════════════════════════════════════════
 class _TabHome extends StatelessWidget {
-  final ValueChanged<int> onTabSelected;
-
-  const _TabHome({required this.onTabSelected});
+  const _TabHome();
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        _buildTopSearchBar(context),
+        _buildTopSearchBar(),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.only(
@@ -202,7 +249,7 @@ class _TabHome extends StatelessWidget {
     );
   }
 
-  Widget _buildTopSearchBar(BuildContext context) {
+  Widget _buildTopSearchBar() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
@@ -234,33 +281,30 @@ class _TabHome extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/search'),
-              child: Container(
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.search_rounded,
-                      color: Colors.black45.withValues(alpha: 0.6),
-                      size: 18,
+            child: Container(
+              height: 40,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.search_rounded,
+                    color: Colors.black45.withValues(alpha: 0.6),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '搜索校园景点、服务设施...',
+                    style: TextStyle(
+                      color: Colors.black38.withValues(alpha: 0.6),
+                      fontSize: 13,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '搜索校园景点、服务设施...',
-                      style: TextStyle(
-                        color: Colors.black38.withValues(alpha: 0.6),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -321,13 +365,12 @@ class _TabHome extends StatelessWidget {
           _GridButton(
             icon: Icons.map_outlined,
             label: '校园地图',
-            onTap: () => onTabSelected(1),
+            onTap: () => _switchTab(context, 1),
           ),
           _GridButton(
             icon: Icons.route_outlined,
             label: '路线规划',
-// 🌟 核心修改：点击这里，跳转到我们刚刚写的独立路线规划页面 RoutePage
-            onTap: () => _navTo(context, '/route'),
+            onTap: () => _switchTab(context, 1),
           ),
           _GridButton(
             icon: Icons.view_in_ar_rounded,
@@ -337,7 +380,7 @@ class _TabHome extends StatelessWidget {
           _GridButton(
             icon: Icons.workspace_premium_outlined,
             label: '景点打卡',
-            onTap: () => onTabSelected(3),
+            onTap: () => _switchTab(context, 3),
           ),
           _GridButton(
             icon: Icons.auto_stories_outlined,
@@ -347,7 +390,7 @@ class _TabHome extends StatelessWidget {
           _GridButton(
             icon: Icons.directions_bus_filled_outlined,
             label: '校车时刻',
-            onTap: () => _navTo(context, '/bus'),
+            onTap: () {},
           ),
           _GridButton(
             icon: Icons.cloud_download_outlined,
@@ -362,6 +405,11 @@ class _TabHome extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  void _switchTab(BuildContext context, int index) {
+    final state = context.findAncestorStateOfType<_HomePageState>();
+    state?.setState(() => state._currentIndex = index);
   }
 
   void _navTo(BuildContext context, String route) {
@@ -391,14 +439,14 @@ class _TabHome extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _spotTile('樟树林点位', '漫步天然氧吧，结合实时定位触发文化故事播报'),
-          _spotTile('第25教学楼', '计算机与信息科学学院，智能讲解核心围栏触发区'),
+          _SpotTile('樟树林点位', '漫步天然氧吧，结合实时定位触发文化故事播报'),
+          _SpotTile('第25教学楼', '计算机与信息科学学院，智能讲解核心围栏触发区'),
         ],
       ),
     );
   }
 
-  Widget _spotTile(String title, String subtitle) {
+  Widget _SpotTile(String title, String subtitle) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -447,219 +495,287 @@ class _TabHome extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════
-//  TAB 2：智能讲解 — LBS地理围栏 + 音频 (3.1.3+3.1.4+3.1.5)
+//  TAB 1：地图导览 — 空间检索+路线规划 (3.1.2 + 3.2.4)
 // ═══════════════════════════════════════════════════
-class _TabSmartAudio extends StatelessWidget {
-  const _TabSmartAudio();
+class _TabMapGuide extends StatelessWidget {
+  const _TabMapGuide();
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // 地图占位层
-        Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.radar_rounded,
-                size: 70,
-                color: AppTheme.primary.withValues(alpha: 0.4),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '实时定位与位置感知讲解图盘',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textMain,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  '地理围栏核心检测中：触发半径 50米',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.alt_route_rounded,
+            size: 70,
+            color: AppTheme.primary.withValues(alpha: 0.3),
           ),
-        ),
-        // 顶部：自动讲解开关
-        Positioned(
-          top: 16,
-          left: 16,
-          right: 16,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.location_searching_rounded,
-                          color: AppTheme.primary,
-                          size: 20,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'LBS 靠近建筑自动播报讲解',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppTheme.textMain,
-                          ),
-                        ),
-                      ],
-                    ),
-                    // 开关（默认开启）
-                    _GeoSwitch(),
-                  ],
-                ),
+          const SizedBox(height: 12),
+          const Text(
+            '全局智能路线规划大地图',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textSub,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              '配置高德地图 + 全局路径重绘',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.primary,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-        ),
-        // 底部：音频播放控制器
-        Positioned(
-          bottom: 110,
-          left: 16,
-          right: 85,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 16,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // 建筑缩略图
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFC2DEF5), Color(0xFF73B4E9)],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.account_balance_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // 播报状态
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '正在感知：西南大学博物馆',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: AppTheme.textMain,
-                            ),
-                          ),
-                          SizedBox(height: 3),
-                          Text(
-                            '多语种 TTS 讲解就绪，点击播放',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // 播放按钮
-                    GestureDetector(
-                      onTap: () => HapticFeedback.mediumImpact(),
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: const BoxDecoration(
-                          color: AppTheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _GeoSwitch extends StatefulWidget {
-  const _GeoSwitch();
+// ═══════════════════════════════════════════════════
+//  TAB 2：智能讲解 — LBS地理围栏 + 音频 (3.1.3+3.1.4+3.1.5)
+// ═══════════════════════════════════════════════════
+class _TabSmartAudio extends StatefulWidget {
+  const _TabSmartAudio();
 
   @override
-  State<_GeoSwitch> createState() => _GeoSwitchState();
+  State<_TabSmartAudio> createState() => _TabSmartAudioState();
 }
 
-class _GeoSwitchState extends State<_GeoSwitch> {
-  bool _on = true;
+class _TabSmartAudioState extends State<_TabSmartAudio> {
+  final LocationService _loc = LocationService();
+  bool _playing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loc.addListener(() => setState(() {}));
+    _loc.startTracking();
+  }
+
+  @override
+  void dispose() {
+    _loc.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Transform.scale(
-      scale: 0.85,
-      child: Switch(
-        value: _on,
-        activeThumbColor: AppTheme.primary,
-        onChanged: (v) => setState(() => _on = v),
+    final nearby = _loc.nearbySpot;
+    final dist = _loc.distance;
+    final triggered = _loc.triggeredSpot;
+
+    return Stack(
+      children: [
+        // 地图+雷达扫描层
+        Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Stack(alignment: Alignment.center, children: [
+              Icon(Icons.radar_rounded, size: 120,
+                  color: AppTheme.primary.withValues(alpha: 0.15)),
+              Container(
+                width: 16, height: 16,
+                decoration: BoxDecoration(
+                  color: _loc.isTracking ? AppTheme.primary : AppTheme.textSub,
+                  shape: BoxShape.circle,
+                  boxShadow: [BoxShadow(color: AppTheme.primary.withValues(alpha: 0.4), blurRadius: 12, spreadRadius: 4)],
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            Text(_loc.geoStatus,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textMain)),
+            if (nearby.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: dist < 50 ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text('附近：$nearby · 约${dist.toStringAsFixed(0)}米',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
+                        color: dist < 50 ? AppTheme.success : AppTheme.primary)),
+              ),
+            ],
+            const SizedBox(height: 4),
+            Text('坐标：${_loc.latitude.toStringAsFixed(5)}, ${_loc.longitude.toStringAsFixed(5)}',
+                style: const TextStyle(fontSize: 11, color: AppTheme.textSub)),
+          ]),
+        ),
+        // 顶部：LBS开关
+        Positioned(top: 16, left: 16, right: 16, child: _buildControlBar()),
+        // 触发提示
+        if (triggered != null)
+          Positioned(top: 80, left: 16, right: 16, child: _buildTriggerBanner(triggered)),
+        // 底部：音频播放器
+        Positioned(bottom: 110, left: 16, right: 85, child: _buildAudioPlayer(triggered)),
+      ],
+    );
+  }
+
+  Widget _buildControlBar() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Row(children: [
+              Icon(_loc.isTracking ? Icons.location_searching_rounded : Icons.location_off_rounded,
+                  color: _loc.isTracking ? AppTheme.primary : AppTheme.textSub, size: 20),
+              const SizedBox(width: 8),
+              Text(_loc.isTracking ? 'LBS 自动讲解 · 半径50米' : 'LBS 已关闭',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textMain)),
+            ]),
+            Transform.scale(
+              scale: 0.85,
+              child: Switch(
+                value: _loc.isTracking,
+                activeThumbColor: AppTheme.primary,
+                onChanged: (v) => v ? _loc.startTracking() : _loc.stopTracking(),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTriggerBanner(String spot) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.success.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.check_circle, color: AppTheme.success, size: 22),
+            const SizedBox(width: 10),
+            Expanded(child: Text('已进入「$spot」范围，讲解已触发',
+                style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textMain, fontSize: 14))),
+            GestureDetector(
+              onTap: () => _loc.clearTrigger(),
+              child: const Icon(Icons.close, size: 18, color: AppTheme.textSub),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioPlayer(String? spot) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 16)],
+          ),
+          child: Row(children: [
+            Container(
+              width: 46, height: 46,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [Color(0xFFC2DEF5), Color(0xFF73B4E9)]),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(spot != null ? Icons.volume_up : Icons.headphones,
+                  color: Colors.white, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                Text(spot != null ? '正在讲解：$spot' : '等待进入景点区域...',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textMain)),
+                const SizedBox(height: 3),
+                Text(spot != null ? 'AI语音讲解播放中' : '靠近景点自动触发',
+                    style: const TextStyle(fontSize: 11, color: AppTheme.primary)),
+              ]),
+            ),
+            GestureDetector(
+              onTap: () => setState(() => _playing = !_playing),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                    color: _playing ? AppTheme.warning : AppTheme.primary, shape: BoxShape.circle),
+                child: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: Colors.white, size: 18),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  TAB 3：我的 — 个人中心+徽章 (3.1.1 + 3.2.5)
+// ═══════════════════════════════════════════════════
+class _TabProfile extends StatelessWidget {
+  const _TabProfile();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.verified_user_outlined,
+            size: 70,
+            color: AppTheme.primary.withValues(alpha: 0.3),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '管理员与普通用户个人面板',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textSub,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              '打卡记录 + 校园徽章墙',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
