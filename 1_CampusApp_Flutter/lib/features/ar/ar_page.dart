@@ -273,7 +273,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                 onPressed: () => Navigator.pop(context),
               ),
               const Text(
-                'AR 建筑识别',
+                'AI 实景识图',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -516,7 +516,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                     '/chat',
                     arguments: {
                       'prompt':
-                          '我刚通过 AR 识别到【${result.buildingName}】，请用新生视角介绍它的历史，并告诉我附近还可以看什么。',
+                          '我刚通过 AI 识图扫到了【${result.buildingName}】，请用新生视角介绍它的历史，并告诉我附近还可以看什么。',
                     },
                   );
                 },
@@ -534,7 +534,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                     '/chat',
                     arguments: {
                       'prompt':
-                          '我刚通过 AR 识别到【${result.buildingName}】，请用新生视角介绍它，并告诉我附近还可以看什么。',
+                          '我刚通过 AI 识图扫到了【${result.buildingName}】，请用新生视角介绍它，并告诉我附近还可以看什么。',
                     },
                   );
                 },

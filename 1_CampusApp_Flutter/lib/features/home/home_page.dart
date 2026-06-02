@@ -494,8 +494,8 @@ class _TabHomeState extends State<_TabHome> {
             onTap: () => Navigator.pushNamed(context, '/route'),
           ),
           _GridButton(
-            icon: Icons.view_in_ar_rounded,
-            label: 'AR 扫一扫',
+            icon: Icons.document_scanner_outlined,
+            label: 'AI 识图',
             onTap: () => Navigator.pushNamed(context, '/ar'),
           ),
           _GridButton(
