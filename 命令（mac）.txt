@@ -15,4 +15,4 @@ ngrok http --domain=genna-boldhearted-dewily.ngrok-free.dev 8081 &
 
 关闭：
 
-brew services stop redis ; pkill -f "spring-boot:run" ; pkill -f "uvicorn main:app" ; pkill -f "vite" ; caddy stop ; pkill -f "ngrok"
+brew services stop redis ; pkill -f "java" ; pkill -f "uvicorn" ; pkill -f "vite" ; caddy stop ; pkill -f "ngrok"
