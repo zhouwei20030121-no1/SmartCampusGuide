@@ -496,7 +496,7 @@ class _TabHomeState extends State<_TabHome> {
           _GridButton(
             icon: Icons.document_scanner_outlined,
             label: 'AI 识图',
-            onTap: () => Navigator.pushNamed(context, '/ar'),
+            onTap: () => Navigator.pushNamed(context, '/ai_vision'),
           ),
           _GridButton(
             icon: Icons.workspace_premium_outlined,

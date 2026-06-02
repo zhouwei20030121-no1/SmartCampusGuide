@@ -7,7 +7,7 @@ import '../../features/map/map_page.dart';
 import '../../features/spot/spot_detail_page.dart';
 import '../../features/guide/guide_page.dart';
 import '../../features/chat/chat_page.dart';
-import '../../features/ar/ar_page.dart';
+import '../../features/ai_vision/ai_vision_page.dart';
 import '../../features/route/route_page.dart';
 import '../../features/social/checkin_page.dart';
 import '../../features/home/home_page.dart';
@@ -25,7 +25,7 @@ class AppRouter {
   static const String spotDetail = '/spot/detail';
   static const String guide = '/guide';
   static const String chat = '/chat';
-  static const String ar = '/ar';
+  static const String aiVision = '/ai_vision';
   static const String routePlan = '/route';
   static const String checkin = '/checkin';
   static const String search = '/search';
@@ -55,8 +55,8 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => ChatPage(initialPrompt: args?['prompt']?.toString()),
         );
-      case ar:
-        return MaterialPageRoute(builder: (_) => const ARPage());
+      case aiVision:
+        return MaterialPageRoute(builder: (_) => const AiVisionPage());
       case routePlan:
         return MaterialPageRoute(builder: (_) => const RoutePage());
       case checkin:

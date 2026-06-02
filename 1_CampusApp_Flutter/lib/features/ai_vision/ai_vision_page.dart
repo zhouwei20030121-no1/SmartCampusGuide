@@ -6,23 +6,23 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/app_theme.dart';
-import 'ar_api.dart';
+import 'ai_vision_api.dart';
 
 const Color _schoolBlue = Color(0xFF023D83);
 
-class ARPage extends StatefulWidget {
-  const ARPage({super.key});
+class AiVisionPage extends StatefulWidget {
+  const AiVisionPage({super.key});
 
   @override
-  State<ARPage> createState() => _ARPageState();
+  State<AiVisionPage> createState() => _AiVisionPageState();
 }
 
-class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
+class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver {
   CameraController? _cameraCtrl;
   List<CameraDescription>? _cameras;
   bool _cameraReady = false;
   bool _recognizing = false;
-  ArRecognizeResult? _result;
+  AiVisionResult? _result;
   String? _errorMsg;
   String? _statusMsg;
   File? _selectedImage;
@@ -439,7 +439,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
   }
 
   /// 识别成功卡片
-  Widget _buildRecognizedCard(ArRecognizeResult result) {
+  Widget _buildRecognizedCard(AiVisionResult result) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -626,7 +626,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
       final bytes = await File(xFile.path).readAsBytes();
       final base64Image = base64.encode(bytes);
 
-      final result = await ArApi.recognize(base64Image);
+      final result = await AiVisionApi.recognize(base64Image);
       if (!mounted) return;
 
       setState(() {
@@ -664,14 +664,14 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
       final base64Image = base64.encode(bytes);
 
       // 调用视觉识别 API
-      final result = await ArApi.recognize(base64Image);
+      final result = await AiVisionApi.recognize(base64Image);
       if (!mounted) return;
 
       setState(() {
         _result = result;
         _recognizing = false;
       });
-    } on ArApiException catch (e) {
+    } on AiVisionException catch (e) {
       if (!mounted) return;
       setState(() {
         _errorMsg = e.message;
