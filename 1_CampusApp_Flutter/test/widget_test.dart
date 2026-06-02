@@ -7,7 +7,8 @@ void main() {
     await tester.pumpWidget(const SmartCampusApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('西大智能导览'), findsOneWidget);
+    expect(find.text('SWU Guide'), findsOneWidget);
+    expect(find.text('西大智慧校园导览'), findsOneWidget);
     expect(find.text('登 录'), findsOneWidget);
   });
 }

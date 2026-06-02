@@ -15,7 +15,9 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
   List<dynamic> _lines = [];
   bool _loading = true;
   int? _expandedIndex;
-  int _tabIndex = 0; // 0=时刻表, 1=换乘查询
+  int _tabIndex = 0;
+
+  String _n(dynamic s) => (s['stationName'] ?? s['station_name'] ?? '').toString();
 
   // 换乘查询
   final _fromCtrl = TextEditingController();
@@ -71,7 +73,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       bool hasFrom = false, hasTo = false;
       for (final sts in stations.values) {
         for (final s in (sts as List)) {
-          final name = s['station_name']?.toString() ?? '';
+          final name = _n(s);
           if (name == from) hasFrom = true;
           if (name == to) hasTo = true;
         }
@@ -119,7 +121,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       if (line['lineId'] != lineId) continue;
       final stations = line['stations'] as Map<String, dynamic>? ?? {};
       for (final sts in stations.values) {
-        final list = (sts as List).map((s) => s['station_name']?.toString() ?? '').toList();
+        final list = (sts as List).map((s) => _n(s)).toList();
         final i1 = list.indexOf(from);
         final i2 = list.indexOf(to);
         if (i1 != -1 && i2 != -1) {
@@ -145,7 +147,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         final stations = line['stations'] as Map<String, dynamic>? ?? {};
         for (final sts in stations.values) {
           for (final s in (sts as List)) {
-            result.add(s['station_name']?.toString() ?? '');
+            result.add(_n(s));
           }
         }
       }
@@ -184,8 +186,13 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(children: [
-                  Image.asset('assets/images/bg.jpg', height: 80, fit: BoxFit.cover,
-                      errorBuilder: (_, __, _) => const Icon(Icons.bus_alert, size: 48, color: AppTheme.primary)),
+                  Image.asset(
+                    'assets/images/bg.jpg',
+                    height: 80,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Icon(Icons.bus_alert, size: 48, color: AppTheme.primary),
+                  ),
                   const SizedBox(height: 14),
                   const Text('请登录微信小程序',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textMain)),
@@ -228,7 +235,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       final stations = line['stations'] as Map<String, dynamic>? ?? {};
       for (final sts in stations.values) {
         for (final s in (sts as List)) {
-          final n = s['station_name']?.toString() ?? '';
+          final n = _n(s);
           if (n.isNotEmpty) names.add(n);
         }
       }
@@ -243,8 +250,11 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset('assets/images/bg.jpg', fit: BoxFit.cover,
-              errorBuilder: (_, __, _) => Container(color: AppTheme.pageBg)),
+            child: Image.asset(
+              'assets/images/bg.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(color: AppTheme.pageBg),
+            ),
           ),
           Positioned.fill(
             child: BackdropFilter(
@@ -406,7 +416,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textMain)),
                       const SizedBox(height: 4),
-                      Text('$start - $end | 约${interval}分钟/班', style: const TextStyle(fontSize: 12, color: AppTheme.darkBlue)),
+                      Text('$start - $end | 约$interval分钟/班', style: const TextStyle(fontSize: 12, color: AppTheme.darkBlue)),
                     ]),
                   ),
                   Icon(expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: AppTheme.darkBlue),
@@ -438,7 +448,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         ...sts.asMap().entries.map((e) {
           final s = e.value;
           final order = s['stop_order'] ?? (e.key + 1);
-          final name = s['station_name'] ?? '';
+          final name = _n(s);
           final isLast = e.key == sts.length - 1;
           return SizedBox(height: 46, child: Row(children: [
             SizedBox(width: 26, child: Column(children: [

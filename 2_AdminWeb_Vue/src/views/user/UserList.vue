@@ -42,6 +42,9 @@
         <el-form-item label="用户名">
           <el-input v-model="form.username" placeholder="请输入用户名 (必填)" />
         </el-form-item>
+        <el-form-item label="真实姓名">
+          <el-input v-model="form.realName" placeholder="请输入真实姓名" />
+        </el-form-item>
         <el-form-item label="密码">
           <el-input v-model="form.password" type="password" placeholder="编辑时留空则不修改密码" />
         </el-form-item>
@@ -87,6 +90,7 @@ const dialogTitle = ref('新增用户')
 const form = reactive({
   id: null,
   username: '',
+  realName: '',
   password: '',
   campusId: '',
   phone: '',
@@ -102,7 +106,6 @@ const getRoleName = (role: number) => {
   }
 }
 
-// 获取用户列表
 const fetchUsers = async () => {
   loading.value = true
   try {
@@ -115,21 +118,18 @@ const fetchUsers = async () => {
   }
 }
 
-// 点击新增按钮
 const handleAdd = () => {
   dialogTitle.value = '新增用户'
-  Object.assign(form, { id: null, username: '', password: '', campusId: '', phone: '', role: 0, status: 0 })
+  Object.assign(form, { id: null, username: '', realName: '', password: '', campusId: '', phone: '', role: 0, status: 0 })
   dialogVisible.value = true
 }
 
-// 点击编辑按钮
 const handleEdit = (row: any) => {
   dialogTitle.value = '编辑用户'
-  Object.assign(form, { ...row, password: '' })
+  Object.assign(form, { ...row, password: '', realName: row.realName || '' })
   dialogVisible.value = true
 }
 
-// 确认保存数据
 const handleSave = async () => {
   if (!form.username) {
     ElMessage.warning('用户名不能为空')
@@ -148,7 +148,6 @@ const handleSave = async () => {
   }
 }
 
-// 确认删除数据
 const handleDelete = (row: any) => {
   ElMessageBox.confirm(`确定要永久删除用户 "${row.username}" 吗？`, '高危操作警告', {
     type: 'warning',

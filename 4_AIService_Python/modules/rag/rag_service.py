@@ -332,5 +332,68 @@ class RAGService:
     def _normalize_text(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.strip().lower())
 
+    async def generate_guide(self, spot_name: str, persona: str = "新生") -> dict:
+        """生成AI讲解词：RAG检索 + LLM生成"""
+        # 1. RAG 检索背景知识
+        docs = self.search(spot_name, top_k=3) if self.index else []
+        context = "\n".join([d.get("content", "") for d in docs])
+
+        # 2. 组装 Prompt
+        persona_map = {
+            "新生": "用热情、憧憬的语气，欢迎新同学",
+            "校友": "用怀旧、亲切的语气，唤起美好回忆",
+            "游客": "用专业、生动的语气，介绍校园文化",
+        }
+        style = persona_map.get(persona, persona_map["新生"])
+
+        prompt = (
+            f"你是西南大学的虚拟导游「西小导」。\n"
+            f"用户身份：{persona}。请{style}。\n"
+            f"请结合以下背景知识，向用户讲解「{spot_name}」。\n"
+            f"要求：口语化，适合TTS语音播报，控制在150字以内。\n"
+            f"背景知识：\n{context if context else spot_name + '是西南大学校园内的重要地点。'}"
+        )
+
+        # 3. 调用 LLM（如果配置了DeepSeek）
+        text = ""
+        try:
+            import httpx
+            api_key = getattr(self, '_deepseek_key', None) or ""
+            if api_key:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    resp = await client.post(
+                        "https://api.deepseek.com/chat/completions",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                        json={
+                            "model": "deepseek-chat",
+                            "messages": [{"role": "user", "content": prompt}],
+                            "temperature": 0.7, "max_tokens": 300
+                        }
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        text = data["choices"][0]["message"]["content"]
+        except Exception as e:
+            logging.warning(f"LLM调用失败，使用模板生成: {e}")
+
+        # 4. 降级：模板生成
+        if not text:
+            text = self._template_guide(spot_name, persona)
+
+        return {"spot_name": spot_name, "text": text, "persona": persona}
+
+    def _template_guide(self, spot_name: str, persona: str) -> str:
+        """无LLM时的模板生成"""
+        templates = {
+            "新生": f"欢迎来到{spot_name}！这里是西南大学最具代表性的地标之一。"
+                    f"作为新同学，你将在这里度过许多难忘的时光。"
+                    f"请带着好奇心，慢慢探索这片美丽的校园吧！",
+            "校友": f"又见面了，{spot_name}。这里承载着无数西大学子的青春记忆。"
+                    f"无论你毕业多久，这里永远是你的精神家园。",
+            "游客": f"您现在看到的是西南大学{spot_name}，"
+                    f"这里是校园内最具代表性的建筑之一，体现了西大深厚的历史文化底蕴。",
+        }
+        return templates.get(persona, templates["新生"])
+
 
 rag_service = RAGService()

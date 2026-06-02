@@ -162,7 +162,7 @@ class _SearchPageState extends State<SearchPage> {
 
     return ListView.separated(
       itemCount: res.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, indent: 16),
+      separatorBuilder: (context, index) => const Divider(height: 1, indent: 16),
       itemBuilder: (context, index) {
         final item = res[index];
         IconData icon;

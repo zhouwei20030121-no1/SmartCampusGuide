@@ -48,7 +48,7 @@ class _MapPageState extends State<MapPage> {
               initialZoom: 16.0,
               minZoom: 12.0,
               maxZoom: 18.0,
-              onTap: (_, __) => setState(() => _selectedPoi = null),
+              onTap: (tapPosition, point) => setState(() => _selectedPoi = null),
             ),
             children: [
               // 高德瓦片图层

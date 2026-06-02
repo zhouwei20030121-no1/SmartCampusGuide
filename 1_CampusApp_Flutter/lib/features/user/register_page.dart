@@ -36,18 +36,21 @@ class _RegisterPageState extends State<RegisterPage> {
       if (!mounted) return;
       if (response.data['code'] == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('注册成功，请登录！'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('注册成功，请登录！'),
+            backgroundColor: Colors.green,
+          ),
         );
         Navigator.pop(context);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.data['msg'] ?? '注册失败')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(response.data['msg'] ?? '注册失败')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('网络连接失败，请检查后端是否启动')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('网络连接失败，请检查后端是否启动')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -69,11 +72,16 @@ class _RegisterPageState extends State<RegisterPage> {
               child: Container(
                 padding: const EdgeInsets.all(30),
                 decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.85), // 统一透明度
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: const [ // 统一添加阴影
-                      BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 5)
-                    ]
+                  color: Colors.white.withValues(alpha: 0.85), // 统一透明度
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: const [
+                    // 统一添加阴影
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 10,
+                      spreadRadius: 5,
+                    ),
+                  ],
                 ),
                 child: Form(
                   key: _formKey,
@@ -82,7 +90,10 @@ class _RegisterPageState extends State<RegisterPage> {
                     children: [
                       const Text(
                         '创建新账号',
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 25),
 
@@ -91,7 +102,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         decoration: InputDecoration(
                           labelText: '用户名 (必填)',
                           prefixIcon: const Icon(Icons.person_outline),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                         validator: (value) => value!.isEmpty ? '请输入用户名' : null,
                       ),
@@ -103,9 +116,12 @@ class _RegisterPageState extends State<RegisterPage> {
                         decoration: InputDecoration(
                           labelText: '密码 (必填)',
                           prefixIcon: const Icon(Icons.lock_outline),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
-                        validator: (value) => value!.length < 6 ? '密码至少6位' : null,
+                        validator: (value) =>
+                            value!.length < 6 ? '密码至少6位' : null,
                       ),
                       const SizedBox(height: 15),
 
@@ -114,7 +130,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         decoration: InputDecoration(
                           labelText: '学号/工号',
                           prefixIcon: const Icon(Icons.badge_outlined),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 15),
@@ -125,7 +143,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         decoration: InputDecoration(
                           labelText: '手机号',
                           prefixIcon: const Icon(Icons.phone_android),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 30),
@@ -136,11 +156,20 @@ class _RegisterPageState extends State<RegisterPage> {
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _handleRegister,
                           style: ElevatedButton.styleFrom(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: const Color(0xFF023D83),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                           child: _isLoading
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : const Text('注 册', style: TextStyle(fontSize: 18)),
+                              ? const CircularProgressIndicator(
+                                  color: Colors.white,
+                                )
+                              : const Text(
+                                  '注 册',
+                                  style: TextStyle(fontSize: 18),
+                                ),
                         ),
                       ),
                     ],

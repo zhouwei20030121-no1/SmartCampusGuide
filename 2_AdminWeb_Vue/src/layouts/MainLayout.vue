@@ -22,7 +22,7 @@
         </router-link>
       </nav>
       <div class="topbar-right">
-        <span class="admin-name">Admin_周玮</span>
+        <span class="admin-name">{{ username }}</span>
         <button class="logout-btn" @click="handleLogout">退出</button>
       </div>
     </header>
@@ -35,9 +35,12 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import request from '@/api/request'
 
 const router = useRouter()
+const username = ref('管理员')
 
 const navItems = [
   { label: '数据大屏', path: '/dashboard' },
@@ -45,14 +48,50 @@ const navItems = [
   { label: '用户管理', path: '/users' },
   { label: '内容编辑', path: '/content' },
   { label: '路线管理', path: '/routes' },
+  { label: '校车管理', path: '/bus' },
   { label: '评论审核', path: '/comments' },
   { label: '语料库', path: '/corpus' },
 ]
 
+const getUsername = () => {
+  const name = localStorage.getItem('username') 
+    || localStorage.getItem('realName') 
+    || localStorage.getItem('real_name')
+  if (name) {
+    username.value = name
+  }
+}
+
 const handleLogout = () => {
   localStorage.removeItem('token')
+  localStorage.removeItem('username')
+  localStorage.removeItem('realName')
   router.replace('/login')
 }
+
+onMounted(async () => {
+  getUsername()
+  if (username.value === '管理员') {
+    try {
+      const token = localStorage.getItem('token')
+      if (token) {
+        const payload = token.split('.')[1]
+        const decoded = JSON.parse(atob(payload))
+        const userId = decoded.userId || decoded.id || decoded.sub
+        if (userId) {
+          const res = await request.get(`/user/info/${userId}`)
+          const user = (res as any).data || res
+          if (user && user.realName) {
+            localStorage.setItem('realName', user.realName)
+            username.value = user.realName
+          }
+        }
+      }
+    } catch (e) {
+      console.log('获取用户信息失败')
+    }
+  }
+})
 </script>
 
 <style scoped>
@@ -66,7 +105,6 @@ const handleLogout = () => {
   font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
-/* ─── 背景 ─── */
 .global-bg {
   position: fixed;
   top: 0;
@@ -88,7 +126,6 @@ const handleLogout = () => {
   z-index: -1;
 }
 
-/* ─── 顶部导航 ─── */
 .topbar {
   display: flex;
   justify-content: space-between;
@@ -188,7 +225,6 @@ const handleLogout = () => {
   color: #fff;
 }
 
-/* ─── 主内容区 ─── */
 .main-content {
   flex: 1;
   overflow-y: auto;

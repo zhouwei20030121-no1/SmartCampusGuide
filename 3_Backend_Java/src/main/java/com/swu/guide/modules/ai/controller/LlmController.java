@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.swu.guide.common.Result;
 import com.swu.guide.modules.ai.entity.PromptTemplate;
 import com.swu.guide.modules.ai.mapper.PromptTemplateMapper;
+import com.swu.guide.modules.ai.service.AiGuideService;
 import com.swu.guide.modules.ai.service.AiSessionService;
 import com.swu.guide.modules.ai.service.LlmGatewayService;
 import org.springframework.web.bind.annotation.*;
@@ -17,12 +18,14 @@ public class LlmController {
     private final LlmGatewayService llmGateway;
     private final AiSessionService sessionService;
     private final PromptTemplateMapper promptMapper;
+    private final AiGuideService aiGuideService;
 
     public LlmController(LlmGatewayService llmGateway, AiSessionService sessionService,
-                         PromptTemplateMapper promptMapper) {
+                         PromptTemplateMapper promptMapper, AiGuideService aiGuideService) {
         this.llmGateway = llmGateway;
         this.sessionService = sessionService;
         this.promptMapper = promptMapper;
+        this.aiGuideService = aiGuideService;
     }
 
     /**
@@ -55,6 +58,19 @@ public class LlmController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("sessionId", sessionId);
         result.put("reply", reply);
+        return Result.ok(result);
+    }
+
+    /** AI 讲解词生成（供 Flutter 智能讲解页调用） */
+    @GetMapping("/guide/generate")
+    public Result<Map<String, Object>> generateGuide(
+            @RequestParam String spotName,
+            @RequestParam(defaultValue = "新生") String persona) {
+        String text = aiGuideService.generateGuide(spotName, persona);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("spotName", spotName);
+        result.put("text", text);
+        result.put("persona", persona);
         return Result.ok(result);
     }
 
