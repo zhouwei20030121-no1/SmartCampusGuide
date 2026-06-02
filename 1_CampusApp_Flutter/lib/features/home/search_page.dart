@@ -17,7 +17,7 @@ class _SearchPageState extends State<SearchPage> {
   // 全站功能与景点数据，keywords 字段用于模糊匹配
   final List<Map<String, dynamic>> _allData = [
     {'title': '西小导 AI 对话', 'type': '功能', 'route': '/chat', 'desc': 'AI 虚拟导游，RAG 多轮问答', 'keywords': '西小导 AI 问答 聊天 RAG 导游 虚拟导游 智能体'},
-    {'title': 'AI 识图', 'type': '功能', 'route': '/ai_vision', 'desc': '拍下校园建筑获取详细介绍', 'keywords': 'AI 识图 识别 建筑识别 相机 拍照 视觉'},
+    {'title': 'AI 探校', 'type': '功能', 'route': '/ai_vision', 'desc': '拍下校园建筑获取详细介绍', 'keywords': 'AI 探校 识图 识别 建筑识别 相机 拍照 视觉'},
     {'title': '智能讲解', 'type': '功能', 'route': '/guide', 'desc': '基于 LBS 的多语种语音讲解', 'keywords': '讲解 语音 TTS 多语种 播报'},
     {'title': '路线规划', 'type': '功能', 'route': '/route', 'desc': '校园内智能导航与路线生成', 'keywords': '路线 规划 导航 寻路 步行'},
     {'title': '景点打卡', 'type': '功能', 'route': '/checkin', 'desc': '点亮地图徽章，记录足迹', 'keywords': '打卡 徽章 足迹 成就'},
@@ -116,7 +116,7 @@ class _SearchPageState extends State<SearchPage> {
             runSpacing: 12,
             children: [
               _tag('西小导', '/chat'),
-              _tag('AI 识图', '/ai_vision'),
+              _tag('AI 探校', '/ai_vision'),
               _tag('路线规划', '/route'),
               _tag('建筑识别', '/ai_vision'),
               _tag('智能讲解', '/guide'),
