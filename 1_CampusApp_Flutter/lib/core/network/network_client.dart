@@ -41,8 +41,9 @@ class NetworkClient {
             req.baseUrl = 'https://genna-boldhearted-dewily.ngrok-free.dev';
             try {
               req.headers['ngrok-skip-browser-warning'] = 'true';
+              final fullUrl = req.path.startsWith('http') ? req.path : req.baseUrl + req.path;
               final response = await d.request(
-                req.path,
+                fullUrl,
                 data: req.data,
                 queryParameters: req.queryParameters,
                 options: Options(
