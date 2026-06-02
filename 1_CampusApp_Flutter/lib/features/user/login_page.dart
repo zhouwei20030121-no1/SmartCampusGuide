@@ -44,7 +44,7 @@ class _LoginPageState extends State<LoginPage> {
         Navigator.pushReplacementNamed(context, AppRouter.home);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.data['msg'] ?? '账号或密码错误')),
+          SnackBar(content: Text(response.data['message'] ?? response.data['msg'] ?? '账号或密码错误')),
         );
       }
     } catch (e) {
