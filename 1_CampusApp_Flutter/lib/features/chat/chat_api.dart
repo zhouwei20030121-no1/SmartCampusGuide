@@ -49,6 +49,7 @@ class ChatApi {
     try {
       final req = await client.postUrl(Uri.parse('$baseUrl/api/rag/chat'));
       req.headers.set('Content-Type', 'application/json');
+      req.headers.set('ngrok-skip-browser-warning', 'true');
       req.add(utf8.encode(json.encode({
         'query': query,
         'history': history,

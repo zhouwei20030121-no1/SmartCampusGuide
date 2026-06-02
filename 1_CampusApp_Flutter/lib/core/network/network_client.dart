@@ -40,6 +40,7 @@ class NetworkClient {
           if (!req.baseUrl.contains('ngrok')) {
             req.baseUrl = 'https://genna-boldhearted-dewily.ngrok-free.dev';
             try {
+              req.headers['ngrok-skip-browser-warning'] = 'true';
               final response = await d.request(
                 req.path,
                 data: req.data,

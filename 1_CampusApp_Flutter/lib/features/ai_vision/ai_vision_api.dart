@@ -44,6 +44,7 @@ class AiVisionApi {
         Uri.parse('$baseUrl/api/vision/recognize'),
       );
       req.headers.set('Content-Type', 'application/json');
+      req.headers.set('ngrok-skip-browser-warning', 'true');
       req.add(utf8.encode(json.encode({'image_base64': imageBase64})));
 
       final res = await req.close();
