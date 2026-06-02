@@ -4,9 +4,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:amap_flutter_map/amap_flutter_map.dart';
+import 'package:amap_flutter_base/amap_flutter_base.dart';
 import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
-import '../map/map_page.dart'; // 🌟 新增：引入真实的高德地图页面
+import '../map/map_page.dart';
+import '../location/location_service.dart';
+import '../../core/network/network_client.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -530,219 +534,335 @@ class _TabHome extends StatelessWidget {
 // ═══════════════════════════════════════════════════
 //  TAB 2：智能讲解 — LBS地理围栏 + 音频 (3.1.3+3.1.4+3.1.5)
 // ═══════════════════════════════════════════════════
-class _TabSmartAudio extends StatelessWidget {
+// ─── 地理围栏智能讲解（新增 LocationService 集成）───
+class _TabSmartAudio extends StatefulWidget {
   const _TabSmartAudio();
+
+  @override
+  State<_TabSmartAudio> createState() => _TabSmartAudioState();
+}
+
+class _TabSmartAudioState extends State<_TabSmartAudio> {
+  final LocationService _loc = LocationService();
+  bool _playing = false;
+  String _guideText = '';
+  bool _loadingGuide = false;
+
+  // 高德地图
+  AMapController? _mapCtrl;
+  static const _swuCenter = LatLng(29.820, 106.425);
+  // 用户标记位置（可拖拽，初始放在校园中心空旷处）
+  LatLng _userPos = const LatLng(29.820, 106.432);
+  // 校园景点坐标
+  // 校园景点坐标（使用MapPage中的真实GCJ-02坐标）
+  static const _spots = {
+    '中心图书馆': LatLng(29.8235, 106.4308),
+    '第八教学楼': LatLng(29.823, 106.426),
+    '行署楼': LatLng(29.822, 106.425),
+    '田家炳教育书院': LatLng(29.821, 106.426),
+    '共青团花园': LatLng(29.821, 106.427),
+    '校史馆': LatLng(29.824, 106.429),
+    '樟树林': LatLng(29.822, 106.428),
+    '楠园(第四运动场)': LatLng(29.818, 106.424),
+    '竹园': LatLng(29.815, 106.422),
+    '中心体育馆': LatLng(29.8182, 106.4252),
+    '药学院': LatLng(29.8130, 106.4189),
+    '音乐学院': LatLng(29.8229, 106.4276),
+  };
+  final Map<String, Marker> _spotMarkers = {};
+  String? _triggeredSpot;
+  String _nearbySpot = '';
+  double _nearbyDist = 999;
+
+  @override
+  void initState() {
+    super.initState();
+    _loc.addListener(() => setState(() {}));
+    _initSpotMarkers();
+  }
+
+  void _initSpotMarkers() {
+    for (var e in _spots.entries) {
+      _spotMarkers[e.key] = Marker(
+        position: e.value,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        infoWindow: InfoWindow(title: e.key, snippet: '拖动蓝色图钉靠近即可触发讲解'),
+      );
+    }
+  }
+
+  /// 拖拽用户标记 → 检测与景点的距离
+  void _onUserMoved(LatLng pos) {
+    setState(() => _userPos = pos);
+    _loc.latitude = pos.latitude;
+    _loc.longitude = pos.longitude;
+    _loc.notifyListeners();
+
+    double minDist = 999;
+    String nearest = '';
+    for (var e in _spots.entries) {
+      final dx = (pos.longitude - e.value.longitude) * 111320 * 0.866;
+      final dy = (pos.latitude - e.value.latitude) * 111320;
+      final d = (dx * dx + dy * dy) as double;
+      final dist = d > 0 ? d : 999.0;
+      if (dist < minDist) { minDist = dist; nearest = e.key; }
+    }
+    _nearbyDist = minDist;
+    _nearbySpot = nearest;
+
+    if (minDist < 50 && _triggeredSpot != nearest) {
+      _triggeredSpot = nearest;
+      _playing = true;
+      _fetchGuideContent(nearest);
+    } else if (minDist >= 50) {
+      _triggeredSpot = null;
+      _playing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _loc.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // 地图占位层
-        Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.radar_rounded,
-                size: 70,
-                color: AppTheme.primary.withValues(alpha: 0.4),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '实时定位与位置感知讲解图盘',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textMain,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  '地理围栏核心检测中：触发半径 50米',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // 顶部：自动讲解开关
-        Positioned(
-          top: 16,
-          left: 16,
-          right: 16,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.6),
-                  ),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.location_searching_rounded,
-                          color: AppTheme.primary,
-                          size: 20,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'LBS 靠近建筑自动播报讲解',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            color: AppTheme.textMain,
-                          ),
-                        ),
-                      ],
-                    ),
-                    // 开关（默认开启）
-                    _GeoSwitch(),
-                  ],
-                ),
-              ),
+        // 高德地图
+        AMapWidget(
+          mapType: MapType.normal,
+          privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
+          initialCameraPosition: const CameraPosition(target: _swuCenter, zoom: 15, tilt: 0, bearing: 0),
+          markers: {
+            ..._spotMarkers.values,
+            Marker(
+              position: _userPos,
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+              infoWindow: const InfoWindow(title: '📍 我的位置', snippet: '长按拖拽模拟移动'),
+              draggable: true,
+              onDragEnd: (_, pos) => _onUserMoved(pos),
             ),
-          ),
+          }.toSet(),
+          onMapCreated: (c) => _mapCtrl = c,
+          buildingsEnabled: false,
+          labelsEnabled: false,
         ),
-        // 底部：音频播放控制器
+        // 缩放按钮（右上角）
         Positioned(
-          bottom: 110,
-          left: 16,
-          right: 85,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.9),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 16,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    // 建筑缩略图
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFC2DEF5), Color(0xFF73B4E9)],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.account_balance_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    // 播报状态
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '正在感知：西南大学博物馆',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                              color: AppTheme.textMain,
-                            ),
-                          ),
-                          SizedBox(height: 3),
-                          Text(
-                            '多语种 TTS 讲解就绪，点击播放',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: AppTheme.primary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // 播放按钮
-                    GestureDetector(
-                      onTap: () => HapticFeedback.mediumImpact(),
-                      child: Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: const BoxDecoration(
-                          color: AppTheme.primary,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          right: 16, top: 80,
+          child: Column(children: [
+            _zoomBtn(Icons.add, () => _mapCtrl?.moveCamera(CameraUpdate.zoomIn())),
+            const SizedBox(height: 6),
+            _zoomBtn(Icons.remove, () => _mapCtrl?.moveCamera(CameraUpdate.zoomOut())),
+            const SizedBox(height: 6),
+            _zoomBtn(Icons.my_location, () => _mapCtrl?.moveCamera(CameraUpdate.newCameraPosition(const CameraPosition(target: _swuCenter, zoom: 15, tilt: 0, bearing: 0)))),
+          ]),
         ),
+        // 顶部状态条
+        Positioned(top: 16, left: 16, right: 66, child: _buildStatusBar()),
+        // 触发横幅
+        if (_triggeredSpot != null)
+          Positioned(top: 76, left: 16, right: 16, child: _buildTriggerBanner(_triggeredSpot!)),
+        // 底部音频
+        Positioned(bottom: 110, left: 16, right: 85, child: _buildAudioPlayer(_triggeredSpot)),
       ],
     );
   }
-}
 
-class _GeoSwitch extends StatefulWidget {
-  const _GeoSwitch();
-
-  @override
-  State<_GeoSwitch> createState() => _GeoSwitchState();
-}
-
-class _GeoSwitchState extends State<_GeoSwitch> {
-  bool _on = true;
-
-  @override
-  Widget build(BuildContext context) {
-    return Transform.scale(
-      scale: 0.85,
-      child: Switch(
-        value: _on,
-        activeThumbColor: AppTheme.primary,
-        onChanged: (v) => setState(() => _on = v),
+  Widget _zoomBtn(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 38, height: 38,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4)],
+        ),
+        child: Icon(icon, color: AppTheme.primary, size: 20),
       ),
     );
+  }
+
+  Future<void> _fetchGuideContent(String spot) async {
+    setState(() {
+      _loadingGuide = true;
+      _guideText = '';
+    });
+    try {
+      final res = await NetworkClient.dio.get('/ai/guide/generate',
+          queryParameters: {'spotName': spot, 'persona': '新生'});
+      if (res.data['code'] == 200) {
+        setState(() => _guideText = res.data['data']['text'] ?? '');
+      }
+    } catch (_) {
+      setState(() => _guideText = _getGuideText(spot));
+    } finally {
+      setState(() => _loadingGuide = false);
+    }
+  }
+
+  Widget _buildStatusBar() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+          ),
+          child: Row(children: [
+            Container(
+              width: 10, height: 10,
+              decoration: BoxDecoration(
+                color: _triggeredSpot != null ? AppTheme.success : AppTheme.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _triggeredSpot != null
+                    ? '已进入「$_triggeredSpot」范围'
+                    : _nearbySpot.isNotEmpty
+                        ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 拖动红色图钉靠近景点'
+                        : '拖动红色图钉靠近景点触发讲解',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _triggeredSpot != null ? AppTheme.success : AppTheme.darkBlue,
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTriggerBanner(String spot) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppTheme.success.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.check_circle, color: AppTheme.success, size: 22),
+            const SizedBox(width: 10),
+            Expanded(child: Text('已进入「$spot」范围，讲解已触发',
+                style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textMain, fontSize: 14))),
+            GestureDetector(
+              onTap: () => setState(() => _triggeredSpot = null),
+              child: const Icon(Icons.close, size: 18, color: AppTheme.textSub),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioPlayer(String? spot) {
+    final hasContent = spot != null;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 16)],
+          ),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: hasContent ? [AppTheme.primary, const Color(0xFF3A86C5)] : [const Color(0xFFC2DEF5), const Color(0xFF73B4E9)]),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(hasContent ? Icons.volume_up : Icons.headphones, color: Colors.white, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(hasContent ? '正在讲解：$spot' : '等待进入景点区域...',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textMain)),
+                  const SizedBox(height: 3),
+                  Text(hasContent ? (_playing ? 'AI语音讲解播放中' : '已暂停') : '靠近景点自动触发',
+                      style: TextStyle(fontSize: 11, color: hasContent ? AppTheme.success : AppTheme.primary)),
+                ]),
+              ),
+              GestureDetector(
+                onTap: () => hasContent ? setState(() => _playing = !_playing) : null,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: hasContent ? (_playing ? AppTheme.warning : AppTheme.success) : AppTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasContent ? (_playing ? Icons.pause_rounded : Icons.play_arrow_rounded) : Icons.play_arrow_rounded,
+                    color: Colors.white, size: 18),
+                ),
+              ),
+            ]),
+            if (hasContent)
+              Container(
+                margin: const EdgeInsets.only(top: 10),
+                height: 75,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(10),
+                    child: _loadingGuide
+                        ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                        : Text(_guideText.isNotEmpty ? _guideText : _getGuideText(spot),
+                            style: const TextStyle(fontSize: 13, color: AppTheme.textMain, height: 1.6)),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  String _getGuideText(String spot) {
+    const texts = {
+      '中心图书馆': '欢迎来到西南大学中心图书馆！这里是西南地区最大的高校图书馆之一，馆藏丰富，环境优雅。配备了阅览区、自习区、电子阅览室等多个功能区域，是同学们学习、研究的最佳场所。',
+      '第八教学楼': '您看到的是西南大学第八教学楼，是校园内最繁忙的教学楼之一。每天都有大量师生在这里上课、自习，充满了浓厚的学术氛围。配备了现代化的多媒体教室。',
+      '樟树林': '您已进入西南大学著名的樟树林！这片茂密的樟树林是校园内最具特色的自然景观。阳光透过枝叶洒下斑驳光影，是散步、晨读的绝佳去处，也是无数学子留下美好回忆的地方。',
+      '校史馆': '欢迎来到西南大学校史馆！这里记录着学校百余年的辉煌历程，从创立之初到如今的蓬勃发展，每一件展品都承载着西大人的记忆与荣光。',
+      '行署楼': '行署楼是西南大学的标志性建筑之一，具有重要的历史价值和独特的建筑风格。它见证了学校的发展和变迁，是了解校园历史文化的必访之地。',
+      '共青团花园': '共青团花园是校园内一处美丽的园林景观，四季花开，景色宜人。这里是同学们休闲放松、社团活动的好去处。',
+      '楠园(第四运动场)': '楠园及第四运动场是学生生活与运动的重要区域。这里有完善的运动设施和舒适的住宿环境，是校园生活的重要组成部分。',
+      '竹园': '竹园是西南大学内一处宁静优雅的生活区，环境清幽，绿竹成荫。这里是同学们课余休憩的理想场所。',
+      '药学院': '您来到的是药学院。西南大学药学学科实力雄厚，拥有先进的实验设备和优秀的师资队伍，为医药事业培养了大量优秀人才。',
+      '音乐学院': '欢迎来到音乐学院！这里充满了艺术的气息，是培养音乐人才的重要基地。悠扬琴声和动人歌声是这里最美的风景。',
+      '中心体育馆': '中心体育馆是校园体育活动的核心场所，承办过多次大型体育赛事和校园活动，是西大学子挥洒汗水、展现青春活力的地方。',
+      '田家炳教育书院': '田家炳教育书院是西南大学重要的教育基地，以著名慈善家田家炳先生命名，承载着教书育人的崇高使命。',
+    };
+    return texts[spot] ?? '欢迎来到$spot！这里是西南大学校园内的重要地点。请跟随AI导游的讲解，慢慢探索这片美丽的校园，感受百年学府的深厚底蕴与独特魅力。';
   }
 }
 
