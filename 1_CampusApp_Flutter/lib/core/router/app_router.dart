@@ -13,6 +13,7 @@ import '../../features/social/checkin_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/home/search_page.dart';
 import '../../features/bus/bus_schedule_page.dart';
+import '../../features/spot/spot_list_page.dart';
 
 class AppRouter {
   static const String busSchedule = '/bus';
@@ -28,6 +29,7 @@ class AppRouter {
   static const String routePlan = '/route';
   static const String checkin = '/checkin';
   static const String search = '/search';
+  static const String spotList = '/spot/list';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -68,6 +70,8 @@ class AppRouter {
             return FadeTransition(opacity: animation, child: child);
           },
         );
+      case spotList:
+        return MaterialPageRoute(builder: (_) => const SpotListPage());
       default:
         return MaterialPageRoute(builder: (_) => const LoginPage());
     }
