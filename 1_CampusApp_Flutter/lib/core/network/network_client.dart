@@ -20,21 +20,51 @@ class NetworkClient {
   // 保存当前登录账号，方便个人中心页面拉取后端信息。
   static String currentAccount = '';
 
-  static final Dio dio = Dio(
-    BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-    ),
-  );
+  static Dio _createDio(String primaryUrl, Duration timeout) {
+    final d = Dio(
+      BaseOptions(
+        baseUrl: primaryUrl,
+        connectTimeout: timeout,
+        receiveTimeout: timeout,
+      ),
+    );
+    
+    d.interceptors.add(InterceptorsWrapper(
+      onError: (err, handler) async {
+        final isConnectionError = err.type == DioExceptionType.connectionTimeout || 
+                                  err.type == DioExceptionType.receiveTimeout || 
+                                  err.type == DioExceptionType.connectionError ||
+                                  err.type == DioExceptionType.unknown;
+        if (isConnectionError) {
+          final req = err.requestOptions;
+          if (!req.baseUrl.contains('ngrok')) {
+            req.baseUrl = 'https://genna-boldhearted-dewily.ngrok-free.dev';
+            try {
+              final response = await d.request(
+                req.path,
+                data: req.data,
+                queryParameters: req.queryParameters,
+                options: Options(
+                  method: req.method,
+                  headers: req.headers,
+                  responseType: req.responseType,
+                  contentType: req.contentType,
+                ),
+              );
+              return handler.resolve(response);
+            } catch (e) {
+              if (e is DioException) return handler.next(e);
+            }
+          }
+        }
+        return handler.next(err);
+      }
+    ));
+    return d;
+  }
 
-  static final Dio aiDio = Dio(
-    BaseOptions(
-      baseUrl: aiBaseUrl,
-      connectTimeout: const Duration(seconds: 30), // AI takes longer
-      receiveTimeout: const Duration(seconds: 30),
-    ),
-  );
+  static final Dio dio = _createDio(baseUrl, const Duration(seconds: 10));
+  static final Dio aiDio = _createDio(aiBaseUrl, const Duration(seconds: 30));
 
   static Future<Response> get(
     String path, {
