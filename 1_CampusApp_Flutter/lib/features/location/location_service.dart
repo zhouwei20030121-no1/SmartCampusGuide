@@ -13,7 +13,9 @@ class LocationService extends ChangeNotifier {
 
   // 公开属性
   double get latitude => _latitude;
+  set latitude(double v) { _latitude = v; notifyListeners(); }
   double get longitude => _longitude;
+  set longitude(double v) { _longitude = v; notifyListeners(); }
   bool get isTracking => _isTracking;
   String? get triggeredSpot => _triggeredSpot;
   String get geoStatus => _geoStatus;

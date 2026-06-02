@@ -3,6 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:amap_flutter_map/amap_flutter_map.dart';
+import 'package:amap_flutter_base/amap_flutter_base.dart';
 import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
 import '../map/map_page.dart';      // 🌟 新增：引入真实的高德地图页面
@@ -462,11 +464,69 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   final LocationService _loc = LocationService();
   bool _playing = false;
 
+  // 高德地图
+  AMapController? _mapCtrl;
+  static const _swuCenter = LatLng(29.820, 106.425);
+  // 用户标记位置（可拖拽）
+  LatLng _userPos = const LatLng(29.820, 106.421);
+  // 校园景点坐标
+  static const _spots = {
+    '25教': LatLng(29.820, 106.421),
+    '樟树林': LatLng(29.822, 106.428),
+    '中心图书馆': LatLng(29.8235, 106.4308),
+    '共青团花园': LatLng(29.821, 106.427),
+    '行署楼': LatLng(29.822, 106.425),
+    '第八教学楼': LatLng(29.823, 106.426),
+    '校史馆': LatLng(29.824, 106.429),
+    '楠园': LatLng(29.818, 106.424),
+    '竹园': LatLng(29.815, 106.422),
+  };
+  final Map<String, Marker> _spotMarkers = {};
+  String? _triggeredSpot;
+  String _nearbySpot = '';
+  double _nearbyDist = 999;
+
   @override
   void initState() {
     super.initState();
     _loc.addListener(() => setState(() {}));
-    _loc.startTracking();
+    _initSpotMarkers();
+  }
+
+  void _initSpotMarkers() {
+    for (var e in _spots.entries) {
+      _spotMarkers[e.key] = Marker(
+        position: e.value,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+        infoWindow: InfoWindow(title: e.key, snippet: '拖动蓝色图钉靠近即可触发讲解'),
+      );
+    }
+  }
+
+  /// 拖拽用户标记 → 检测与景点的距离
+  void _onUserMoved(LatLng pos) {
+    setState(() => _userPos = pos);
+    _loc.latitude = pos.latitude;
+    _loc.longitude = pos.longitude;
+    _loc.notifyListeners();
+
+    double minDist = 999;
+    String nearest = '';
+    for (var e in _spots.entries) {
+      final dx = (pos.longitude - e.value.longitude) * 111320 * 0.866;
+      final dy = (pos.latitude - e.value.latitude) * 111320;
+      final d = (dx * dx + dy * dy) as double;
+      final dist = d > 0 ? d : 999.0;
+      if (dist < minDist) { minDist = dist; nearest = e.key; }
+    }
+    _nearbyDist = minDist;
+    _nearbySpot = nearest;
+
+    if (minDist < 50 && _triggeredSpot != nearest) {
+      _triggeredSpot = nearest;
+    } else if (minDist >= 50) {
+      _triggeredSpot = null;
+    }
   }
 
   @override
@@ -477,55 +537,39 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   @override
   Widget build(BuildContext context) {
-    final nearby = _loc.nearbySpot;
-    final dist = _loc.distance;
-    final triggered = _loc.triggeredSpot;
-
     return Stack(
       children: [
-        Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Stack(alignment: Alignment.center, children: [
-              Icon(Icons.radar_rounded, size: 120,
-                  color: AppTheme.primary.withValues(alpha: 0.15)),
-              Container(
-                width: 16, height: 16,
-                decoration: BoxDecoration(
-                  color: _loc.isTracking ? AppTheme.primary : AppTheme.textSub,
-                  shape: BoxShape.circle,
-                  boxShadow: [BoxShadow(color: AppTheme.primary.withValues(alpha: 0.4), blurRadius: 12, spreadRadius: 4)],
-                ),
-              ),
-            ]),
-            const SizedBox(height: 16),
-            Text(_loc.geoStatus, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textMain)),
-            if (nearby.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: dist < 50 ? AppTheme.success.withValues(alpha: 0.1) : AppTheme.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text('附近：$nearby · 约${dist.toStringAsFixed(0)}米',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                        color: dist < 50 ? AppTheme.success : AppTheme.primary)),
-              ),
-            ],
-            const SizedBox(height: 4),
-            Text('坐标：${_loc.latitude.toStringAsFixed(5)}, ${_loc.longitude.toStringAsFixed(5)}',
-                style: const TextStyle(fontSize: 11, color: AppTheme.textSub)),
-          ]),
+        // 高德地图
+        AMapWidget(
+          mapType: MapType.normal,
+          privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
+          initialCameraPosition: const CameraPosition(target: _swuCenter, zoom: 15, tilt: 0, bearing: 0),
+          markers: {
+            ..._spotMarkers.values,
+            Marker(
+              position: _userPos,
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+              infoWindow: const InfoWindow(title: '我的位置', snippet: '拖拽我模拟移动'),
+              draggable: true,
+              onDragEnd: (_, pos) => _onUserMoved(pos),
+            ),
+          }.toSet(),
+          onMapCreated: (c) => _mapCtrl = c,
+          buildingsEnabled: false,
+          labelsEnabled: false,
         ),
-        Positioned(top: 16, left: 16, right: 16, child: _buildControlBar()),
-        if (triggered != null)
-          Positioned(top: 80, left: 16, right: 16, child: _buildTriggerBanner(triggered)),
-        Positioned(bottom: 110, left: 16, right: 85, child: _buildAudioPlayer(triggered)),
+        // 顶部状态条
+        Positioned(top: 16, left: 16, right: 16, child: _buildStatusBar()),
+        // 触发横幅
+        if (_triggeredSpot != null)
+          Positioned(top: 76, left: 16, right: 16, child: _buildTriggerBanner(_triggeredSpot!)),
+        // 底部音频
+        Positioned(bottom: 110, left: 16, right: 85, child: _buildAudioPlayer(_triggeredSpot)),
       ],
     );
   }
 
-  Widget _buildControlBar() {
+  Widget _buildStatusBar() {
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
@@ -537,20 +581,27 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
           ),
-          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Row(children: [
-              Icon(_loc.isTracking ? Icons.location_searching_rounded : Icons.location_off_rounded,
-                  color: _loc.isTracking ? AppTheme.primary : AppTheme.textSub, size: 20),
-              const SizedBox(width: 8),
-              Text(_loc.isTracking ? 'LBS 自动讲解 · 半径50米' : 'LBS 已关闭',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textMain)),
-            ]),
-            Transform.scale(
-              scale: 0.85,
-              child: Switch(
-                value: _loc.isTracking,
-                activeThumbColor: AppTheme.primary,
-                onChanged: (v) => v ? _loc.startTracking() : _loc.stopTracking(),
+          child: Row(children: [
+            Container(
+              width: 10, height: 10,
+              decoration: BoxDecoration(
+                color: _triggeredSpot != null ? AppTheme.success : AppTheme.primary,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _triggeredSpot != null
+                    ? '已进入「$_triggeredSpot」范围'
+                    : _nearbySpot.isNotEmpty
+                        ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 拖拽蓝色标记靠近景点'
+                        : '拖拽蓝色标记靠近景点触发讲解',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _triggeredSpot != null ? AppTheme.success : AppTheme.darkBlue,
+                ),
               ),
             ),
           ]),
