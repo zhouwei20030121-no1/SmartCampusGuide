@@ -14,14 +14,12 @@ import java.util.Map;
 public class AiGuideService {
 
     private final LlmGatewayService llmGateway;
-    private final PromptTemplateMapper promptMapper;
 
     @Value("${ai-service.url:http://localhost:5000}")
     private String aiServiceUrl;
 
-    public AiGuideService(LlmGatewayService llmGateway, PromptTemplateMapper promptMapper) {
+    public AiGuideService(LlmGatewayService llmGateway) {
         this.llmGateway = llmGateway;
-        this.promptMapper = promptMapper;
     }
 
     /**
