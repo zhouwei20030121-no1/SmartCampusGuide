@@ -528,8 +528,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
     if (minDist < 50 && _triggeredSpot != nearest) {
       _triggeredSpot = nearest;
+      _playing = true; // 自动开始播放
     } else if (minDist >= 50) {
       _triggeredSpot = null;
+      _playing = false;
     }
   }
 
@@ -669,6 +671,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   Widget _buildAudioPlayer(String? spot) {
+    final hasContent = spot != null;
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -681,37 +684,79 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
             boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 16)],
           ),
-          child: Row(children: [
-            Container(
-              width: 46, height: 46,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFFC2DEF5), Color(0xFF73B4E9)]),
-                borderRadius: BorderRadius.circular(12),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(children: [
+              Container(
+                width: 46, height: 46,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: hasContent ? [AppTheme.primary, const Color(0xFF3A86C5)] : [const Color(0xFFC2DEF5), const Color(0xFF73B4E9)]),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(hasContent ? Icons.volume_up : Icons.headphones, color: Colors.white, size: 22),
               ),
-              child: Icon(spot != null ? Icons.volume_up : Icons.headphones, color: Colors.white, size: 22),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                Text(spot != null ? '正在讲解：$spot' : '等待进入景点区域...',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textMain)),
-                const SizedBox(height: 3),
-                Text(spot != null ? 'AI语音讲解播放中' : '靠近景点自动触发',
-                    style: const TextStyle(fontSize: 11, color: AppTheme.primary)),
-              ]),
-            ),
-            GestureDetector(
-              onTap: () => setState(() => _playing = !_playing),
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: _playing ? AppTheme.warning : AppTheme.primary, shape: BoxShape.circle),
-                child: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 18),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  Text(hasContent ? '正在讲解：$spot' : '等待进入景点区域...',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textMain)),
+                  const SizedBox(height: 3),
+                  Text(hasContent ? (_playing ? 'AI语音讲解播放中' : '已暂停') : '靠近景点自动触发',
+                      style: TextStyle(fontSize: 11, color: hasContent ? AppTheme.success : AppTheme.primary)),
+                ]),
               ),
-            ),
+              GestureDetector(
+                onTap: () => hasContent ? setState(() => _playing = !_playing) : null,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: hasContent ? (_playing ? AppTheme.warning : AppTheme.success) : AppTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    hasContent ? (_playing ? Icons.pause_rounded : Icons.play_arrow_rounded) : Icons.play_arrow_rounded,
+                    color: Colors.white, size: 18),
+                ),
+              ),
+            ]),
+            if (hasContent)
+              Container(
+                margin: const EdgeInsets.only(top: 10),
+                height: 75,
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(10),
+                    child: Text(_getGuideText(spot), style: const TextStyle(fontSize: 13, color: AppTheme.textMain, height: 1.6)),
+                  ),
+                ),
+              ),
           ]),
         ),
       ),
     );
+  }
+
+  String _getGuideText(String spot) {
+    const texts = {
+      '中心图书馆': '欢迎来到西南大学中心图书馆！这里是西南地区最大的高校图书馆之一，馆藏丰富，环境优雅。配备了阅览区、自习区、电子阅览室等多个功能区域，是同学们学习、研究的最佳场所。',
+      '第八教学楼': '您看到的是西南大学第八教学楼，是校园内最繁忙的教学楼之一。每天都有大量师生在这里上课、自习，充满了浓厚的学术氛围。配备了现代化的多媒体教室。',
+      '樟树林': '您已进入西南大学著名的樟树林！这片茂密的樟树林是校园内最具特色的自然景观。阳光透过枝叶洒下斑驳光影，是散步、晨读的绝佳去处，也是无数学子留下美好回忆的地方。',
+      '校史馆': '欢迎来到西南大学校史馆！这里记录着学校百余年的辉煌历程，从创立之初到如今的蓬勃发展，每一件展品都承载着西大人的记忆与荣光。',
+      '行署楼': '行署楼是西南大学的标志性建筑之一，具有重要的历史价值和独特的建筑风格。它见证了学校的发展和变迁，是了解校园历史文化的必访之地。',
+      '共青团花园': '共青团花园是校园内一处美丽的园林景观，四季花开，景色宜人。这里是同学们休闲放松、社团活动的好去处。',
+      '楠园(第四运动场)': '楠园及第四运动场是学生生活与运动的重要区域。这里有完善的运动设施和舒适的住宿环境，是校园生活的重要组成部分。',
+      '竹园': '竹园是西南大学内一处宁静优雅的生活区，环境清幽，绿竹成荫。这里是同学们课余休憩的理想场所。',
+      '药学院': '您来到的是药学院。西南大学药学学科实力雄厚，拥有先进的实验设备和优秀的师资队伍，为医药事业培养了大量优秀人才。',
+      '音乐学院': '欢迎来到音乐学院！这里充满了艺术的气息，是培养音乐人才的重要基地。悠扬琴声和动人歌声是这里最美的风景。',
+      '中心体育馆': '中心体育馆是校园体育活动的核心场所，承办过多次大型体育赛事和校园活动，是西大学子挥洒汗水、展现青春活力的地方。',
+      '田家炳教育书院': '田家炳教育书院是西南大学重要的教育基地，以著名慈善家田家炳先生命名，承载着教书育人的崇高使命。',
+    };
+    return texts[spot] ?? '欢迎来到$spot！这里是西南大学校园内的重要地点。请跟随AI导游的讲解，慢慢探索这片美丽的校园，感受百年学府的深厚底蕴与独特魅力。';
   }
 }
 
