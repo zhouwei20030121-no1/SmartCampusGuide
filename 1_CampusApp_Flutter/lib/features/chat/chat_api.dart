@@ -6,13 +6,15 @@ class ChatApi {
   static String get _baseUrl {
     const envUrl = String.fromEnvironment('AI_SERVICE_BASE_URL');
     if (envUrl.isNotEmpty) return envUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5000';
-    return 'http://127.0.0.1:5000';
+    if (!kIsWeb && Platform.isAndroid) return 'https://genna-boldhearted-dewily.ngrok-free.dev';
+    if (!kIsWeb && Platform.isIOS) return 'https://genna-boldhearted-dewily.ngrok-free.dev';
+    return 'https://genna-boldhearted-dewily.ngrok-free.dev';
   }
 
   static List<String> get _baseUrls {
     final urls = <String>[
       _baseUrl,
+      'https://genna-boldhearted-dewily.ngrok-free.dev',
       'http://127.0.0.1:5000',
       'http://10.0.2.2:5000',
       'http://localhost:5000',

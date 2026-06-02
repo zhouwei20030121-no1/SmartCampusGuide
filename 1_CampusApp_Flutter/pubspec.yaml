@@ -16,6 +16,9 @@ dependencies:
   sqflite: ^2.3.0
   path: ^1.9.0
   dio: ^5.9.2
+  # 地图（使用高德瓦片）
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
   # 摄像头
   camera: ^0.11.1
   image_picker: ^1.1.2

@@ -62,7 +62,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
         (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => _cameras!.first,
       );
-      _cameraCtrl = CameraController(cam, ResolutionPreset.medium);
+      _cameraCtrl = CameraController(cam, ResolutionPreset.medium, enableAudio: false);
       await _cameraCtrl!.initialize();
       if (!mounted) return;
       setState(() {

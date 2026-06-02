@@ -28,26 +28,19 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>127.0.0.1</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-			<key>localhost</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-		</dict>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>用于校园地图定位和智能导览功能。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>用于拍摄校园建筑并进行 AR 识别讲解。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>用于从相册选择校园建筑图片进行识别。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>扫描时不需要录音，但底层相机模块可能会请求此权限。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

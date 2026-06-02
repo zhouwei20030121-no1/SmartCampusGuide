@@ -1,0 +1,8 @@
+:8081 {
+    handle /api/* {
+        reverse_proxy localhost:5000
+    }
+    handle * {
+        reverse_proxy localhost:8080
+    }
+}

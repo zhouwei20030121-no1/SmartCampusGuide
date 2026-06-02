@@ -1,18 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../core/theme/app_theme.dart';
 
-class MapPage extends StatelessWidget {
+class MapPage extends StatefulWidget {
   const MapPage({super.key});
 
+  @override
+  State<MapPage> createState() => _MapPageState();
+}
+
+class _MapPageState extends State<MapPage> {
+  final MapController _mapController = MapController();
+
+  // 西南大学中心坐标（北碚校区）
+  static const _swuCenter = LatLng(29.824, 106.608);
+
   static const _pois = [
-    _CampusPoi('含弘门（1号门）', '西南大学主校门，常用入校点', Icons.flag),
-    _CampusPoi('学行门（2号门）', '天生路主入口，适合定位测试', Icons.flag_outlined),
-    _CampusPoi('中心图书馆', '北区核心学习空间', Icons.local_library),
-    _CampusPoi('南区图书馆', '南区学习服务点', Icons.menu_book),
-    _CampusPoi('计算机与信息科学学院', '计科院 / 软件学院相关区域', Icons.computer),
-    _CampusPoi('中心体育馆', '校内体育场馆', Icons.sports_basketball),
+    _CampusPoi('含弘门（1号门）', '西南大学主校门，常用入校点', Icons.flag, LatLng(29.8201, 106.6105)),
+    _CampusPoi('学行门（2号门）', '天生路主入口', Icons.flag_outlined, LatLng(29.8268, 106.6005)),
+    _CampusPoi('中心图书馆', '北区核心学习空间', Icons.local_library, LatLng(29.8260, 106.6075)),
+    _CampusPoi('南区图书馆', '南区学习服务点', Icons.menu_book, LatLng(29.8185, 106.6120)),
+    _CampusPoi('计算机与信息科学学院', '计科院 / 软件学院', Icons.computer, LatLng(29.8235, 106.6140)),
+    _CampusPoi('中心体育馆', '校内体育场馆', Icons.sports_basketball, LatLng(29.8215, 106.6060)),
   ];
+
+  _CampusPoi? _selectedPoi;
 
   @override
   Widget build(BuildContext context) {
@@ -24,221 +38,231 @@ class MapPage extends StatelessWidget {
         foregroundColor: AppTheme.textMain,
         elevation: 0,
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 120),
+      body: Stack(
         children: [
-          Container(
-            height: 210,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              gradient: const LinearGradient(
-                colors: [Color(0xFFB7E3F5), Color(0xFFEAF8EF)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+          // 高德瓦片地图
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: _swuCenter,
+              initialZoom: 16.0,
+              minZoom: 12.0,
+              maxZoom: 18.0,
+              onTap: (_, __) => setState(() => _selectedPoi = null),
+            ),
+            children: [
+              // 高德瓦片图层
+              TileLayer(
+                urlTemplate:
+                    'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7',
+                subdomains: const ['1', '2', '3', '4'],
+                userAgentPackageName: 'com.swu.smartCampusGuide',
+                maxZoom: 18,
               ),
-              border: Border.all(color: Colors.white, width: 1.5),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x15000000),
-                  blurRadius: 18,
-                  offset: Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: CustomPaint(painter: _CampusSketchPainter()),
-                ),
-                Positioned(
-                  left: 18,
-                  top: 16,
-                  child: _MapBadge(
-                    icon: Icons.map_rounded,
-                    label: '模拟器临时地图',
-                  ),
-                ),
-                const Positioned(
-                  left: 18,
-                  right: 18,
-                  bottom: 18,
-                  child: Text(
-                    '已临时停用高德原生插件，便于 iPhone 模拟器构建与测试。真机/安卓可恢复原地图模块。',
-                    style: TextStyle(
-                      color: AppTheme.textSub,
-                      fontSize: 12,
-                      height: 1.4,
+              // POI 标记
+              MarkerLayer(
+                markers: _pois.map((poi) {
+                  final isSelected = _selectedPoi == poi;
+                  return Marker(
+                    point: poi.position,
+                    width: isSelected ? 160 : 44,
+                    height: isSelected ? 72 : 44,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedPoi = poi),
+                      child: isSelected
+                          ? _buildSelectedMarker(poi)
+                          : _buildMarker(poi),
                     ),
-                  ),
-                ),
-              ],
-            ),
+                  );
+                }).toList(),
+              ),
+            ],
           ),
-          const SizedBox(height: 18),
-          const Text(
-            '校园地点',
-            style: TextStyle(
-              color: AppTheme.textMain,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-          for (final poi in _pois) ...[
-            _PoiTile(poi: poi),
-            const SizedBox(height: 10),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PoiTile extends StatelessWidget {
-  const _PoiTile({required this.poi});
-
-  final _CampusPoi poi;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(poi.icon, color: AppTheme.primary),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  poi.name,
-                  style: const TextStyle(
-                    color: AppTheme.textMain,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
+          // 底部 POI 列表（可滑出）
+          DraggableScrollableSheet(
+            initialChildSize: 0.15,
+            minChildSize: 0.08,
+            maxChildSize: 0.55,
+            builder: (context, scrollController) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x20000000),
+                      blurRadius: 16,
+                      offset: Offset(0, -4),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  poi.description,
-                  style: const TextStyle(
-                    color: AppTheme.textSub,
-                    fontSize: 12,
-                  ),
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 30),
+                  children: [
+                    // 拖拽指示条
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 14),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade300,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      '校园地点',
+                      style: TextStyle(
+                        color: AppTheme.textMain,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    for (final poi in _pois) ...[
+                      _PoiTile(
+                        poi: poi,
+                        onTap: () {
+                          _mapController.move(poi.position, 17.0);
+                          setState(() => _selectedPoi = poi);
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ],
       ),
     );
   }
-}
 
-class _MapBadge extends StatelessWidget {
-  const _MapBadge({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildMarker(_CampusPoi poi) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.primary,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2.5),
+        boxShadow: const [
+          BoxShadow(color: Color(0x30000000), blurRadius: 6, offset: Offset(0, 2)),
+        ],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 17, color: AppTheme.primary),
-          const SizedBox(width: 6),
-          Text(
-            label,
+      child: Icon(poi.icon, color: Colors.white, size: 20),
+    );
+  }
+
+  Widget _buildSelectedMarker(_CampusPoi poi) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [
+              BoxShadow(color: Color(0x30000000), blurRadius: 8, offset: Offset(0, 2)),
+            ],
+          ),
+          child: Text(
+            poi.name,
             style: const TextStyle(
               color: AppTheme.textMain,
               fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ],
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppTheme.primary,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2.5),
+            boxShadow: const [
+              BoxShadow(color: Color(0x30000000), blurRadius: 6, offset: Offset(0, 2)),
+            ],
+          ),
+          child: Icon(poi.icon, color: Colors.white, size: 16),
+        ),
+      ],
+    );
+  }
+}
+
+class _PoiTile extends StatelessWidget {
+  const _PoiTile({required this.poi, required this.onTap});
+
+  final _CampusPoi poi;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFFEEEEEE)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(15),
+              ),
+              child: Icon(poi.icon, color: AppTheme.primary),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    poi.name,
+                    style: const TextStyle(
+                      color: AppTheme.textMain,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    poi.description,
+                    style: const TextStyle(
+                      color: AppTheme.textSub,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppTheme.textSub, size: 20),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _CampusSketchPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final roadPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.9)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
-      ..strokeCap = StrokeCap.round;
-    final lakePaint = Paint()
-      ..color = const Color(0xFF79C6E8).withValues(alpha: 0.55)
-      ..style = PaintingStyle.fill;
-    final lawnPaint = Paint()
-      ..color = const Color(0xFF75C889).withValues(alpha: 0.45)
-      ..style = PaintingStyle.fill;
-    final pinPaint = Paint()
-      ..color = AppTheme.primary
-      ..style = PaintingStyle.fill;
-
-    canvas.drawOval(
-      Rect.fromLTWH(size.width * 0.56, size.height * 0.16, 86, 58),
-      lakePaint,
-    );
-    canvas.drawOval(
-      Rect.fromLTWH(size.width * 0.08, size.height * 0.42, 110, 70),
-      lawnPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.12, size.height * 0.76),
-      Offset(size.width * 0.86, size.height * 0.26),
-      roadPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width * 0.20, size.height * 0.22),
-      Offset(size.width * 0.82, size.height * 0.72),
-      roadPaint,
-    );
-
-    for (final point in [
-      Offset(size.width * 0.25, size.height * 0.62),
-      Offset(size.width * 0.48, size.height * 0.46),
-      Offset(size.width * 0.68, size.height * 0.32),
-      Offset(size.width * 0.72, size.height * 0.66),
-    ]) {
-      canvas.drawCircle(point, 7, pinPaint);
-      canvas.drawCircle(point, 13, pinPaint..color = AppTheme.primary.withValues(alpha: 0.15));
-      pinPaint.color = AppTheme.primary;
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
 class _CampusPoi {
-  const _CampusPoi(this.name, this.description, this.icon);
+  const _CampusPoi(this.name, this.description, this.icon, this.position);
 
   final String name;
   final String description;
   final IconData icon;
+  final LatLng position;
 }
