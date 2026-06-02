@@ -467,8 +467,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   // 高德地图
   AMapController? _mapCtrl;
   static const _swuCenter = LatLng(29.820, 106.425);
-  // 用户标记位置（可拖拽）
-  LatLng _userPos = const LatLng(29.820, 106.421);
+  // 用户标记位置（可拖拽，初始放在校园中心空旷处）
+  LatLng _userPos = const LatLng(29.820, 106.432);
   // 校园景点坐标
   static const _spots = {
     '25教': LatLng(29.820, 106.421),
@@ -548,8 +548,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             ..._spotMarkers.values,
             Marker(
               position: _userPos,
-              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-              infoWindow: const InfoWindow(title: '我的位置', snippet: '拖拽我模拟移动'),
+              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+              infoWindow: const InfoWindow(title: '📍 我的位置', snippet: '长按拖拽模拟移动'),
               draggable: true,
               onDragEnd: (_, pos) => _onUserMoved(pos),
             ),
@@ -558,14 +558,41 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           buildingsEnabled: false,
           labelsEnabled: false,
         ),
+        // 缩放按钮（右上角）
+        Positioned(
+          right: 16, top: 80,
+          child: Column(children: [
+            _zoomBtn(Icons.add, () => _mapCtrl?.moveCamera(CameraUpdate.zoomIn())),
+            const SizedBox(height: 6),
+            _zoomBtn(Icons.remove, () => _mapCtrl?.moveCamera(CameraUpdate.zoomOut())),
+            const SizedBox(height: 6),
+            _zoomBtn(Icons.my_location, () => _mapCtrl?.moveCamera(CameraUpdate.newCameraPosition(const CameraPosition(target: _swuCenter, zoom: 15, tilt: 0, bearing: 0)))),
+          ]),
+        ),
         // 顶部状态条
-        Positioned(top: 16, left: 16, right: 16, child: _buildStatusBar()),
+        Positioned(top: 16, left: 16, right: 66, child: _buildStatusBar()),
         // 触发横幅
         if (_triggeredSpot != null)
           Positioned(top: 76, left: 16, right: 16, child: _buildTriggerBanner(_triggeredSpot!)),
         // 底部音频
         Positioned(bottom: 110, left: 16, right: 85, child: _buildAudioPlayer(_triggeredSpot)),
       ],
+    );
+  }
+
+  Widget _zoomBtn(IconData icon, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 38, height: 38,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4)],
+        ),
+        child: Icon(icon, color: AppTheme.primary, size: 20),
+      ),
     );
   }
 
