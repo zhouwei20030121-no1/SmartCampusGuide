@@ -470,16 +470,20 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   // 用户标记位置（可拖拽，初始放在校园中心空旷处）
   LatLng _userPos = const LatLng(29.820, 106.432);
   // 校园景点坐标
+  // 校园景点坐标（使用MapPage中的真实GCJ-02坐标）
   static const _spots = {
-    '25教': LatLng(29.820, 106.421),
-    '樟树林': LatLng(29.822, 106.428),
     '中心图书馆': LatLng(29.8235, 106.4308),
-    '共青团花园': LatLng(29.821, 106.427),
-    '行署楼': LatLng(29.822, 106.425),
     '第八教学楼': LatLng(29.823, 106.426),
+    '行署楼': LatLng(29.822, 106.425),
+    '田家炳教育书院': LatLng(29.821, 106.426),
+    '共青团花园': LatLng(29.821, 106.427),
     '校史馆': LatLng(29.824, 106.429),
-    '楠园': LatLng(29.818, 106.424),
+    '樟树林': LatLng(29.822, 106.428),
+    '楠园(第四运动场)': LatLng(29.818, 106.424),
     '竹园': LatLng(29.815, 106.422),
+    '中心体育馆': LatLng(29.8182, 106.4252),
+    '药学院': LatLng(29.8130, 106.4189),
+    '音乐学院': LatLng(29.8229, 106.4276),
   };
   final Map<String, Marker> _spotMarkers = {};
   String? _triggeredSpot;
@@ -622,8 +626,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 _triggeredSpot != null
                     ? '已进入「$_triggeredSpot」范围'
                     : _nearbySpot.isNotEmpty
-                        ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 拖拽蓝色标记靠近景点'
-                        : '拖拽蓝色标记靠近景点触发讲解',
+                        ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 拖动红色图钉靠近景点'
+                        : '拖动红色图钉靠近景点触发讲解',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -655,7 +659,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             Expanded(child: Text('已进入「$spot」范围，讲解已触发',
                 style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textMain, fontSize: 14))),
             GestureDetector(
-              onTap: () => _loc.clearTrigger(),
+              onTap: () => setState(() => _triggeredSpot = null),
               child: const Icon(Icons.close, size: 18, color: AppTheme.textSub),
             ),
           ]),
