@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -92,7 +94,9 @@ class _ChatPageState extends State<ChatPage> {
       if (!mounted) return;
       final msg = e.message;
       String friendlyMsg;
-      if (msg.contains('连接失败') || msg.contains('Connection refused') || msg.contains('5000')) {
+      if (msg.contains('连接失败') ||
+          msg.contains('Connection refused') ||
+          msg.contains('5000')) {
         friendlyMsg = '无法连接西小导服务，请确认 Python AI 服务已在 5000 端口启动。';
       } else if (msg.contains('格式异常') || msg.contains('Format')) {
         friendlyMsg = '西小导服务返回格式异常，请检查 AI 服务日志。';
@@ -172,82 +176,171 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('西小导 - AI 对话')),
-      body: Column(
+      extendBodyBehindAppBar: true,
+      backgroundColor: Colors.transparent,
+      body: Stack(
         children: [
-          _ChatStatusBar(
-            persona: _persona,
-            onPersonaChanged: (value) => setState(() => _persona = value),
-            onPromptSelected: _sendText,
-            disabled: _sending,
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/bg.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(color: AppTheme.pageBg),
+            ),
           ),
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollCtrl,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (ctx, i) => _ChatBubble(msg: _messages[i]),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                color: const Color(0xFFE0F2FE).withValues(alpha: 0.42),
+              ),
             ),
           ),
           SafeArea(
-            top: false,
-            minimum: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              children: [
+                _buildHeader(),
+                _ChatStatusBar(
+                  persona: _persona,
+                  onPersonaChanged: (value) => setState(() => _persona = value),
+                  onPromptSelected: _sendText,
+                  disabled: _sending,
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scrollCtrl,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (ctx, i) => _ChatBubble(msg: _messages[i]),
+                  ),
+                ),
+                SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.only(bottom: 8),
+                  child: ClipRRect(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.76),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 10,
+                              offset: const Offset(0, -3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              tooltip: '语音输入',
+                              onPressed: _sending ? null : _showVoiceInputSheet,
+                              icon: const Icon(Icons.mic_none_rounded),
+                              color: AppTheme.primary,
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _msgCtrl,
+                                enabled: !_sending,
+                                textInputAction: TextInputAction.send,
+                                onSubmitted: (_) => _send(),
+                                decoration: InputDecoration(
+                                  hintText: '问西小导任何问题...',
+                                  filled: true,
+                                  fillColor: Colors.white.withValues(
+                                    alpha: 0.86,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    borderSide: BorderSide(
+                                      color: AppTheme.darkBlue.withValues(
+                                        alpha: 0.28,
+                                      ),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    borderSide: const BorderSide(
+                                      color: AppTheme.primary,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            CircleAvatar(
+                              backgroundColor: _sending
+                                  ? Colors.grey.shade400
+                                  : AppTheme.primary,
+                              child: IconButton(
+                                icon: Icon(
+                                  _sending
+                                      ? Icons.hourglass_top_rounded
+                                      : Icons.send,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
+                                onPressed: _sending ? null : _send,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
             child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 4,
-                    offset: Offset(0, -2),
-                  ),
-                ],
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
               ),
-              child: Row(
-                children: [
-                  IconButton(
-                    tooltip: '语音输入',
-                    onPressed: _sending ? null : _showVoiceInputSheet,
-                    icon: const Icon(Icons.mic_none_rounded),
-                    color: AppTheme.primary,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _msgCtrl,
-                      enabled: !_sending,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(),
-                      decoration: InputDecoration(
-                        hintText: '问西小导任何问题...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  CircleAvatar(
-                    backgroundColor: _sending
-                        ? Colors.grey.shade400
-                        : AppTheme.primary,
-                    child: IconButton(
-                      icon: Icon(
-                        _sending ? Icons.hourglass_top_rounded : Icons.send,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      onPressed: _sending ? null : _send,
-                    ),
-                  ),
-                ],
+              child: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: AppTheme.darkBlue,
+                size: 18,
               ),
             ),
           ),
+          const Expanded(
+            child: Center(
+              child: Text(
+                '西小导 - AI 对话',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.darkBlue,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 40),
         ],
       ),
     );
@@ -269,62 +362,87 @@ class _ChatStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final prompts = ['西小导是谁？', '图书馆在哪里？', '它有什么特点？', '我是新生，推荐参观路线', 'AR识别后怎么讲解？'];
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-      color: const Color(0xFFF8FBFF),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    final prompts = [
+      '西小导是谁？',
+      '图书馆在哪里？',
+      '它有什么特点？',
+      '我是新生，推荐参观路线',
+      'AR识别后怎么讲解？',
+    ];
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.52),
+            border: Border(
+              bottom: BorderSide(color: Colors.white.withValues(alpha: 0.45)),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.psychology_alt,
-                color: AppTheme.primary,
-                size: 18,
+              Row(
+                children: [
+                  const Icon(
+                    Icons.psychology_alt,
+                    color: AppTheme.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text(
+                      'RAG 知识库 + 多轮上下文',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: persona,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(value: '新生', child: Text('新生')),
+                        DropdownMenuItem(value: '游客', child: Text('游客')),
+                        DropdownMenuItem(value: '校友', child: Text('校友')),
+                      ],
+                      onChanged: disabled
+                          ? null
+                          : (value) {
+                              if (value != null) onPersonaChanged(value);
+                            },
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              const Expanded(
-                child: Text(
-                  'RAG 知识库 + 多轮上下文',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                ),
-              ),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: persona,
-                  isDense: true,
-                  items: const [
-                    DropdownMenuItem(value: '新生', child: Text('新生')),
-                    DropdownMenuItem(value: '游客', child: Text('游客')),
-                    DropdownMenuItem(value: '校友', child: Text('校友')),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final prompt in prompts) ...[
+                      ActionChip(
+                        label: Text(prompt),
+                        backgroundColor: Colors.white.withValues(alpha: 0.85),
+                        side: BorderSide(
+                          color: AppTheme.darkBlue.withValues(alpha: 0.18),
+                        ),
+                        onPressed: disabled
+                            ? null
+                            : () => onPromptSelected(prompt),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                   ],
-                  onChanged: disabled
-                      ? null
-                      : (value) {
-                          if (value != null) onPersonaChanged(value);
-                        },
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final prompt in prompts) ...[
-                  ActionChip(
-                    label: Text(prompt),
-                    onPressed: disabled ? null : () => onPromptSelected(prompt),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -361,7 +479,7 @@ class _ChatBubble extends StatelessWidget {
         ? AppTheme.primary
         : msg.isError
         ? const Color(0xFFFFE4E6)
-        : Colors.grey[200];
+        : Colors.white.withValues(alpha: 0.86);
     final textColor = msg.isMe
         ? Colors.white
         : msg.isError
@@ -388,6 +506,16 @@ class _ChatBubble extends StatelessWidget {
                 ? const Radius.circular(4)
                 : const Radius.circular(16),
           ),
+          border: msg.isMe
+              ? null
+              : Border.all(color: Colors.white.withValues(alpha: 0.72)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

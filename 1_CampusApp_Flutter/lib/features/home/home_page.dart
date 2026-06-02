@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -5,7 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
-import '../map/map_page.dart';      // 🌟 新增：引入真实的高德地图页面
+import '../map/map_page.dart'; // 🌟 新增：引入真实的高德地图页面
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -15,7 +16,10 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  static const double _xiaoDaoFabSize = 58;
+
   int _currentIndex = 0;
+  Offset? _xiaoDaoFabOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -54,8 +58,10 @@ class _HomePageState extends State<HomePage> {
               index: _currentIndex,
               children: [
                 _TabHome(
-                  onTabSelected: (index) =>
-                      setState(() => _currentIndex = index),
+                  onTabSelected: (index) {
+                    ScaffoldMessenger.of(context).clearSnackBars();
+                    setState(() => _currentIndex = index);
+                  },
                 ),
                 const MapPage(),
                 const _TabSmartAudio(),
@@ -63,11 +69,10 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
+          // 4. 西小导悬浮球，可拖拽避免遮挡页面内容
+          _buildDraggableXiXiaoDaoFab(context),
         ],
       ),
-      // 4. 西小导悬浮球
-      floatingActionButton: _buildXiXiaoDaoFab(context),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       // 5. 底部导航
       bottomNavigationBar: _buildBottomNav(),
     );
@@ -76,39 +81,99 @@ class _HomePageState extends State<HomePage> {
   // ═══════════════════════════════════════════
   //  西小导 AI 悬浮球
   // ═══════════════════════════════════════════
-  Widget _buildXiXiaoDaoFab(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.7),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.9),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primary.withValues(alpha: 0.25),
-                  blurRadius: 15,
-                  offset: const Offset(0, 6),
+  Widget _buildDraggableXiXiaoDaoFab(BuildContext context) {
+    return Positioned.fill(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final safePadding = MediaQuery.of(context).padding;
+          final defaultOffset = Offset(
+            constraints.maxWidth - _xiaoDaoFabSize - 16,
+            constraints.maxHeight - _xiaoDaoFabSize - safePadding.bottom - 72,
+          );
+          final currentOffset = _clampXiaoDaoOffset(
+            _xiaoDaoFabOffset ?? defaultOffset,
+            constraints,
+            safePadding,
+          );
+
+          return Stack(
+            children: [
+              Positioned(
+                left: currentOffset.dx,
+                top: currentOffset.dy,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (_) {
+                    _xiaoDaoFabOffset = currentOffset;
+                  },
+                  onPanUpdate: (details) {
+                    setState(() {
+                      final latestOffset = _xiaoDaoFabOffset ?? currentOffset;
+                      _xiaoDaoFabOffset = _clampXiaoDaoOffset(
+                        latestOffset + details.delta,
+                        constraints,
+                        safePadding,
+                      );
+                    });
+                  },
+                  onTap: () => _showChatSheet(context),
+                  child: _buildXiXiaoDaoFab(),
                 ),
-              ],
-            ),
-            child: IconButton(
-              icon: const Icon(
-                Icons.support_agent_rounded,
-                color: AppTheme.primary,
-                size: 30,
               ),
-              onPressed: () => _showChatSheet(context),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Offset _clampXiaoDaoOffset(
+    Offset offset,
+    BoxConstraints constraints,
+    EdgeInsets safePadding,
+  ) {
+    const edgePadding = 12.0;
+    final minX = edgePadding;
+    final maxX = math.max(
+      minX,
+      constraints.maxWidth - _xiaoDaoFabSize - edgePadding,
+    );
+    final minY = safePadding.top + edgePadding;
+    final maxY = math.max(
+      minY,
+      constraints.maxHeight - _xiaoDaoFabSize - safePadding.bottom - 72,
+    );
+
+    return Offset(offset.dx.clamp(minX, maxX), offset.dy.clamp(minY, maxY));
+  }
+
+  Widget _buildXiXiaoDaoFab() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          width: _xiaoDaoFabSize,
+          height: _xiaoDaoFabSize,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.7),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.9),
+              width: 1.5,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.primary.withValues(alpha: 0.25),
+                blurRadius: 15,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.support_agent_rounded,
+            color: AppTheme.primary,
+            size: 30,
           ),
         ),
       ),
@@ -116,6 +181,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showChatSheet(BuildContext context) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     Navigator.pushNamed(context, '/chat');
   }
 
@@ -131,7 +197,10 @@ class _HomePageState extends State<HomePage> {
           child: SafeArea(
             child: BottomNavigationBar(
               currentIndex: _currentIndex,
-              onTap: (i) => setState(() => _currentIndex = i),
+              onTap: (i) {
+                ScaffoldMessenger.of(context).clearSnackBars();
+                setState(() => _currentIndex = i);
+              },
               backgroundColor: Colors.transparent,
               elevation: 0,
               type: BottomNavigationBarType.fixed,
@@ -221,13 +290,19 @@ class _TabHome extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Center(
-              child: Text(
-                '西大',
-                style: TextStyle(
-                  color: AppTheme.primary,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 13,
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/校徽.png',
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const Center(
+                  child: Text(
+                    '西大',
+                    style: TextStyle(
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -235,14 +310,19 @@ class _TabHome extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: GestureDetector(
-              onTap: () => Navigator.pushNamed(context, '/search'),
+              onTap: () {
+                ScaffoldMessenger.of(context).clearSnackBars();
+                Navigator.pushNamed(context, '/search');
+              },
               child: Container(
                 height: 40,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.6),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -326,7 +406,7 @@ class _TabHome extends StatelessWidget {
           _GridButton(
             icon: Icons.route_outlined,
             label: '路线规划',
-// 🌟 核心修改：点击这里，跳转到我们刚刚写的独立路线规划页面 RoutePage
+            // 🌟 核心修改：点击这里，跳转到我们刚刚写的独立路线规划页面 RoutePage
             onTap: () => _navTo(context, '/route'),
           ),
           _GridButton(
@@ -365,6 +445,7 @@ class _TabHome extends StatelessWidget {
   }
 
   void _navTo(BuildContext context, String route) {
+    ScaffoldMessenger.of(context).clearSnackBars();
     Navigator.of(context).pushNamed(route);
   }
 
