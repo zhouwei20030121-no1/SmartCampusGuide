@@ -9,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
 import '../map/map_page.dart';      // 🌟 新增：引入真实的高德地图页面
 import '../location/location_service.dart';
+import '../../core/network/network_client.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -463,6 +464,8 @@ class _TabSmartAudio extends StatefulWidget {
 class _TabSmartAudioState extends State<_TabSmartAudio> {
   final LocationService _loc = LocationService();
   bool _playing = false;
+  String _guideText = '';
+  bool _loadingGuide = false;
 
   // 高德地图
   AMapController? _mapCtrl;
@@ -528,7 +531,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
     if (minDist < 50 && _triggeredSpot != nearest) {
       _triggeredSpot = nearest;
-      _playing = true; // 自动开始播放
+      _playing = true;
+      _fetchGuideContent(nearest);
     } else if (minDist >= 50) {
       _triggeredSpot = null;
       _playing = false;
@@ -600,6 +604,24 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         child: Icon(icon, color: AppTheme.primary, size: 20),
       ),
     );
+  }
+
+  Future<void> _fetchGuideContent(String spot) async {
+    setState(() {
+      _loadingGuide = true;
+      _guideText = '';
+    });
+    try {
+      final res = await NetworkClient.dio.get('/ai/guide/generate',
+          queryParameters: {'spotName': spot, 'persona': '新生'});
+      if (res.data['code'] == 200) {
+        setState(() => _guideText = res.data['data']['text'] ?? '');
+      }
+    } catch (_) {
+      setState(() => _guideText = _getGuideText(spot));
+    } finally {
+      setState(() => _loadingGuide = false);
+    }
   }
 
   Widget _buildStatusBar() {
@@ -731,7 +753,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                   borderRadius: BorderRadius.circular(12),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(10),
-                    child: Text(_getGuideText(spot), style: const TextStyle(fontSize: 13, color: AppTheme.textMain, height: 1.6)),
+                    child: _loadingGuide
+                        ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                        : Text(_guideText.isNotEmpty ? _guideText : _getGuideText(spot),
+                            style: const TextStyle(fontSize: 13, color: AppTheme.textMain, height: 1.6)),
                   ),
                 ),
               ),
