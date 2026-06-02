@@ -53,11 +53,14 @@ class _HomePageState extends State<HomePage> {
             bottom: false,
             child: IndexedStack(
               index: _currentIndex,
-              children: const [
-                _TabHome(),
-                _TabMapGuide(),
-                _TabSmartAudio(),
-                _TabProfile(),
+              children: [
+                _TabHome(
+                  onTabSelected: (index) =>
+                      setState(() => _currentIndex = index),
+                ),
+                const MapPage(),
+                const _TabSmartAudio(),
+                const ProfilePage(),
               ],
             ),
           ),
@@ -218,7 +221,8 @@ class _HomePageState extends State<HomePage> {
 //  TAB 0：首页 — 全局聚合入口
 // ═══════════════════════════════════════════════════
 class _TabHome extends StatelessWidget {
-  const _TabHome();
+  final ValueChanged<int> onTabSelected;
+  const _TabHome({required this.onTabSelected});
 
   @override
   Widget build(BuildContext context) {
