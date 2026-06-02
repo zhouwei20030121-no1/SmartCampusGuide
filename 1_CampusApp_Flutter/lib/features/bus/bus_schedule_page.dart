@@ -15,7 +15,9 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
   List<dynamic> _lines = [];
   bool _loading = true;
   int? _expandedIndex;
-  int _tabIndex = 0; // 0=时刻表, 1=换乘查询
+  int _tabIndex = 0;
+
+  String _n(dynamic s) => (s['stationName'] ?? s['station_name'] ?? '').toString();
 
   // 换乘查询
   final _fromCtrl = TextEditingController();
@@ -71,7 +73,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       bool hasFrom = false, hasTo = false;
       for (final sts in stations.values) {
         for (final s in (sts as List)) {
-          final name = s['station_name']?.toString() ?? '';
+          final name = _n(s);
           if (name == from) hasFrom = true;
           if (name == to) hasTo = true;
         }
@@ -119,7 +121,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       if (line['lineId'] != lineId) continue;
       final stations = line['stations'] as Map<String, dynamic>? ?? {};
       for (final sts in stations.values) {
-        final list = (sts as List).map((s) => s['station_name']?.toString() ?? '').toList();
+        final list = (sts as List).map((s) => _n(s)).toList();
         final i1 = list.indexOf(from);
         final i2 = list.indexOf(to);
         if (i1 != -1 && i2 != -1) {
@@ -145,7 +147,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         final stations = line['stations'] as Map<String, dynamic>? ?? {};
         for (final sts in stations.values) {
           for (final s in (sts as List)) {
-            result.add(s['station_name']?.toString() ?? '');
+            result.add(_n(s));
           }
         }
       }
@@ -228,7 +230,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       final stations = line['stations'] as Map<String, dynamic>? ?? {};
       for (final sts in stations.values) {
         for (final s in (sts as List)) {
-          final n = s['station_name']?.toString() ?? '';
+          final n = _n(s);
           if (n.isNotEmpty) names.add(n);
         }
       }
@@ -438,7 +440,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         ...sts.asMap().entries.map((e) {
           final s = e.value;
           final order = s['stop_order'] ?? (e.key + 1);
-          final name = s['station_name'] ?? '';
+          final name = _n(s);
           final isLast = e.key == sts.length - 1;
           return SizedBox(height: 46, child: Row(children: [
             SizedBox(width: 26, child: Column(children: [
