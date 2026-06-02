@@ -8,7 +8,11 @@ cd 4_AIService_Python; $env:HF_ENDPOINT="https://hf-mirror.com"; .\.venv\Scripts
 
 cd 2_AdminWeb_Vue; npm run dev
 
+# 启动反向代理和内网穿透（必须在上方的 Java/Python 启动后执行）
+caddy start --config Caddyfile
+ngrok http --domain=genna-boldhearted-dewily.ngrok-free.dev 8081
+
 
 关闭：
 
-各窗口按 Ctrl+C 停止服务
+各窗口按 Ctrl+C 停止服务，或者在任务管理器中结束对应进程。
