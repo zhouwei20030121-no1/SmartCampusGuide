@@ -38,15 +38,20 @@ public class AiGuideService {
             req.put("persona", persona);
             var resp = new org.springframework.web.client.RestTemplate()
                     .postForEntity(aiServiceUrl + "/api/rag/guide/generate", req, Map.class);
-            if (resp.getBody() != null && "success".equals(((Map)resp.getBody().get("data")).get("spot_name"))) {
-                return "200";
+            if (resp.getBody() != null) {
+                Map<String, Object> data = (Map<String, Object>) resp.getBody().get("data");
+                if (data != null && data.get("text") != null) {
+                    return data.get("text").toString();
+                }
             }
         } catch (Exception ignored) {}
 
         // 2. 降级：直接用 DeepSeek（跳过 Python RAG）
         try {
             String prompt = buildPrompt(spotName, persona);
-            return llmGateway.chatSimple(prompt, "请为「" + spotName + "」生成一段150-200字的校园导览讲解词，要求口语化、生动有趣、适合语音播报。");
+            String result = llmGateway.chatSimple(prompt,
+                    "请为「" + spotName + "」生成一段200-300字的校园导览讲解词。要求：口语化、生动有趣、适合语音播报、包含建筑特色和历史背景。");
+            if (result != null && !result.isBlank()) return result;
         } catch (Exception ignored) {}
 
         // 3. 完全降级：本地模板
