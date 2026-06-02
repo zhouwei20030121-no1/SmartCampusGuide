@@ -21,6 +21,8 @@ _PERSONA_HINTS: dict[str, str] = {
     "校友": "你正在为一名西南大学校友服务。用温暖、回忆感十足的语气，多提及校园变迁、老建筑的故事，激发怀旧情感。",
 }
 
+_UNSUPPORTED_LOCATION_TERMS = ("光华楼", "南门")
+
 
 def _current_date() -> str:
     return datetime.datetime.now().strftime("%Y年%m月%d日")
@@ -39,7 +41,10 @@ class RAGService:
 
     def search(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
         """Hybrid search combining vector similarity and keyword overlap score."""
-        vector_results = vector_store.search(query, top_k=max(top_k, 5), threshold=0.35)
+        if any(term in query for term in _UNSUPPORTED_LOCATION_TERMS):
+            return []
+
+        vector_results = vector_store.search(query, top_k=max(top_k * 3, 10), threshold=0.35)
         
         normalized_query = self._normalize_text(query)
         keyword_results: list[dict[str, Any]] = []
@@ -76,8 +81,65 @@ class RAGService:
             if doc["id"] not in seen_ids:
                 merged.append(doc)
                 seen_ids.add(doc["id"])
-                
+
+        merged = self._filter_conflicting_gate_results(query, merged)
         return merged[: max(1, top_k)]
+
+    def _filter_conflicting_gate_results(self, query: str, docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Avoid mixing route context between clearly requested school gates."""
+        gate_aliases = {
+            "gate_1": ("含弘门", "1号门", "一号门"),
+            "gate_2": ("学行门", "2号门", "二号门"),
+            "gate_3": ("天生门", "3号门", "三号门"),
+            "gate_5": ("学府门", "5号门", "五号门"),
+            "gate_6": ("学苑门", "6号门", "六号门"),
+            "gate_7": ("文星门", "7号门", "七号门"),
+            "gate_8": ("将军门", "8号门", "八号门"),
+        }
+        requested = [
+            gate
+            for gate, aliases in gate_aliases.items()
+            if any(alias in query for alias in aliases)
+        ]
+        if len(requested) != 1:
+            return docs
+
+        requested_gate = requested[0]
+        conflicting_aliases = [
+            alias
+            for gate, aliases in gate_aliases.items()
+            if gate != requested_gate
+            for alias in aliases
+        ]
+        requested_aliases = gate_aliases[requested_gate]
+
+        filtered = []
+        for doc in docs:
+            identity_text = " ".join(
+                [
+                    str(doc.get("title", "")),
+                    str(doc.get("question", "")),
+                    str(doc.get("entity_id", "")),
+                ]
+            )
+            if any(alias in identity_text for alias in conflicting_aliases):
+                continue
+
+            text = " ".join(
+                [
+                    str(doc.get("title", "")),
+                    str(doc.get("question", "")),
+                    str(doc.get("answer", "")),
+                    " ".join(doc.get("keywords", [])),
+                    str(doc.get("entity_id", "")),
+                ]
+            )
+            has_conflict = any(alias in text for alias in conflicting_aliases)
+            has_requested = any(alias in text for alias in requested_aliases)
+            if has_conflict and not has_requested:
+                continue
+            filtered.append(doc)
+        return filtered
 
     async def _web_search(self, query: str, max_results: int = 3) -> list[dict[str, Any]]:
         """Perform a web search using DuckDuckGo with timeout protection."""
@@ -274,7 +336,7 @@ class RAGService:
             )
         return (
             f"我暂时没有在本地知识库中检索到“{query}”的准确资料。"
-            "你可以换一个更具体的关键词，例如“图书馆”“光华楼”“博物馆”或“校车路线”。"
+            "你可以换一个更具体的关键词，例如“图书馆”“含弘门”“第25教学楼”或“校车路线”。"
         )
 
     def _format_context(self, sources: list[dict[str, Any]]) -> str:

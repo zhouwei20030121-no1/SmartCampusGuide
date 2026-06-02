@@ -12,6 +12,8 @@ import '../map/map_page.dart';
 import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
 
+const Color _schoolBlue = Color(0xFF023D83);
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -21,6 +23,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const double _xiaoDaoFabSize = 58;
+  static const double _xiaoDaoBottomReserve = 0;
 
   int _currentIndex = 0;
   Offset? _xiaoDaoFabOffset;
@@ -92,7 +95,10 @@ class _HomePageState extends State<HomePage> {
           final safePadding = MediaQuery.of(context).padding;
           final defaultOffset = Offset(
             constraints.maxWidth - _xiaoDaoFabSize - 16,
-            constraints.maxHeight - _xiaoDaoFabSize - safePadding.bottom - 72,
+            constraints.maxHeight -
+                _xiaoDaoFabSize -
+                safePadding.bottom -
+                _xiaoDaoBottomReserve,
           );
           final currentOffset = _clampXiaoDaoOffset(
             _xiaoDaoFabOffset ?? defaultOffset,
@@ -145,7 +151,10 @@ class _HomePageState extends State<HomePage> {
     final minY = safePadding.top + edgePadding;
     final maxY = math.max(
       minY,
-      constraints.maxHeight - _xiaoDaoFabSize - safePadding.bottom - 72,
+      constraints.maxHeight -
+          _xiaoDaoFabSize -
+          safePadding.bottom -
+          _xiaoDaoBottomReserve,
     );
 
     return Offset(offset.dx.clamp(minX, maxX), offset.dy.clamp(minY, maxY));
@@ -168,7 +177,7 @@ class _HomePageState extends State<HomePage> {
             ),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.25),
+                color: _schoolBlue.withValues(alpha: 0.25),
                 blurRadius: 15,
                 offset: const Offset(0, 6),
               ),
@@ -176,7 +185,7 @@ class _HomePageState extends State<HomePage> {
           ),
           child: const Icon(
             Icons.support_agent_rounded,
-            color: AppTheme.primary,
+            color: _schoolBlue,
             size: 30,
           ),
         ),
