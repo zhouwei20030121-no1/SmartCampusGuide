@@ -42,7 +42,7 @@ mybatis-plus:
 
 # DeepSeek 大模型配置
 deepseek:
-  api-key: ${DEEPSEEK_API_KEY:sk-your-deepseek-key}
+  api-key: ${DEEPSEEK_API_KEY:sk-a3ac8956117f4464b5148a92501c591b}
   api-url: https://api.deepseek.com/chat/completions
   default-model: deepseek-chat
   temperature: 0.7
