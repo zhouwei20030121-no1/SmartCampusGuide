@@ -8,7 +8,11 @@ cd 4_AIService_Python && HF_ENDPOINT=https://hf-mirror.com .venv/bin/uvicorn mai
 
 cd 2_AdminWeb_Vue && npm run dev &
 
+# 启动反向代理和内网穿透（必须在上方的 Java/Python 启动后执行）
+caddy start --config Caddyfile
+ngrok http --domain=genna-boldhearted-dewily.ngrok-free.dev 8081 &
+
 
 关闭：
 
-brew services stop redis ; pkill -f "spring-boot:run" ; pkill -f "uvicorn main:app" ; pkill -f "vite"
+brew services stop redis ; pkill -f "spring-boot:run" ; pkill -f "uvicorn main:app" ; pkill -f "vite" ; caddy stop ; pkill -f "ngrok"

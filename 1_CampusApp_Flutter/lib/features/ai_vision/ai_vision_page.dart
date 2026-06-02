@@ -273,7 +273,7 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
                 onPressed: () => Navigator.pop(context),
               ),
               const Text(
-                'AI 实景识图',
+                'AI 探校',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -516,7 +516,7 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
                     '/chat',
                     arguments: {
                       'prompt':
-                          '我刚通过 AI 识图扫到了【${result.buildingName}】，请用新生视角介绍它的历史，并告诉我附近还可以看什么。',
+                          '我刚通过 AI 探校扫到了【${result.buildingName}】，请用新生视角介绍它的历史，并告诉我附近还可以看什么。',
                     },
                   );
                 },
@@ -534,7 +534,7 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
                     '/chat',
                     arguments: {
                       'prompt':
-                          '我刚通过 AI 识图扫到了【${result.buildingName}】，请用新生视角介绍它，并告诉我附近还可以看什么。',
+                          '我刚通过 AI 探校扫到了【${result.buildingName}】，请用新生视角介绍它，并告诉我附近还可以看什么。',
                     },
                   );
                 },

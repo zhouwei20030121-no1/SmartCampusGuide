@@ -1,0 +1,14 @@
+:8081 {
+    handle /api/tts/* {
+        reverse_proxy 127.0.0.1:5000
+    }
+    handle /api/rag/* {
+        reverse_proxy 127.0.0.1:5000
+    }
+    handle /api/vision/* {
+        reverse_proxy 127.0.0.1:5000
+    }
+    handle /* {
+        reverse_proxy 127.0.0.1:8080
+    }
+}
