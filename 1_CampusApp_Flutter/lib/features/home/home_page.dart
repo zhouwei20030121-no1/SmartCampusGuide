@@ -639,11 +639,66 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   String _guideText = '';
   bool _loadingGuide = false;
   bool _lookingUpPoi = false;
+  String _poiLookupNotice = '';
   int _poiLookupSeq = 0;
 
   // 高德地图
   AMapController? _mapCtrl;
   static const _swuCenter = LatLng(29.820, 106.425);
+  static final LatLngBounds _campusBounds = LatLngBounds(
+    southwest: const LatLng(29.80649, 106.402434),
+    northeast: const LatLng(29.835163, 106.436554),
+  );
+  static const _blockedPoiKeywords = [
+    '咖啡',
+    '瑞幸',
+    '星巴克',
+    '奶茶',
+    '茶饮',
+    '甜品',
+    '餐厅',
+    '饭店',
+    '小吃',
+    '面馆',
+    '火锅',
+    '烧烤',
+    '超市',
+    '便利',
+    '商店',
+    '店铺',
+    '药房',
+    '银行',
+    '营业厅',
+    '快递',
+  ];
+  static const _campusPoiKeywords = [
+    '西南大学',
+    '北碚校区',
+    '学院',
+    '教学楼',
+    '运动场',
+    '体育馆',
+    '图书馆',
+    '礼堂',
+    '广场',
+    '公寓',
+    '宿舍',
+    '学生',
+    '中心',
+    '讲堂',
+    '博物馆',
+    '校门',
+    '楼',
+    '园',
+    '门',
+    '湖',
+  ];
+  static const _campusPoiTypes = [
+    '科教文化服务',
+    '体育休闲服务',
+    '风景名胜',
+    '地名地址信息',
+  ];
   // 用户标记位置（可拖拽，初始放在校园中心空旷处）
   LatLng _userPos = _swuCenter;
 
@@ -664,6 +719,14 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final pos = poi.latLng;
     final name = poi.name?.trim();
     if (pos == null || name == null || name.isEmpty) return;
+    if (!_campusBounds.contains(pos)) {
+      _showPoiNotice('请在西南大学北碚校区范围内选择位置');
+      return;
+    }
+    if (!_isAllowedCampusPoiName(name)) {
+      _showPoiNotice('商家店铺不参与智能讲解，请选择校园建筑或场所');
+      return;
+    }
 
     _selectedPoiName = name;
     _selectedPoiPos = pos;
@@ -678,12 +741,20 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   /// 点击普通地图区域 → 移动“我的位置”，并用高德周边搜索识别最近地名。
   void _onMapTapped(LatLng pos) {
+    if (!_campusBounds.contains(pos)) {
+      _showPoiNotice('请在西南大学北碚校区范围内选择位置');
+      return;
+    }
     _moveUserTo(pos);
     _triggerNearestPoi(pos);
   }
 
   /// 拖拽用户标记 → 结束时识别附近地名并触发讲解。
   void _onUserMoved(LatLng pos) {
+    if (!_campusBounds.contains(pos)) {
+      _showPoiNotice('请在西南大学北碚校区范围内拖动位置');
+      return;
+    }
     _moveUserTo(pos);
     _triggerNearestPoi(pos);
   }
@@ -710,6 +781,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       _nearbyDist = dist;
 
       if (spot != null && spot != _triggeredSpot) {
+        _poiLookupNotice = '';
         _triggeredSpot = spot;
         _playing = true;
       } else if (spot == null) {
@@ -732,7 +804,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   Future<void> _triggerNearestPoi(LatLng pos) async {
     final seq = ++_poiLookupSeq;
-    setState(() => _lookingUpPoi = true);
+    setState(() {
+      _lookingUpPoi = true;
+      _poiLookupNotice = '';
+    });
 
     try {
       final res = await Dio().get(
@@ -740,8 +815,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         queryParameters: {
           'key': AMapRouteApi.webApiKey,
           'location': '${pos.longitude},${pos.latitude}',
-          'radius': 120,
-          'offset': 1,
+          'radius': 180,
+          'offset': 25,
           'page': 1,
           'sortrule': 'distance',
           'extensions': 'base',
@@ -751,15 +826,26 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
       final pois = res.data['pois'];
       if (pois is List && pois.isNotEmpty) {
-        final first = pois.first as Map;
-        final name = first['name']?.toString().trim();
-        final distance = double.tryParse(first['distance']?.toString() ?? '');
-        final poiPos = _parseAmapLocation(first['location']?.toString()) ?? pos;
-        if (name != null && name.isNotEmpty) {
-          _selectedPoiName = name;
-          _selectedPoiPos = poiPos;
-          _moveUserTo(pos, triggerSpot: name, distance: distance ?? 0);
+        Map? candidate;
+        for (final poi in pois.whereType<Map>()) {
+          if (_isCampusPoi(poi)) {
+            candidate = poi;
+            break;
+          }
         }
+        if (candidate == null) {
+          _showPoiNotice('附近没有识别到可讲解的校园建筑或场所');
+          return;
+        }
+
+        final name = candidate['name']!.toString().trim();
+        final distance =
+            double.tryParse(candidate['distance']?.toString() ?? '');
+        final poiPos =
+            _parseAmapLocation(candidate['location']?.toString()) ?? pos;
+        _selectedPoiName = name;
+        _selectedPoiPos = poiPos;
+        _moveUserTo(pos, triggerSpot: name, distance: distance ?? 0);
       }
     } catch (e) {
       debugPrint('高德周边地名识别失败: $e');
@@ -768,6 +854,34 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         setState(() => _lookingUpPoi = false);
       }
     }
+  }
+
+  bool _isCampusPoi(Map poi) {
+    final name = poi['name']?.toString().trim();
+    if (name == null || name.isEmpty) return false;
+    if (_containsAny(name, _blockedPoiKeywords)) return false;
+    final type = poi['type']?.toString() ?? '';
+    return _containsAny(name, _campusPoiKeywords) ||
+        _containsAny(type, _campusPoiTypes);
+  }
+
+  bool _isAllowedCampusPoiName(String name) {
+    if (_containsAny(name, _blockedPoiKeywords)) return false;
+    return _containsAny(name, _campusPoiKeywords);
+  }
+
+  bool _containsAny(String value, List<String> keywords) {
+    return keywords.any(value.contains);
+  }
+
+  void _showPoiNotice(String notice) {
+    setState(() {
+      _lookingUpPoi = false;
+      _poiLookupNotice = notice;
+      _triggeredSpot = null;
+      _playing = false;
+      _guideText = '';
+    });
   }
 
   LatLng? _parseAmapLocation(String? location) {
@@ -794,7 +908,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         AMapWidget(
           mapType: MapType.normal,
           privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
-          initialCameraPosition: const CameraPosition(target: _swuCenter, zoom: 15, tilt: 0, bearing: 0),
+          initialCameraPosition: const CameraPosition(target: _swuCenter, zoom: 16.5, tilt: 0, bearing: 0),
           markers: {
             Marker(
               position: _userPos,
@@ -808,6 +922,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           onTap: _onMapTapped,
           onPoiTouched: _onPoiTouched,
           touchPoiEnabled: true,
+          limitBounds: _campusBounds,
+          minMaxZoomPreference: const MinMaxZoomPreference(16.0, 20.0),
           buildingsEnabled: true,
           labelsEnabled: true,
         ),
@@ -819,7 +935,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             const SizedBox(height: 6),
             _zoomBtn(Icons.remove, () => _mapCtrl?.moveCamera(CameraUpdate.zoomOut())),
             const SizedBox(height: 6),
-            _zoomBtn(Icons.my_location, () => _mapCtrl?.moveCamera(CameraUpdate.newCameraPosition(const CameraPosition(target: _swuCenter, zoom: 15, tilt: 0, bearing: 0)))),
+            _zoomBtn(Icons.my_location, () => _mapCtrl?.moveCamera(CameraUpdate.newCameraPosition(const CameraPosition(target: _swuCenter, zoom: 16.5, tilt: 0, bearing: 0)))),
           ]),
         ),
         // 顶部状态条
@@ -894,6 +1010,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                     ? '已进入「$_triggeredSpot」范围'
                     : _lookingUpPoi
                     ? '正在识别附近高德地名...'
+                    : _poiLookupNotice.isNotEmpty
+                    ? _poiLookupNotice
                     : _nearbySpot.isNotEmpty
                     ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 点地图或拖动红点模拟移动'
                     : '点击地图位置或高德地名即可模拟到达并触发讲解',
