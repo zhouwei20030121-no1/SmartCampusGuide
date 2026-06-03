@@ -688,6 +688,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   ];
   // 用户模拟位置（点击地图移动，初始放在校园中心）
   LatLng _userPos = _swuCenter;
+  late Marker _userMarker;
 
   String? _selectedPoiName;
   LatLng? _selectedPoiPos;
@@ -698,6 +699,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   @override
   void initState() {
     super.initState();
+    _userMarker = _buildUserMarker(_userPos);
     _loc.addListener(() => setState(() {}));
   }
 
@@ -750,6 +752,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
     setState(() {
       _userPos = pos;
+      _userMarker = _userMarker.copyWith(positionParam: pos);
       _nearbySpot = spot ?? (targetPos != null ? targetName ?? '' : '');
       _nearbyDist = dist;
 
@@ -876,6 +879,15 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     );
   }
 
+  Marker _buildUserMarker(LatLng pos) {
+    return Marker(
+      position: pos,
+      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      infoWindow: const InfoWindow(title: '📍 我的位置', snippet: '点击地图位置即可移动'),
+      draggable: false,
+    );
+  }
+
   @override
   void dispose() {
     _loc.dispose();
@@ -892,12 +904,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
           initialCameraPosition: CameraPosition(target: _userPos, zoom: 17, tilt: 0, bearing: 0),
           markers: {
-            Marker(
-              position: _userPos,
-              icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-              infoWindow: const InfoWindow(title: '📍 我的位置', snippet: '点击地图位置即可移动'),
-              draggable: false,
-            ),
+            _userMarker,
           }.toSet(),
           onMapCreated: (c) {
             _mapCtrl = c;
