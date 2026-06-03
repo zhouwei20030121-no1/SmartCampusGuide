@@ -42,3 +42,6 @@ chroma_db/
 # Local raw knowledge drafts
 知识库.txt
 知识库设计方案.txt
+
+# Mac 个人执行脚本
+*.command
