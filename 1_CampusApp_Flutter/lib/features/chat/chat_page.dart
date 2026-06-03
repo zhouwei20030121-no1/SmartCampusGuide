@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import 'chat_api.dart';
 
+const Color _schoolBlue = Color(0xFF023D83);
+
 class ChatPage extends StatefulWidget {
   final String? initialPrompt;
 
@@ -126,7 +128,7 @@ class _ChatPageState extends State<ChatPage> {
   }
 
   void _showVoiceInputSheet() {
-    final voiceSamples = ['图书馆在哪里？', '我是新生，推荐一条参观路线', 'AR识别到建筑后怎么讲解？'];
+    final voiceSamples = ['最近的食堂怎么走？', '第八教学楼在哪里？', '帮我规划一条参观校园的路线'];
     showModalBottomSheet<void>(
       context: context,
       builder: (context) => SafeArea(
@@ -148,7 +150,7 @@ class _ChatPageState extends State<ChatPage> {
               const SizedBox(height: 12),
               for (final sample in voiceSamples)
                 ListTile(
-                  leading: const Icon(Icons.mic, color: AppTheme.primary),
+                  leading: const Icon(Icons.mic, color: _schoolBlue),
                   title: Text(sample),
                   onTap: () {
                     Navigator.pop(context);
@@ -237,7 +239,7 @@ class _ChatPageState extends State<ChatPage> {
                               tooltip: '语音输入',
                               onPressed: _sending ? null : _showVoiceInputSheet,
                               icon: const Icon(Icons.mic_none_rounded),
-                              color: AppTheme.primary,
+                              color: _schoolBlue,
                             ),
                             Expanded(
                               child: TextField(
@@ -257,7 +259,7 @@ class _ChatPageState extends State<ChatPage> {
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(24),
                                     borderSide: BorderSide(
-                                      color: AppTheme.darkBlue.withValues(
+                                      color: _schoolBlue.withValues(
                                         alpha: 0.28,
                                       ),
                                     ),
@@ -265,7 +267,7 @@ class _ChatPageState extends State<ChatPage> {
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(24),
                                     borderSide: const BorderSide(
-                                      color: AppTheme.primary,
+                                      color: _schoolBlue,
                                       width: 1.5,
                                     ),
                                   ),
@@ -280,7 +282,7 @@ class _ChatPageState extends State<ChatPage> {
                             CircleAvatar(
                               backgroundColor: _sending
                                   ? Colors.grey.shade400
-                                  : AppTheme.primary,
+                                  : _schoolBlue,
                               child: IconButton(
                                 icon: Icon(
                                   _sending
@@ -323,7 +325,7 @@ class _ChatPageState extends State<ChatPage> {
               ),
               child: const Icon(
                 Icons.arrow_back_ios_new_rounded,
-                color: AppTheme.darkBlue,
+                color: _schoolBlue,
                 size: 18,
               ),
             ),
@@ -335,7 +337,7 @@ class _ChatPageState extends State<ChatPage> {
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.darkBlue,
+                  color: _schoolBlue,
                 ),
               ),
             ),
@@ -363,11 +365,11 @@ class _ChatStatusBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final prompts = [
-      '西小导是谁？',
-      '图书馆在哪里？',
-      '它有什么特点？',
-      '我是新生，推荐参观路线',
-      'AR识别后怎么讲解？',
+      '介绍一下计信院',
+      '第八教学楼怎么走？',
+      '学校有什么特色美食？',
+      '推荐一条校园参观路线',
+      '校史馆什么时候开放？',
     ];
     return ClipRRect(
       child: BackdropFilter(
@@ -388,7 +390,7 @@ class _ChatStatusBar extends StatelessWidget {
                 children: [
                   const Icon(
                     Icons.psychology_alt,
-                    color: AppTheme.primary,
+                    color: _schoolBlue,
                     size: 18,
                   ),
                   const SizedBox(width: 6),
@@ -429,7 +431,7 @@ class _ChatStatusBar extends StatelessWidget {
                         label: Text(prompt),
                         backgroundColor: Colors.white.withValues(alpha: 0.85),
                         side: BorderSide(
-                          color: AppTheme.darkBlue.withValues(alpha: 0.18),
+                          color: _schoolBlue.withValues(alpha: 0.18),
                         ),
                         onPressed: disabled
                             ? null
@@ -476,7 +478,7 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bubbleColor = msg.isMe
-        ? AppTheme.primary
+        ? _schoolBlue
         : msg.isError
         ? const Color(0xFFFFE4E6)
         : Colors.white.withValues(alpha: 0.86);
@@ -526,7 +528,10 @@ class _ChatBubble extends StatelessWidget {
               const SizedBox(
                 width: 16,
                 height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: _schoolBlue,
+                ),
               ),
             ],
             if (!msg.isMe && msg.sources.isNotEmpty) ...[
@@ -553,7 +558,7 @@ class _ChatBubble extends StatelessWidget {
               const SizedBox(height: 4),
               const Text(
                 '本地知识库兜底回答',
-                style: TextStyle(color: AppTheme.primary, fontSize: 11),
+                style: TextStyle(color: _schoolBlue, fontSize: 11),
               ),
             ],
           ],

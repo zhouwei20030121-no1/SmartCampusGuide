@@ -39,7 +39,9 @@ class VectorStore:
         metadatas = results.get("metadatas", [[]])[0]
         distances = results.get("distances", [[]])[0]
         for item_id, metadata, distance in zip(ids, metadatas, distances):
-            score = round(1 - float(distance), 4)
+            # ChromaDB defaults to L2 squared distance for normalized embeddings: L2^2 = 2 - 2*cos(theta)
+            # Therefore, cosine_similarity = 1 - L2^2 / 2
+            score = round(1 - float(distance) / 2, 4)
             if score < threshold:
                 continue
             metadata = metadata or {}

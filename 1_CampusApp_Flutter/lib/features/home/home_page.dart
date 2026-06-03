@@ -1,13 +1,17 @@
+// lib/features/home/home_page.dart
 import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../user/profile_page.dart'; // 💡 新增：引入刚刚写好的真实个人中心页面
+import '../user/profile_page.dart';
 import '../map/map_page.dart';
 import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
+import '../spot/spot_model.dart'; // 引入数据模型
+
+const Color _schoolBlue = Color(0xFF023D83);
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,6 +22,7 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const double _xiaoDaoFabSize = 58;
+  static const double _xiaoDaoBottomReserve = 0;
 
   int _currentIndex = 0;
   Offset? _xiaoDaoFabOffset;
@@ -89,7 +94,10 @@ class _HomePageState extends State<HomePage> {
           final safePadding = MediaQuery.of(context).padding;
           final defaultOffset = Offset(
             constraints.maxWidth - _xiaoDaoFabSize - 16,
-            constraints.maxHeight - _xiaoDaoFabSize - safePadding.bottom - 72,
+            constraints.maxHeight -
+                _xiaoDaoFabSize -
+                safePadding.bottom -
+                _xiaoDaoBottomReserve,
           );
           final currentOffset = _clampXiaoDaoOffset(
             _xiaoDaoFabOffset ?? defaultOffset,
@@ -129,10 +137,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Offset _clampXiaoDaoOffset(
-    Offset offset,
-    BoxConstraints constraints,
-    EdgeInsets safePadding,
-  ) {
+      Offset offset,
+      BoxConstraints constraints,
+      EdgeInsets safePadding,
+      ) {
     const edgePadding = 12.0;
     final minX = edgePadding;
     final maxX = math.max(
@@ -142,7 +150,10 @@ class _HomePageState extends State<HomePage> {
     final minY = safePadding.top + edgePadding;
     final maxY = math.max(
       minY,
-      constraints.maxHeight - _xiaoDaoFabSize - safePadding.bottom - 72,
+      constraints.maxHeight -
+          _xiaoDaoFabSize -
+          safePadding.bottom -
+          _xiaoDaoBottomReserve,
     );
 
     return Offset(offset.dx.clamp(minX, maxX), offset.dy.clamp(minY, maxY));
@@ -165,7 +176,7 @@ class _HomePageState extends State<HomePage> {
             ),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.25),
+                color: _schoolBlue.withValues(alpha: 0.25),
                 blurRadius: 15,
                 offset: const Offset(0, 6),
               ),
@@ -173,7 +184,7 @@ class _HomePageState extends State<HomePage> {
           ),
           child: const Icon(
             Icons.support_agent_rounded,
-            color: AppTheme.primary,
+            color: _schoolBlue,
             size: 30,
           ),
         ),
@@ -236,12 +247,82 @@ class _HomePageState extends State<HomePage> {
 }
 
 // ═══════════════════════════════════════════════════
-//  TAB 0：首页 — 全局聚合入口
+//  TAB 0：首页 — 动态拉取数据库 + 实时定位最近 3 个
 // ═══════════════════════════════════════════════════
-class _TabHome extends StatelessWidget {
+class _TabHome extends StatefulWidget {
   final ValueChanged<int> onTabSelected;
 
   const _TabHome({required this.onTabSelected});
+
+  @override
+  State<_TabHome> createState() => _TabHomeState();
+}
+
+class _TabHomeState extends State<_TabHome> {
+  final LocationService _loc = LocationService();
+
+  List<SpotModel> _allSpots = [];
+  List<Map<String, dynamic>> _closestSpots = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loc.addListener(_updateClosestSpots);
+    _loc.startTracking(); // 启动队友写的心跳和位置模拟
+    _fetchAllSpotsFromDB();
+  }
+
+  @override
+  void dispose() {
+    _loc.removeListener(_updateClosestSpots);
+    super.dispose();
+  }
+
+  // 从后端获取所有景点的真实数据，确保 ID 绝对正确
+  Future<void> _fetchAllSpotsFromDB() async {
+    try {
+      final res = await NetworkClient.dio.get('/spot/list', queryParameters: {'page': 1, 'size': 100});
+      if (res.data['code'] == 200) {
+        final records = res.data['data']['records'] as List;
+        _allSpots = records.map((e) => SpotModel.fromJson(e)).toList();
+        _updateClosestSpots(); // 数据拉取成功后，立刻计算一次距离
+      }
+    } catch (e) {
+      debugPrint('首页获取景点失败: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // 核心：实时距离计算与排序算法
+  void _updateClosestSpots() {
+    if (_allSpots.isEmpty) return;
+
+    double currentLat = _loc.latitude != 0.0 ? _loc.latitude : 29.820;
+    double currentLng = _loc.longitude != 0.0 ? _loc.longitude : 106.425;
+
+    // 遍历数据库真实数据，利用经纬度估算距离
+    List<Map<String, dynamic>> spotsWithDistance = _allSpots.map((spot) {
+      double dx = (currentLng - spot.longitude) * 111320 * 0.866;
+      double dy = (currentLat - spot.latitude) * 111320;
+      double distance = math.sqrt(dx * dx + dy * dy);
+      return {
+        'spot': spot, // 存放真实的 SpotModel 对象
+        'distance': distance,
+      };
+    }).toList();
+
+    // 升序排序
+    spotsWithDistance.sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
+
+    // 截取距离最近的 3 个
+    if (mounted) {
+      setState(() {
+        _closestSpots = spotsWithDistance.take(3).toList();
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -263,8 +344,8 @@ class _TabHome extends StatelessWidget {
               // 金刚区 8宫格
               _buildGridNav(context),
               const SizedBox(height: 20),
-              // 推荐卡片
-              _buildRecommendCard(),
+              // 动态精选推荐卡片
+              _buildDynamicRecommendCard(context),
             ],
           ),
         ),
@@ -402,33 +483,32 @@ class _TabHome extends StatelessWidget {
           _GridButton(
             icon: Icons.map_outlined,
             label: '校园地图',
-            onTap: () => onTabSelected(1),
+            onTap: () => widget.onTabSelected(1),
           ),
           _GridButton(
             icon: Icons.route_outlined,
             label: '路线规划',
-            // 🌟 核心修改：点击这里，跳转到我们刚刚写的独立路线规划页面 RoutePage
-            onTap: () => _navTo(context, '/route'),
+            onTap: () => Navigator.pushNamed(context, '/route'),
           ),
           _GridButton(
-            icon: Icons.view_in_ar_rounded,
-            label: 'AR 扫一扫',
-            onTap: () => _navTo(context, '/ar'),
+            icon: Icons.document_scanner_outlined,
+            label: 'AI 探校',
+            onTap: () => Navigator.pushNamed(context, '/ai_vision'),
           ),
           _GridButton(
             icon: Icons.workspace_premium_outlined,
             label: '景点打卡',
-            onTap: () => onTabSelected(3),
+            onTap: () => widget.onTabSelected(3),
           ),
           _GridButton(
             icon: Icons.auto_stories_outlined,
             label: '校园故事',
-            onTap: () => _navTo(context, '/checkin'),
+            onTap: () => Navigator.pushNamed(context, '/checkin'),
           ),
           _GridButton(
             icon: Icons.directions_bus_filled_outlined,
             label: '校车时刻',
-            onTap: () => _navTo(context, '/bus'),
+            onTap: () => Navigator.pushNamed(context, '/bus'),
           ),
           _GridButton(
             icon: Icons.cloud_download_outlined,
@@ -445,84 +525,93 @@ class _TabHome extends StatelessWidget {
     );
   }
 
-  void _navTo(BuildContext context, String route) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    Navigator.of(context).pushNamed(route);
-  }
-
-  Widget _buildRecommendCard() {
+  // 动态渲染推荐卡片 + “全部景点”选项
+  Widget _buildDynamicRecommendCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.8),
-          width: 1.5,
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '📍 实时推荐建筑',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textMain,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('📍 附近景点推荐', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
+                  SizedBox(height: 2),
+                  Text('基于当前实时定位', style: TextStyle(fontSize: 11, color: AppTheme.textSub)),
+                ],
+              ),
+              // 全部景点跳转按钮
+              GestureDetector(
+                onTap: () => Navigator.pushNamed(context, '/spot/list'),
+                child: const Text('全部景点 >', style: TextStyle(fontSize: 13, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
-          _spotTile('樟树林点位', '漫步天然氧吧，结合实时定位触发文化故事播报'),
-          _spotTile('第25教学楼', '计算机与信息科学学院，智能讲解核心围栏触发区'),
+
+          if (_isLoading)
+            const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator(strokeWidth: 2))),
+
+          if (!_isLoading && _closestSpots.isEmpty)
+            const Center(child: Text('暂无附近景点', style: TextStyle(color: AppTheme.textSub))),
+
+          // 动态渲染 3 个真实景点
+          ..._closestSpots.map((item) {
+            final SpotModel spot = item['spot'];
+            String distStr = (item['distance'] as double).toStringAsFixed(0);
+            return _spotTile(
+                '${spot.name} (距您约${distStr}米)',
+                spot.description.isNotEmpty ? spot.description : '暂无简介',
+                    () {
+                  // 此时传入的绝对是后端的真实 ID
+                  Navigator.pushNamed(context, '/spot/detail', arguments: {'spotId': spot.id});
+                }
+            );
+          }),
         ],
       ),
     );
   }
 
-  Widget _spotTile(String title, String subtitle) {
+  Widget _spotTile(String title, String subtitle, VoidCallback onTap) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: const Color(0xCCFAFADB),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Row(
+          children: [
+            Container(
+              width: 54, height: 54,
+              decoration: BoxDecoration(
+                color: const Color(0xCCFAFADB),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white),
+              ),
+              child: const Icon(Icons.pin_drop_rounded, color: AppTheme.primary, size: 22),
             ),
-            child: const Icon(
-              Icons.pin_drop_rounded,
-              color: AppTheme.primary,
-              size: 22,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textMain)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(fontSize: 11, color: AppTheme.textSub), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: AppTheme.textMain,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(fontSize: 11, color: AppTheme.textSub),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -531,7 +620,7 @@ class _TabHome extends StatelessWidget {
 // ═══════════════════════════════════════════════════
 //  TAB 2：智能讲解 — LBS地理围栏 + 音频 (3.1.3+3.1.4+3.1.5)
 // ═══════════════════════════════════════════════════
-// ─── 地理围栏智能讲解（新增 LocationService 集成）───
+// ─── 地理围栏智能讲解（保留图钉拖拽方便模拟器测试）───
 class _TabSmartAudio extends StatefulWidget {
   const _TabSmartAudio();
 
@@ -544,6 +633,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   bool _playing = false;
   String _guideText = '';
   bool _loadingGuide = false;
+
   String? _triggeredSpot;
 
   static const _spots = [

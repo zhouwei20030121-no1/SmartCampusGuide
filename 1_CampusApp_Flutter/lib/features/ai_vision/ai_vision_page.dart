@@ -6,21 +6,23 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/theme/app_theme.dart';
-import 'ar_api.dart';
+import 'ai_vision_api.dart';
 
-class ARPage extends StatefulWidget {
-  const ARPage({super.key});
+const Color _schoolBlue = Color(0xFF023D83);
+
+class AiVisionPage extends StatefulWidget {
+  const AiVisionPage({super.key});
 
   @override
-  State<ARPage> createState() => _ARPageState();
+  State<AiVisionPage> createState() => _AiVisionPageState();
 }
 
-class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
+class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver {
   CameraController? _cameraCtrl;
   List<CameraDescription>? _cameras;
   bool _cameraReady = false;
   bool _recognizing = false;
-  ArRecognizeResult? _result;
+  AiVisionResult? _result;
   String? _errorMsg;
   String? _statusMsg;
   File? _selectedImage;
@@ -122,10 +124,16 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.camera_alt, size: 48, color: Colors.white54),
+                    const Icon(
+                      Icons.camera_alt,
+                      size: 48,
+                      color: Colors.white54,
+                    ),
                     const SizedBox(height: 12),
-                    Text(_statusMsg!,
-                        style: const TextStyle(color: Colors.white70)),
+                    Text(
+                      _statusMsg!,
+                      style: const TextStyle(color: Colors.white70),
+                    ),
                   ],
                 )
               : const CircularProgressIndicator(color: Colors.white54),
@@ -169,18 +177,23 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                             ),
                           ),
                           SizedBox(height: 12),
-                          Text('正在识别…',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 15,
-                              )),
+                          Text(
+                            '正在识别…',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 15,
+                            ),
+                          ),
                         ],
                       )
                     : Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.account_balance_rounded,
-                              size: 60, color: Colors.white.withValues(alpha: 0.35)),
+                          Icon(
+                            Icons.account_balance_rounded,
+                            size: 60,
+                            color: Colors.white.withValues(alpha: 0.35),
+                          ),
                           const SizedBox(height: 8),
                           Text(
                             '对准校园建筑',
@@ -208,23 +221,23 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
         decoration: BoxDecoration(
           border: Border(
             left: align == Alignment.topLeft || align == Alignment.bottomLeft
-                ? const BorderSide(color: AppTheme.primary, width: 3.5)
+                ? const BorderSide(color: _schoolBlue, width: 3.5)
                 : BorderSide.none,
-            right:
-                align == Alignment.topRight || align == Alignment.bottomRight
-                    ? const BorderSide(color: AppTheme.primary, width: 3.5)
-                    : BorderSide.none,
+            right: align == Alignment.topRight || align == Alignment.bottomRight
+                ? const BorderSide(color: _schoolBlue, width: 3.5)
+                : BorderSide.none,
             top: align == Alignment.topLeft || align == Alignment.topRight
-                ? const BorderSide(color: AppTheme.primary, width: 3.5)
+                ? const BorderSide(color: _schoolBlue, width: 3.5)
                 : BorderSide.none,
-            bottom: align == Alignment.bottomLeft ||
-                    align == Alignment.bottomRight
-                ? const BorderSide(color: AppTheme.primary, width: 3.5)
+            bottom:
+                align == Alignment.bottomLeft || align == Alignment.bottomRight
+                ? const BorderSide(color: _schoolBlue, width: 3.5)
                 : BorderSide.none,
           ),
           borderRadius: BorderRadius.only(
-            topLeft:
-                align == Alignment.topLeft ? const Radius.circular(8) : Radius.zero,
+            topLeft: align == Alignment.topLeft
+                ? const Radius.circular(8)
+                : Radius.zero,
             topRight: align == Alignment.topRight
                 ? const Radius.circular(8)
                 : Radius.zero,
@@ -252,12 +265,15 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
           child: Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new,
-                    color: Colors.white, size: 20),
+                icon: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 onPressed: () => Navigator.pop(context),
               ),
               const Text(
-                'AR 建筑识别',
+                'AI 探校',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -265,14 +281,17 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                   shadows: [Shadow(color: Colors.black45, blurRadius: 4)],
                 ),
               ),
-              if (_result != null && _result!.recognized && _result!.fallback) ...[
+              if (_result != null &&
+                  _result!.recognized &&
+                  _result!.fallback) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.orange
-                        .withValues(alpha: 0.8),
+                    color: Colors.orange.withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Text(
@@ -309,7 +328,11 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
             children: [
               // 从相册选择
               IconButton(
-                icon: const Icon(Icons.photo_library_rounded, color: Colors.white, size: 30),
+                icon: const Icon(
+                  Icons.photo_library_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
                 onPressed: _recognizing ? null : _pickFromGallery,
               ),
               const SizedBox(width: 24),
@@ -321,13 +344,10 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                   height: 76,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white,
-                      width: 4,
-                    ),
+                    border: Border.all(color: Colors.white, width: 4),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.primary.withValues(alpha: 0.4),
+                        color: _schoolBlue.withValues(alpha: 0.4),
                         blurRadius: 16,
                       ),
                     ],
@@ -338,9 +358,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                       height: 62,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _recognizing
-                            ? Colors.white54
-                            : Colors.white,
+                        color: _recognizing ? Colors.white54 : Colors.white,
                       ),
                       child: _recognizing
                           ? const SizedBox(
@@ -348,11 +366,14 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                               height: 24,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                color: AppTheme.primary,
+                                color: _schoolBlue,
                               ),
                             )
-                          : const Icon(Icons.camera_alt_rounded,
-                              color: AppTheme.primary, size: 30),
+                          : const Icon(
+                              Icons.camera_alt_rounded,
+                              color: _schoolBlue,
+                              size: 30,
+                            ),
                     ),
                   ),
                 ),
@@ -361,9 +382,15 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
               // 重新识别
               if (_result != null)
                 TextButton.icon(
-                  icon: const Icon(Icons.refresh, color: Colors.white, size: 18),
-                  label: const Text('重新识别',
-                      style: TextStyle(color: Colors.white)),
+                  icon: const Icon(
+                    Icons.refresh,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  label: const Text(
+                    '重新识别',
+                    style: TextStyle(color: Colors.white),
+                  ),
                   onPressed: () {
                     setState(() {
                       _result = null;
@@ -397,7 +424,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
             border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.3),
+                color: _schoolBlue.withValues(alpha: 0.3),
                 blurRadius: 20,
                 offset: const Offset(0, 4),
               ),
@@ -412,15 +439,14 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
   }
 
   /// 识别成功卡片
-  Widget _buildRecognizedCard(ArRecognizeResult result) {
+  Widget _buildRecognizedCard(AiVisionResult result) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Icon(Icons.location_on_rounded,
-                color: AppTheme.primary, size: 20),
+            const Icon(Icons.location_on_rounded, color: _schoolBlue, size: 20),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -432,8 +458,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
               ),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: Colors.green.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
@@ -478,24 +503,40 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
               TextButton.icon(
                 icon: const Icon(Icons.photo_library_rounded, size: 16),
                 label: const Text('换图片'),
+                style: TextButton.styleFrom(foregroundColor: _schoolBlue),
                 onPressed: _recognizing ? null : _pickFromGallery,
               ),
               TextButton.icon(
                 icon: const Icon(Icons.auto_stories_outlined, size: 16),
                 label: const Text('讲讲它的历史'),
+                style: TextButton.styleFrom(foregroundColor: _schoolBlue),
                 onPressed: () {
-                  Navigator.pushNamed(context, '/chat', arguments: {
-                    'prompt': '我刚通过 AR 识别到【${result.buildingName}】，请用新生视角介绍它的历史，并告诉我附近还可以看什么。'
-                  });
+                  Navigator.pushNamed(
+                    context,
+                    '/chat',
+                    arguments: {
+                      'prompt':
+                          '我刚通过 AI 探校扫到了【${result.buildingName}】，请用新生视角介绍它的历史，并告诉我附近还可以看什么。',
+                    },
+                  );
                 },
               ),
               FilledButton.icon(
                 icon: const Icon(Icons.psychology_alt_rounded, size: 16),
                 label: const Text('问问西小导'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _schoolBlue,
+                  foregroundColor: Colors.white,
+                ),
                 onPressed: () {
-                  Navigator.pushNamed(context, '/chat', arguments: {
-                    'prompt': '我刚通过 AR 识别到【${result.buildingName}】，请用新生视角介绍它，并告诉我附近还可以看什么。'
-                  });
+                  Navigator.pushNamed(
+                    context,
+                    '/chat',
+                    arguments: {
+                      'prompt':
+                          '我刚通过 AI 探校扫到了【${result.buildingName}】，请用新生视角介绍它，并告诉我附近还可以看什么。',
+                    },
+                  );
                 },
               ),
             ],
@@ -511,8 +552,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const Icon(Icons.help_outline_rounded,
-            color: Colors.orange, size: 36),
+        const Icon(Icons.help_outline_rounded, color: Colors.orange, size: 36),
         const SizedBox(height: 10),
         const Text(
           '未能识别',
@@ -525,11 +565,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
         const SizedBox(height: 6),
         const Text(
           '当前图片未能匹配到校园建筑，请尝试对准建筑主体重新拍摄，或选择更清晰的建筑照片。',
-          style: TextStyle(
-            fontSize: 14,
-            color: AppTheme.textSub,
-            height: 1.5,
-          ),
+          style: TextStyle(fontSize: 14, color: AppTheme.textSub, height: 1.5),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 14),
@@ -539,6 +575,10 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
             OutlinedButton.icon(
               icon: const Icon(Icons.refresh, size: 16),
               label: const Text('重新识别'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _schoolBlue,
+                side: BorderSide(color: _schoolBlue.withValues(alpha: 0.65)),
+              ),
               onPressed: () {
                 setState(() {
                   _result = null;
@@ -551,6 +591,10 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
             FilledButton.icon(
               icon: const Icon(Icons.photo_library_rounded, size: 16),
               label: const Text('换图片'),
+              style: FilledButton.styleFrom(
+                backgroundColor: _schoolBlue,
+                foregroundColor: Colors.white,
+              ),
               onPressed: _recognizing ? null : _pickFromGallery,
             ),
           ],
@@ -569,7 +613,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
       imageQuality: 85,
     );
     if (xFile == null) return;
-    
+
     setState(() {
       _recognizing = true;
       _errorMsg = null;
@@ -582,7 +626,7 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
       final bytes = await File(xFile.path).readAsBytes();
       final base64Image = base64.encode(bytes);
 
-      final result = await ArApi.recognize(base64Image);
+      final result = await AiVisionApi.recognize(base64Image);
       if (!mounted) return;
 
       setState(() {
@@ -620,14 +664,14 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
       final base64Image = base64.encode(bytes);
 
       // 调用视觉识别 API
-      final result = await ArApi.recognize(base64Image);
+      final result = await AiVisionApi.recognize(base64Image);
       if (!mounted) return;
 
       setState(() {
         _result = result;
         _recognizing = false;
       });
-    } on ArApiException catch (e) {
+    } on AiVisionException catch (e) {
       if (!mounted) return;
       setState(() {
         _errorMsg = e.message;
@@ -677,12 +721,18 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
             const Icon(Icons.error_outline, color: Color(0xFFBE123C)),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(_errorMsg!,
-                  style: const TextStyle(color: Color(0xFFBE123C), fontSize: 13)),
+              child: Text(
+                _errorMsg!,
+                style: const TextStyle(color: Color(0xFFBE123C), fontSize: 13),
+              ),
             ),
             GestureDetector(
               onTap: () => setState(() => _errorMsg = null),
-              child: const Icon(Icons.close, size: 16, color: Color(0xFFBE123C)),
+              child: const Icon(
+                Icons.close,
+                size: 16,
+                color: Color(0xFFBE123C),
+              ),
             ),
           ],
         ),
@@ -696,8 +746,11 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.videocam_off_rounded,
-              size: 48, color: Colors.white54),
+          const Icon(
+            Icons.videocam_off_rounded,
+            size: 48,
+            color: Colors.white54,
+          ),
           const SizedBox(height: 16),
           Text(
             _statusMsg ?? '摄像头不可用',
@@ -716,6 +769,10 @@ class _ARPageState extends State<ARPage> with WidgetsBindingObserver {
                   )
                 : const Icon(Icons.photo_library_rounded),
             label: Text(_recognizing ? '识别中...' : '选择图片识别'),
+            style: FilledButton.styleFrom(
+              backgroundColor: _schoolBlue,
+              foregroundColor: Colors.white,
+            ),
             onPressed: _recognizing ? null : _pickFromGallery,
           ),
           const SizedBox(height: 12),

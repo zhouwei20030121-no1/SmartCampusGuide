@@ -1,14 +1,18 @@
-启动（每条命令在单独的CMD窗口中运行）：
+启动（每条命令在单独的 PowerShell 窗口中运行）：
 
 redis-server
 
-cd 3_Backend_Java && mvn spring-boot:run
+cd 3_Backend_Java; mvn spring-boot:run
 
-cd 4_AIService_Python && set HF_ENDPOINT=https://hf-mirror.com && .venv\Scripts\uvicorn main:app --reload --port 5000
+cd 4_AIService_Python; $env:HF_ENDPOINT="https://hf-mirror.com"; .\.venv\Scripts\uvicorn main:app --reload --port 5000
 
-cd 2_AdminWeb_Vue && npm run dev
+cd 2_AdminWeb_Vue; npm run dev
+
+# 启动反向代理和内网穿透（必须在上方的 Java/Python 启动后执行）
+caddy start --config Caddyfile
+ngrok http --domain=genna-boldhearted-dewily.ngrok-free.dev 8081
 
 
 关闭：
 
-各窗口按 Ctrl+C 停止服务
+各窗口按 Ctrl+C 停止服务，或者在任务管理器中结束对应进程。

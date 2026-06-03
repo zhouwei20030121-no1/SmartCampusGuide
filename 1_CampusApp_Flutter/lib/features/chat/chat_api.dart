@@ -18,6 +18,7 @@ class ChatApi {
       'http://127.0.0.1:5000',
       'http://10.0.2.2:5000',
       'http://localhost:5000',
+      'https://genna-boldhearted-dewily.ngrok-free.dev',
     ];
     return urls.toSet().toList();
   }
@@ -50,6 +51,7 @@ class ChatApi {
     try {
       final req = await client.postUrl(Uri.parse('$baseUrl/api/rag/chat'));
       req.headers.set('Content-Type', 'application/json');
+      req.headers.set('ngrok-skip-browser-warning', 'true');
       req.add(utf8.encode(json.encode({
         'query': query,
         'history': history,

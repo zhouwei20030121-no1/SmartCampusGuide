@@ -1,4 +1,4 @@
-// 文件路径: lib/features/spot/spot_model.dart
+// lib/features/spot/spot_model.dart
 
 class SpotModel {
   final int id;
@@ -8,6 +8,12 @@ class SpotModel {
   final double longitude;
   final String category;
 
+  // 多媒体相关字段
+  final String coverImage;
+  final List<String> images;
+  final String? videoUrl;
+  final double rating;
+
   SpotModel({
     required this.id,
     required this.name,
@@ -15,17 +21,32 @@ class SpotModel {
     required this.latitude,
     required this.longitude,
     required this.category,
+    this.coverImage = '',
+    this.images = const [],
+    this.videoUrl,
+    this.rating = 0.0,
   });
 
   factory SpotModel.fromJson(Map<String, dynamic> json) {
+    // 处理后端以逗号分隔的图片组字符串
+    List<String> parsedImages = [];
+    final String? imagesStr = json['images'];
+    if (imagesStr != null && imagesStr.isNotEmpty) {
+      parsedImages = imagesStr.split(',');
+    }
+
     return SpotModel(
       id: json['id'],
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
-      // 兼容 BigDecimal 传过来的 String 或 num，防止解析报错
+      name: json['name'] ?? '未知景点',
+      description: json['description'] ?? '暂无介绍',
       latitude: double.tryParse(json['latitude']?.toString() ?? '0') ?? 0.0,
       longitude: double.tryParse(json['longitude']?.toString() ?? '0') ?? 0.0,
       category: json['category'] ?? 'default',
+
+      coverImage: json['coverImage'] ?? '',
+      images: parsedImages,
+      videoUrl: json['videoUrl'], // 当前接口暂不返回该字段
+      rating: double.tryParse(json['rating']?.toString() ?? '0') ?? 5.0, // 默认给5.0分
     );
   }
 }
