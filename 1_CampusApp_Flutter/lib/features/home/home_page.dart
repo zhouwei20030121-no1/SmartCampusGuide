@@ -623,7 +623,7 @@ class _TabHomeState extends State<_TabHome> {
 // ═══════════════════════════════════════════════════
 //  TAB 2：智能讲解 — LBS地理围栏 + 音频 (3.1.3+3.1.4+3.1.5)
 // ═══════════════════════════════════════════════════
-// ─── 地理围栏智能讲解（保留图钉拖拽方便模拟器测试）───
+// ─── 地理围栏智能讲解（使用高德底图 POI，点击地图即可模拟移动）───
 class _TabSmartAudio extends StatefulWidget {
   const _TabSmartAudio();
 
@@ -641,24 +641,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   AMapController? _mapCtrl;
   static const _swuCenter = LatLng(29.820, 106.425);
   // 用户标记位置（可拖拽，初始放在校园中心空旷处）
-  LatLng _userPos = const LatLng(29.820, 106.432);
+  LatLng _userPos = _swuCenter;
 
-  // 校园景点坐标（使用MapPage中的真实GCJ-02坐标）
-  static const _spots = {
-    '中心图书馆': LatLng(29.8235, 106.4308),
-    '第八教学楼': LatLng(29.823, 106.426),
-    '行署楼': LatLng(29.822, 106.425),
-    '田家炳教育书院': LatLng(29.821, 106.426),
-    '共青团花园': LatLng(29.821, 106.427),
-    '校史馆': LatLng(29.824, 106.429),
-    '樟树林': LatLng(29.822, 106.428),
-    '楠园(第四运动场)': LatLng(29.818, 106.424),
-    '竹园': LatLng(29.815, 106.422),
-    '中心体育馆': LatLng(29.8182, 106.4252),
-    '药学院': LatLng(29.8130, 106.4189),
-    '音乐学院': LatLng(29.8229, 106.4276),
-  };
-  final Map<String, Marker> _spotMarkers = {};
+  String? _selectedPoiName;
+  LatLng? _selectedPoiPos;
   String? _triggeredSpot;
   String _nearbySpot = '';
   double _nearbyDist = 999;
@@ -667,46 +653,75 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   void initState() {
     super.initState();
     _loc.addListener(() => setState(() {}));
-    _initSpotMarkers();
   }
 
-  void _initSpotMarkers() {
-    for (var e in _spots.entries) {
-      _spotMarkers[e.key] = Marker(
-        position: e.value,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-        infoWindow: InfoWindow(title: e.key, snippet: '拖动蓝色图钉靠近即可触发讲解'),
-      );
-    }
+  /// 点击高德 POI → 将模拟位置移动到该地名，并触发讲解。
+  void _onPoiTouched(AMapPoi poi) {
+    final pos = poi.latLng;
+    final name = poi.name?.trim();
+    if (pos == null || name == null || name.isEmpty) return;
+
+    _selectedPoiName = name;
+    _selectedPoiPos = pos;
+    _moveUserTo(pos, triggerSpot: name, distance: 0);
+    _mapCtrl?.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: pos, zoom: 17, tilt: 0, bearing: 0),
+      ),
+      animated: true,
+    );
   }
 
-  /// 拖拽用户标记 → 检测与景点的距离
+  /// 点击普通地图区域 → 直接移动“我的位置”，用于模拟器快速测试。
+  void _onMapTapped(LatLng pos) {
+    _moveUserTo(pos);
+  }
+
+  /// 拖拽用户标记 → 如果靠近最近点击过的 POI，则自动触发讲解。
   void _onUserMoved(LatLng pos) {
-    setState(() => _userPos = pos);
+    _moveUserTo(pos);
+  }
+
+  void _moveUserTo(LatLng pos, {String? triggerSpot, double? distance}) {
     _loc.latitude = pos.latitude;
     _loc.longitude = pos.longitude;
-    _loc.notifyListeners();
 
-    double minDist = 999;
-    String nearest = '';
-    for (var e in _spots.entries) {
-      final dx = (pos.longitude - e.value.longitude) * 111320 * 0.866;
-      final dy = (pos.latitude - e.value.latitude) * 111320;
-      final d = (dx * dx + dy * dy) as double;
-      final dist = d > 0 ? d : 999.0;
-      if (dist < minDist) { minDist = dist; nearest = e.key; }
-    }
-    _nearbyDist = minDist;
-    _nearbySpot = nearest;
+    String? spot = triggerSpot;
+    double dist = distance ?? 0;
+    final targetName = _selectedPoiName;
+    final targetPos = _selectedPoiPos;
 
-    if (minDist < 50 && _triggeredSpot != nearest) {
-      _triggeredSpot = nearest;
-      _playing = true;
-      _fetchGuideContent(nearest);
-    } else if (minDist >= 50) {
-      _triggeredSpot = null;
-      _playing = false;
+    if (spot == null && targetName != null && targetPos != null) {
+      dist = _distanceInMeters(pos, targetPos);
+      if (dist < 50) spot = targetName;
     }
+
+    final shouldFetchGuide = spot != null && spot != _triggeredSpot;
+
+    setState(() {
+      _userPos = pos;
+      _nearbySpot = spot ?? (targetPos != null ? targetName ?? '' : '');
+      _nearbyDist = dist;
+
+      if (spot != null && spot != _triggeredSpot) {
+        _triggeredSpot = spot;
+        _playing = true;
+      } else if (spot == null) {
+        _triggeredSpot = null;
+        _playing = false;
+        _guideText = '';
+      }
+    });
+
+    if (shouldFetchGuide && spot != null) {
+      _fetchGuideContent(spot);
+    }
+  }
+
+  double _distanceInMeters(LatLng a, LatLng b) {
+    final dx = (a.longitude - b.longitude) * 111320 * 0.866;
+    final dy = (a.latitude - b.latitude) * 111320;
+    return math.sqrt(dx * dx + dy * dy);
   }
 
   @override
@@ -725,18 +740,20 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
           initialCameraPosition: const CameraPosition(target: _swuCenter, zoom: 15, tilt: 0, bearing: 0),
           markers: {
-            ..._spotMarkers.values,
             Marker(
               position: _userPos,
               icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-              infoWindow: const InfoWindow(title: '📍 我的位置', snippet: '长按拖拽模拟移动'),
+              infoWindow: const InfoWindow(title: '📍 我的位置', snippet: '点地图或点地名即可移动'),
               draggable: true,
               onDragEnd: (_, pos) => _onUserMoved(pos),
             ),
           }.toSet(),
           onMapCreated: (c) => _mapCtrl = c,
-          buildingsEnabled: false,
-          labelsEnabled: false,
+          onTap: _onMapTapped,
+          onPoiTouched: _onPoiTouched,
+          touchPoiEnabled: true,
+          buildingsEnabled: true,
+          labelsEnabled: true,
         ),
         // 缩放按钮（右上角）
         Positioned(
@@ -820,8 +837,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 _triggeredSpot != null
                     ? '已进入「$_triggeredSpot」范围'
                     : _nearbySpot.isNotEmpty
-                    ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 拖动红色图钉靠近景点'
-                    : '拖动红色图钉靠近景点触发讲解',
+                    ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 点地图或拖动红点模拟移动'
+                    : '点击高德地图地名即可模拟到达并触发讲解',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -890,10 +907,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                  Text(hasContent ? '正在讲解：$spot' : '等待进入景点区域...',
+                  Text(hasContent ? '正在讲解：$spot' : '等待选择地图地名...',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textMain)),
                   const SizedBox(height: 3),
-                  Text(hasContent ? (_playing ? 'AI语音讲解播放中' : '已暂停') : '靠近景点自动触发',
+                  Text(hasContent ? (_playing ? 'AI语音讲解播放中' : '已暂停') : '点击高德地名或地图位置模拟移动',
                       style: TextStyle(fontSize: 11, color: hasContent ? AppTheme.success : AppTheme.primary)),
                 ]),
               ),
