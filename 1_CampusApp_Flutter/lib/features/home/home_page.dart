@@ -735,12 +735,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     _selectedPoiName = name;
     _selectedPoiPos = pos;
     _moveUserTo(pos, triggerSpot: name, distance: 0);
-    _mapCtrl?.moveCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: pos, zoom: 17, tilt: 0, bearing: 0),
-      ),
-      animated: true,
-    );
   }
 
   /// 点击普通地图区域 → 移动“我的位置”，并用高德周边搜索识别最近地名。
