@@ -719,8 +719,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
     _selectedPoiName = name;
     _selectedPoiPos = pos;
-    _moveUserTo(pos, triggerSpot: name, distance: 0);
+    _moveUserTo(pos);
     _centerCameraOnUser(pos);
+    _triggerGuide(name, distance: 0);
   }
 
   /// 点击普通地图区域 → 移动“我的位置”，并用高德周边搜索识别最近地名。
@@ -734,40 +735,31 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     _triggerNearestPoi(pos);
   }
 
-  void _moveUserTo(LatLng pos, {String? triggerSpot, double? distance}) {
+  void _moveUserTo(LatLng pos) {
     _loc.latitude = pos.latitude;
     _loc.longitude = pos.longitude;
-
-    String? spot = triggerSpot;
-    double dist = distance ?? 0;
-    final targetName = _selectedPoiName;
-    final targetPos = _selectedPoiPos;
-
-    if (spot == null && targetName != null && targetPos != null) {
-      dist = _distanceInMeters(pos, targetPos);
-      if (dist < 50) spot = targetName;
-    }
-
-    final shouldFetchGuide = spot != null && spot != _triggeredSpot;
 
     setState(() {
       _userPos = pos;
       _userMarker = _userMarker.copyWith(positionParam: pos);
-      _nearbySpot = spot ?? (targetPos != null ? targetName ?? '' : '');
-      _nearbyDist = dist;
+      _triggeredSpot = null;
+      _playing = false;
+      _guideText = '';
+    });
+  }
 
-      if (spot != null && spot != _triggeredSpot) {
-        _poiLookupNotice = '';
-        _triggeredSpot = spot;
-        _playing = true;
-      } else if (spot == null) {
-        _triggeredSpot = null;
-        _playing = false;
-        _guideText = '';
-      }
+  void _triggerGuide(String spot, {double? distance}) {
+    final shouldFetchGuide = spot != _triggeredSpot;
+
+    setState(() {
+      _nearbySpot = spot;
+      _nearbyDist = distance ?? 0;
+      _poiLookupNotice = '';
+      _triggeredSpot = spot;
+      _playing = true;
     });
 
-    if (shouldFetchGuide && spot != null) {
+    if (shouldFetchGuide) {
       _fetchGuideContent(spot);
     }
   }
@@ -821,7 +813,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             _parseAmapLocation(candidate['location']?.toString()) ?? pos;
         _selectedPoiName = name;
         _selectedPoiPos = poiPos;
-        _moveUserTo(pos, triggerSpot: name, distance: distance ?? 0);
+        _triggerGuide(name, distance: distance ?? 0);
       }
     } catch (e) {
       debugPrint('高德周边地名识别失败: $e');
