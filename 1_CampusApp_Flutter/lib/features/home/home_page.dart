@@ -675,33 +675,16 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     '物流',
     '取件',
     '寄件',
+    '商铺',
+    '商家',
+    '购物',
+    '售卖',
   ];
-  static const _campusPoiKeywords = [
-    '学院',
-    '教学楼',
-    '实验楼',
-    '办公楼',
-    '行政楼',
-    '综合楼',
-    '大楼',
-    '楼',
-    '建筑',
-    '食堂',
-    '操场',
-    '运动场',
-    '体育场',
-    '体育馆',
-    '图书馆',
-    '礼堂',
-    '广场',
-    '公寓',
-    '宿舍',
-    '学生公寓',
-    '学生宿舍',
-    '中心',
-    '讲堂',
-    '博物馆',
-    '校门',
+  static const _blockedPoiTypes = [
+    '餐饮服务',
+    '购物服务',
+    '生活服务',
+    '金融保险服务',
   ];
   // 用户模拟位置（点击地图移动，初始放在校园中心）
   LatLng _userPos = _swuCenter;
@@ -728,7 +711,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       return;
     }
     if (!_isAllowedCampusPoiName(name)) {
-      _showPoiNotice('商家店铺不参与智能讲解，请选择校园建筑或场所');
+      _showPoiNotice('商家店铺不参与智能讲解，请选择校内建筑或场所');
       return;
     }
 
@@ -823,7 +806,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           }
         }
         if (candidate == null) {
-          _showPoiNotice('附近没有识别到教学楼、食堂、操场或校园建筑');
+          _showPoiNotice('附近没有识别到可讲解的校内建筑或场所');
           return;
         }
 
@@ -848,13 +831,15 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   bool _isCampusPoi(Map poi) {
     final name = poi['name']?.toString().trim();
     if (name == null || name.isEmpty) return false;
+    final type = poi['type']?.toString() ?? '';
     if (_containsAny(name, _blockedPoiKeywords)) return false;
-    return _containsAny(name, _campusPoiKeywords);
+    if (_containsAny(type, _blockedPoiTypes)) return false;
+    return true;
   }
 
   bool _isAllowedCampusPoiName(String name) {
     if (_containsAny(name, _blockedPoiKeywords)) return false;
-    return _containsAny(name, _campusPoiKeywords);
+    return true;
   }
 
   bool _containsAny(String value, List<String> keywords) {
@@ -882,12 +867,22 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   void _centerCameraOnUser(LatLng pos, {bool animated = true}) {
+    final target = _cameraTargetForVisibleUser(pos);
     _mapCtrl?.moveCamera(
       CameraUpdate.newCameraPosition(
-        CameraPosition(target: pos, zoom: 17, tilt: 0, bearing: 0),
+        CameraPosition(target: target, zoom: 17, tilt: 0, bearing: 0),
       ),
       animated: animated,
     );
+  }
+
+  LatLng _cameraTargetForVisibleUser(LatLng pos) {
+    const bottomCardOffsetLat = 0.0012;
+    final targetLat = (pos.latitude - bottomCardOffsetLat).clamp(
+      _campusBounds.southwest.latitude,
+      _campusBounds.northeast.latitude,
+    );
+    return LatLng(targetLat.toDouble(), pos.longitude);
   }
 
   @override
@@ -904,7 +899,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         AMapWidget(
           mapType: MapType.normal,
           privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
-          initialCameraPosition: CameraPosition(target: _userPos, zoom: 17, tilt: 0, bearing: 0),
+          initialCameraPosition: CameraPosition(target: _cameraTargetForVisibleUser(_userPos), zoom: 17, tilt: 0, bearing: 0),
           markers: {
             Marker(
               position: _userPos,
