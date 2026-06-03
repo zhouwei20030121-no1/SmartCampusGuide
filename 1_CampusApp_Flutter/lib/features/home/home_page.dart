@@ -7,11 +7,13 @@ import 'package:flutter/services.dart';
 
 import 'package:amap_flutter_map/amap_flutter_map.dart';
 import 'package:amap_flutter_base/amap_flutter_base.dart';
+import 'package:dio/dio.dart';
 import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart';
 import '../map/map_page.dart';
 import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
+import '../route/amap_route_api.dart';
 import '../spot/spot_model.dart'; // 引入数据模型
 
 const Color _schoolBlue = Color(0xFF023D83);
@@ -636,6 +638,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   bool _playing = false;
   String _guideText = '';
   bool _loadingGuide = false;
+  bool _lookingUpPoi = false;
+  int _poiLookupSeq = 0;
 
   // 高德地图
   AMapController? _mapCtrl;
@@ -672,14 +676,16 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     );
   }
 
-  /// 点击普通地图区域 → 直接移动“我的位置”，用于模拟器快速测试。
+  /// 点击普通地图区域 → 移动“我的位置”，并用高德周边搜索识别最近地名。
   void _onMapTapped(LatLng pos) {
     _moveUserTo(pos);
+    _triggerNearestPoi(pos);
   }
 
-  /// 拖拽用户标记 → 如果靠近最近点击过的 POI，则自动触发讲解。
+  /// 拖拽用户标记 → 结束时识别附近地名并触发讲解。
   void _onUserMoved(LatLng pos) {
     _moveUserTo(pos);
+    _triggerNearestPoi(pos);
   }
 
   void _moveUserTo(LatLng pos, {String? triggerSpot, double? distance}) {
@@ -722,6 +728,56 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final dx = (a.longitude - b.longitude) * 111320 * 0.866;
     final dy = (a.latitude - b.latitude) * 111320;
     return math.sqrt(dx * dx + dy * dy);
+  }
+
+  Future<void> _triggerNearestPoi(LatLng pos) async {
+    final seq = ++_poiLookupSeq;
+    setState(() => _lookingUpPoi = true);
+
+    try {
+      final res = await Dio().get(
+        'https://restapi.amap.com/v3/place/around',
+        queryParameters: {
+          'key': AMapRouteApi.webApiKey,
+          'location': '${pos.longitude},${pos.latitude}',
+          'radius': 120,
+          'offset': 1,
+          'page': 1,
+          'sortrule': 'distance',
+          'extensions': 'base',
+        },
+      );
+      if (!mounted || seq != _poiLookupSeq) return;
+
+      final pois = res.data['pois'];
+      if (pois is List && pois.isNotEmpty) {
+        final first = pois.first as Map;
+        final name = first['name']?.toString().trim();
+        final distance = double.tryParse(first['distance']?.toString() ?? '');
+        final poiPos = _parseAmapLocation(first['location']?.toString()) ?? pos;
+        if (name != null && name.isNotEmpty) {
+          _selectedPoiName = name;
+          _selectedPoiPos = poiPos;
+          _moveUserTo(pos, triggerSpot: name, distance: distance ?? 0);
+        }
+      }
+    } catch (e) {
+      debugPrint('高德周边地名识别失败: $e');
+    } finally {
+      if (mounted && seq == _poiLookupSeq) {
+        setState(() => _lookingUpPoi = false);
+      }
+    }
+  }
+
+  LatLng? _parseAmapLocation(String? location) {
+    if (location == null || location.isEmpty) return null;
+    final parts = location.split(',');
+    if (parts.length != 2) return null;
+    final lng = double.tryParse(parts[0]);
+    final lat = double.tryParse(parts[1]);
+    if (lat == null || lng == null) return null;
+    return LatLng(lat, lng);
   }
 
   @override
@@ -836,9 +892,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               child: Text(
                 _triggeredSpot != null
                     ? '已进入「$_triggeredSpot」范围'
+                    : _lookingUpPoi
+                    ? '正在识别附近高德地名...'
                     : _nearbySpot.isNotEmpty
                     ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 点地图或拖动红点模拟移动'
-                    : '点击高德地图地名即可模拟到达并触发讲解',
+                    : '点击地图位置或高德地名即可模拟到达并触发讲解',
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
