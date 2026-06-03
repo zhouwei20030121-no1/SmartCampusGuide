@@ -894,7 +894,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         AMapWidget(
           mapType: MapType.normal,
           privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
-          initialCameraPosition: CameraPosition(target: _userPos, zoom: 17, tilt: 0, bearing: 0),
+          initialCameraPosition: const CameraPosition(target: _swuCenter, zoom: 17, tilt: 0, bearing: 0),
           markers: {
             _userMarker,
           }.toSet(),
@@ -907,7 +907,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           onTap: _onMapTapped,
           onPoiTouched: _onPoiTouched,
           touchPoiEnabled: true,
-          limitBounds: _campusBounds,
           minMaxZoomPreference: const MinMaxZoomPreference(16.0, 20.0),
           buildingsEnabled: true,
           labelsEnabled: true,
@@ -1031,7 +1030,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             Expanded(child: Text('已进入「$spot」范围，讲解已触发',
                 style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textMain, fontSize: 14))),
             GestureDetector(
-              onTap: () => setState(() => _triggeredSpot = null),
+              onTap: () {
+                setState(() => _triggeredSpot = null);
+                _centerCameraOnUser(_userPos);
+              },
               child: const Icon(Icons.close, size: 18, color: AppTheme.textSub),
             ),
           ]),
