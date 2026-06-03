@@ -727,6 +727,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       return;
     }
     _moveUserTo(pos);
+    _centerCameraOnUser(pos);
     _triggerNearestPoi(pos);
   }
 
@@ -765,7 +766,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     if (shouldFetchGuide && spot != null) {
       _fetchGuideContent(spot);
     }
-    _centerCameraOnUser(pos);
   }
 
   double _distanceInMeters(LatLng a, LatLng b) {
@@ -867,22 +867,12 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   void _centerCameraOnUser(LatLng pos, {bool animated = true}) {
-    final target = _cameraTargetForVisibleUser(pos);
     _mapCtrl?.moveCamera(
       CameraUpdate.newCameraPosition(
-        CameraPosition(target: target, zoom: 17, tilt: 0, bearing: 0),
+        CameraPosition(target: pos, zoom: 17, tilt: 0, bearing: 0),
       ),
       animated: animated,
     );
-  }
-
-  LatLng _cameraTargetForVisibleUser(LatLng pos) {
-    const bottomCardOffsetLat = 0.0012;
-    final targetLat = (pos.latitude - bottomCardOffsetLat).clamp(
-      _campusBounds.southwest.latitude,
-      _campusBounds.northeast.latitude,
-    );
-    return LatLng(targetLat.toDouble(), pos.longitude);
   }
 
   @override
@@ -899,7 +889,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         AMapWidget(
           mapType: MapType.normal,
           privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
-          initialCameraPosition: CameraPosition(target: _cameraTargetForVisibleUser(_userPos), zoom: 17, tilt: 0, bearing: 0),
+          initialCameraPosition: CameraPosition(target: _userPos, zoom: 17, tilt: 0, bearing: 0),
           markers: {
             Marker(
               position: _userPos,
