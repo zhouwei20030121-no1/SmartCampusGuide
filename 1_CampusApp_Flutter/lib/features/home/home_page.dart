@@ -670,36 +670,40 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     '银行',
     '营业厅',
     '快递',
+    '菜鸟',
+    '驿站',
+    '物流',
+    '取件',
+    '寄件',
   ];
   static const _campusPoiKeywords = [
-    '西南大学',
-    '北碚校区',
     '学院',
     '教学楼',
+    '实验楼',
+    '办公楼',
+    '行政楼',
+    '综合楼',
+    '大楼',
+    '楼',
+    '建筑',
+    '食堂',
+    '操场',
     '运动场',
+    '体育场',
     '体育馆',
     '图书馆',
     '礼堂',
     '广场',
     '公寓',
     '宿舍',
-    '学生',
+    '学生公寓',
+    '学生宿舍',
     '中心',
     '讲堂',
     '博物馆',
     '校门',
-    '楼',
-    '园',
-    '门',
-    '湖',
   ];
-  static const _campusPoiTypes = [
-    '科教文化服务',
-    '体育休闲服务',
-    '风景名胜',
-    '地名地址信息',
-  ];
-  // 用户标记位置（可拖拽，初始放在校园中心空旷处）
+  // 用户模拟位置（点击地图移动，初始放在校园中心）
   LatLng _userPos = _swuCenter;
 
   String? _selectedPoiName;
@@ -743,16 +747,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   void _onMapTapped(LatLng pos) {
     if (!_campusBounds.contains(pos)) {
       _showPoiNotice('请在西南大学北碚校区范围内选择位置');
-      return;
-    }
-    _moveUserTo(pos);
-    _triggerNearestPoi(pos);
-  }
-
-  /// 拖拽用户标记 → 结束时识别附近地名并触发讲解。
-  void _onUserMoved(LatLng pos) {
-    if (!_campusBounds.contains(pos)) {
-      _showPoiNotice('请在西南大学北碚校区范围内拖动位置');
       return;
     }
     _moveUserTo(pos);
@@ -834,7 +828,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           }
         }
         if (candidate == null) {
-          _showPoiNotice('附近没有识别到可讲解的校园建筑或场所');
+          _showPoiNotice('附近没有识别到教学楼、食堂、操场或校园建筑');
           return;
         }
 
@@ -860,9 +854,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final name = poi['name']?.toString().trim();
     if (name == null || name.isEmpty) return false;
     if (_containsAny(name, _blockedPoiKeywords)) return false;
-    final type = poi['type']?.toString() ?? '';
-    return _containsAny(name, _campusPoiKeywords) ||
-        _containsAny(type, _campusPoiTypes);
+    return _containsAny(name, _campusPoiKeywords);
   }
 
   bool _isAllowedCampusPoiName(String name) {
@@ -913,9 +905,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             Marker(
               position: _userPos,
               icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-              infoWindow: const InfoWindow(title: '📍 我的位置', snippet: '点地图或点地名即可移动'),
-              draggable: true,
-              onDragEnd: (_, pos) => _onUserMoved(pos),
+              infoWindow: const InfoWindow(title: '📍 我的位置', snippet: '点击地图位置即可移动'),
+              draggable: false,
             ),
           }.toSet(),
           onMapCreated: (c) => _mapCtrl = c,
@@ -1013,7 +1004,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                     : _poiLookupNotice.isNotEmpty
                     ? _poiLookupNotice
                     : _nearbySpot.isNotEmpty
-                    ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 点地图或拖动红点模拟移动'
+                    ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · 点地图位置模拟移动'
                     : '点击地图位置或高德地名即可模拟到达并触发讲解',
                 style: TextStyle(
                   fontSize: 13,
