@@ -782,6 +782,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     if (shouldFetchGuide && spot != null) {
       _fetchGuideContent(spot);
     }
+    _centerCameraOnUser(pos);
   }
 
   double _distanceInMeters(LatLng a, LatLng b) {
@@ -880,6 +881,15 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     return LatLng(lat, lng);
   }
 
+  void _centerCameraOnUser(LatLng pos, {bool animated = true}) {
+    _mapCtrl?.moveCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: pos, zoom: 17, tilt: 0, bearing: 0),
+      ),
+      animated: animated,
+    );
+  }
+
   @override
   void dispose() {
     _loc.dispose();
@@ -894,7 +904,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         AMapWidget(
           mapType: MapType.normal,
           privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
-          initialCameraPosition: const CameraPosition(target: _swuCenter, zoom: 16.5, tilt: 0, bearing: 0),
+          initialCameraPosition: CameraPosition(target: _userPos, zoom: 17, tilt: 0, bearing: 0),
           markers: {
             Marker(
               position: _userPos,
@@ -903,7 +913,12 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               draggable: false,
             ),
           }.toSet(),
-          onMapCreated: (c) => _mapCtrl = c,
+          onMapCreated: (c) {
+            _mapCtrl = c;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _centerCameraOnUser(_userPos, animated: false);
+            });
+          },
           onTap: _onMapTapped,
           onPoiTouched: _onPoiTouched,
           touchPoiEnabled: true,
