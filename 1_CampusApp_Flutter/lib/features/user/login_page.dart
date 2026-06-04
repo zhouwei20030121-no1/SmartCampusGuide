@@ -32,7 +32,10 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       if (response.data['code'] == 200) {
         // 💡 新增：登录成功时，将账号暂存到内存中
-        NetworkClient.currentAccount = _accountController.text.trim();
+        NetworkClient.setLoginSession(
+          _accountController.text.trim(),
+          response.data['data']?.toString() ?? '',
+        );
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

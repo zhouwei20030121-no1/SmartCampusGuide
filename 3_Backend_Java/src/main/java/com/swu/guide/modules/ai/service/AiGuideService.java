@@ -1,7 +1,10 @@
 package com.swu.guide.modules.ai.service;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import com.swu.guide.modules.spot.entity.Spot;
+import com.swu.guide.modules.spot.service.SpotService;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -14,12 +17,16 @@ import java.util.Map;
 public class AiGuideService {
 
     private final LlmGatewayService llmGateway;
+    private final JdbcTemplate jdbcTemplate;
+    private final SpotService spotService;
 
     @Value("${ai-service.url:http://localhost:5000}")
     private String aiServiceUrl;
 
-    public AiGuideService(LlmGatewayService llmGateway) {
+    public AiGuideService(LlmGatewayService llmGateway, JdbcTemplate jdbcTemplate, SpotService spotService) {
         this.llmGateway = llmGateway;
+        this.jdbcTemplate = jdbcTemplate;
+        this.spotService = spotService;
     }
 
     /**
@@ -54,6 +61,212 @@ public class AiGuideService {
 
         // 3. 完全降级：本地模板
         return templateGuide(spotName, persona);
+    }
+
+    public Map<String, Object> generateDynamicGuide(Map<String, Object> params) {
+        String spotName = String.valueOf(params.getOrDefault("spotName", params.getOrDefault("spot_name", "")));
+        String persona = String.valueOf(params.getOrDefault("persona", "新生"));
+        String language = String.valueOf(params.getOrDefault("language", "zh"));
+        String voice = String.valueOf(params.getOrDefault("voice", "gentle_guide"));
+        String style = String.valueOf(params.getOrDefault("style", "auto"));
+
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("spot_name", spotName);
+        req.put("persona", persona);
+        req.put("language", language);
+        req.put("voice", voice);
+        req.put("style", style);
+        req.put("environment", params.getOrDefault("environment", Map.of()));
+        req.put("top_k", params.getOrDefault("topK", params.getOrDefault("top_k", 5)));
+
+        try {
+            var resp = new org.springframework.web.client.RestTemplate()
+                    .postForEntity(aiServiceUrl + "/api/rag/guide/dynamic", req, Map.class);
+            Map<String, Object> body = resp.getBody();
+            if (body != null && body.get("data") instanceof Map<?, ?> data) {
+                Map<String, Object> result = normalizeMap(data);
+                persistGuideResource(spotName, persona, language, voice, String.valueOf(result.getOrDefault("text", "")));
+                return result;
+            }
+        } catch (Exception ignored) {}
+
+        Map<String, Object> fallback = new LinkedHashMap<>();
+        String text = generateGuide(spotName, persona);
+        if (language.toLowerCase().startsWith("en")) {
+            text = translateOrTemplateEnglish(spotName, text);
+        }
+        fallback.put("spotName", spotName);
+        fallback.put("spot_name", spotName);
+        fallback.put("text", text);
+        fallback.put("originalText", language.toLowerCase().startsWith("en") ? generateGuide(spotName, persona) : text);
+        fallback.put("persona", persona);
+        fallback.put("language", language);
+        fallback.put("voice", voice);
+        fallback.put("style", style);
+        fallback.put("fallback", true);
+        persistGuideResource(spotName, persona, language, voice, text);
+        return fallback;
+    }
+
+    public Map<String, Object> translateGuide(Map<String, Object> params) {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("text", params.getOrDefault("text", ""));
+        req.put("target_language", params.getOrDefault("targetLanguage", params.getOrDefault("target_language", "en")));
+        req.put("source_language", params.getOrDefault("sourceLanguage", params.getOrDefault("source_language", "zh")));
+
+        try {
+            var resp = new org.springframework.web.client.RestTemplate()
+                    .postForEntity(aiServiceUrl + "/api/rag/guide/translate", req, Map.class);
+            Map<String, Object> body = resp.getBody();
+            if (body != null && body.get("data") instanceof Map<?, ?> data) {
+                Map<String, Object> result = normalizeMap(data);
+                persistStoryResource(spotName, String.valueOf(result.getOrDefault("story", "")));
+                return result;
+            }
+        } catch (Exception ignored) {}
+
+        Map<String, Object> fallback = new LinkedHashMap<>();
+        fallback.put("text", params.getOrDefault("text", ""));
+        fallback.put("targetLanguage", req.get("target_language"));
+        fallback.put("sourceLanguage", req.get("source_language"));
+        fallback.put("fallback", true);
+        return fallback;
+    }
+
+    public Map<String, Object> generateStory(Map<String, Object> params) {
+        String spotName = String.valueOf(params.getOrDefault("spotName", params.getOrDefault("spot_name", "")));
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("spot_name", spotName);
+        req.put("persona", params.getOrDefault("persona", "新生"));
+        req.put("language", params.getOrDefault("language", "zh"));
+        req.put("comments", params.getOrDefault("comments", java.util.List.of()));
+        req.put("time_context", params.getOrDefault("timeContext", params.getOrDefault("time_context", null)));
+
+        try {
+            var resp = new org.springframework.web.client.RestTemplate()
+                    .postForEntity(aiServiceUrl + "/api/rag/story/generate", req, Map.class);
+            Map<String, Object> body = resp.getBody();
+            if (body != null && body.get("data") instanceof Map<?, ?> data) {
+                return normalizeMap(data);
+            }
+        } catch (Exception ignored) {}
+
+        Map<String, Object> fallback = new LinkedHashMap<>();
+        fallback.put("spotName", spotName);
+        String story = templateStory(
+                spotName,
+                String.valueOf(req.getOrDefault("persona", "新生")),
+                req.get("comments")
+        );
+        if (String.valueOf(req.getOrDefault("language", "zh")).toLowerCase().startsWith("en")) {
+            story = translateOrTemplateEnglishStory(spotName, story);
+        }
+        fallback.put("story", story);
+        fallback.put("persona", req.get("persona"));
+        fallback.put("language", req.get("language"));
+        fallback.put("fallback", true);
+        persistStoryResource(spotName, story);
+        return fallback;
+    }
+
+    private Map<String, Object> normalizeMap(Map<?, ?> source) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        source.forEach((key, value) -> result.put(String.valueOf(key), value));
+        if (result.containsKey("spot_name") && !result.containsKey("spotName")) {
+            result.put("spotName", result.get("spot_name"));
+        }
+        return result;
+    }
+
+    private void persistGuideResource(String spotName, String styleType, String language, String voiceType, String content) {
+        if (content == null || content.isBlank()) return;
+        Long spotId = resolveSpotId(spotName);
+        if (spotId == null) return;
+        try {
+            jdbcTemplate.update(
+                    "insert into ai_explanation(spot_id, style_type, language, content, voice_type) values(?,?,?,?,?)",
+                    spotId, styleType, language, content, voiceType
+            );
+        } catch (Exception ignored) {}
+    }
+
+    private void persistStoryResource(String spotName, String storyContent) {
+        if (storyContent == null || storyContent.isBlank()) return;
+        Long spotId = resolveSpotId(spotName);
+        if (spotId == null) return;
+        try {
+            jdbcTemplate.update(
+                    "insert into ai_story(spot_id, source_type, story_content) values(?,?,?)",
+                    spotId, "ai_generated", storyContent
+            );
+        } catch (Exception ignored) {}
+    }
+
+    private Long resolveSpotId(String spotName) {
+        if (spotName == null || spotName.isBlank()) return null;
+        try {
+            Spot spot = spotService.lambdaQuery().like(Spot::getName, spotName).last("limit 1").one();
+            return spot == null ? null : spot.getId();
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String translateOrTemplateEnglish(String spotName, String chineseText) {
+        try {
+            String translated = llmGateway.chatSimple(
+                    "Translate this Chinese campus audio guide into natural English. Keep facts unchanged and do not add Markdown.",
+                    chineseText
+            );
+            if (translated != null && !translated.isBlank()) {
+                return translated;
+            }
+        } catch (Exception ignored) {}
+        return "Welcome to " + spotName + ". This is one of the important places on Southwest University's campus. "
+                + "As you walk through this area, please notice its daily function, the nearby buildings, and the way students use this space for study, meetings and campus life. "
+                + "The current knowledge base has limited detailed records for this spot, so this guide focuses on orientation, atmosphere and visiting suggestions. "
+                + "You can complete a check-in here, read other visitors' memories, and continue to the next campus landmark.";
+    }
+
+    private String templateStory(String spotName, String persona, Object commentsObj) {
+        String comments = "";
+        if (commentsObj instanceof Iterable<?> items) {
+            StringBuilder builder = new StringBuilder();
+            for (Object item : items) {
+                if (item != null && !item.toString().isBlank()) {
+                    if (!builder.isEmpty()) builder.append("、");
+                    builder.append(item.toString().trim());
+                }
+                if (builder.length() > 120) break;
+            }
+            comments = builder.toString();
+        }
+        if (comments.isBlank()) {
+            comments = "还没有太多公开评论，第一段记忆正等着被写下";
+        }
+        String opening = switch (persona) {
+            case "校友" -> "给校友的一段回忆";
+            case "游客" -> "给来访者的一则校园札记";
+            default -> "给新同学的一则校园故事";
+        };
+        return opening + "：" + spotName + "的故事，常常藏在大家路过时留下的几句话里。"
+                + comments + "。这些声音把一个地点变得具体：它不只是地图上的一个名称，也是赶课、等人、拍照、散步和重新回到校园时会想起的坐标。"
+                + "如果你现在正站在这里，可以看看周围的道路、建筑和人流，再把自己的感受也写下来。后来的人读到它时，看到的就不只是一处景点，而是一段正在继续生长的校园记忆。";
+    }
+
+    private String translateOrTemplateEnglishStory(String spotName, String chineseStory) {
+        try {
+            String translated = llmGateway.chatSimple(
+                    "Translate this Chinese campus story into warm, natural English. Keep it concise and do not add Markdown.",
+                    chineseStory
+            );
+            if (translated != null && !translated.isBlank()) {
+                return translated;
+            }
+        } catch (Exception ignored) {}
+        return "A campus story for " + spotName + ": every campus place becomes warmer when people leave their memories there. "
+                + "Some visitors hurry to class, some wait for friends, and some return years later with a different feeling. "
+                + "Your check-in and comment can become part of this evolving story for the next visitor.";
     }
 
     private String buildPrompt(String spotName, String persona) {

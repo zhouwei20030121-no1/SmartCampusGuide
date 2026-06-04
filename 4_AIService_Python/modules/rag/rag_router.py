@@ -53,3 +53,75 @@ async def generate_guide(req: GuideGenerateRequest):
         return ApiResponse.ok(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class DynamicGuideRequest(BaseModel):
+    spot_name: str
+    user_id: str = "anonymous"
+    persona: str = "新生"
+    language: str = "zh"
+    style: str = "auto"
+    voice: str = "gentle_guide"
+    environment: dict = Field(default_factory=dict)
+    top_k: int = 5
+
+
+class TranslateRequest(BaseModel):
+    text: str
+    target_language: str = "en"
+    source_language: str = "zh"
+
+
+class StoryGenerateRequest(BaseModel):
+    spot_name: str
+    user_id: str = "anonymous"
+    persona: str = "新生"
+    comments: list[str] = Field(default_factory=list)
+    language: str = "zh"
+    time_context: str | None = None
+
+
+@router.post("/guide/dynamic")
+async def generate_dynamic_guide(req: DynamicGuideRequest):
+    """Generate a grounded, persona-aware guide script with language and voice metadata."""
+    try:
+        result = await rag_service.generate_dynamic_guide(
+            spot_name=req.spot_name,
+            persona=req.persona,
+            language=req.language,
+            style=req.style,
+            voice=req.voice,
+            environment=req.environment,
+            top_k=req.top_k,
+        )
+        return ApiResponse.ok(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/guide/translate")
+async def translate_guide(req: TranslateRequest):
+    try:
+        result = await rag_service.translate_text(
+            text=req.text,
+            target_language=req.target_language,
+            source_language=req.source_language,
+        )
+        return ApiResponse.ok(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/story/generate")
+async def generate_story(req: StoryGenerateRequest):
+    try:
+        result = await rag_service.generate_story(
+            spot_name=req.spot_name,
+            persona=req.persona,
+            comments=req.comments,
+            language=req.language,
+            time_context=req.time_context,
+        )
+        return ApiResponse.ok(result)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

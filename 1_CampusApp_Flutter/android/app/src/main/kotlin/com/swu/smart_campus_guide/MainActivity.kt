@@ -22,7 +22,13 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "speak" -> {
-                        result.success(speak(call.argument<String>("text").orEmpty()))
+                        result.success(
+                            speak(
+                                call.argument<String>("text").orEmpty(),
+                                call.argument<String>("voice").orEmpty(),
+                                call.argument<String>("language").orEmpty(),
+                            )
+                        )
                     }
                     "stop" -> {
                         tts?.stop()
@@ -68,7 +74,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         return TextToSpeech.LANG_MISSING_DATA
     }
 
-    private fun speak(text: String): Map<String, Any> {
+    private fun speak(text: String, voice: String, language: String): Map<String, Any> {
         if (text.isBlank()) {
             return mapOf("ok" to false, "reason" to "\u8BB2\u89E3\u8BCD\u4E3A\u7A7A")
         }
@@ -76,6 +82,11 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             return mapOf("ok" to false, "reason" to ttsStatusMessage)
         }
 
+        val languageStatus = chooseLanguageFor(language)
+        if (languageStatus < TextToSpeech.LANG_AVAILABLE) {
+            return mapOf("ok" to false, "reason" to "Current emulator has no TTS data for $language")
+        }
+        applyVoiceProfile(voice)
         val chunks = splitForSpeech(normalizeForSpeech(text))
         if (chunks.isEmpty()) {
             return mapOf("ok" to false, "reason" to "\u8BB2\u89E3\u8BCD\u4E3A\u7A7A")
@@ -112,6 +123,40 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             mapOf("ok" to true)
         } else {
             mapOf("ok" to false, "reason" to "TTS speak() returned error")
+        }
+    }
+
+    private fun chooseLanguageFor(language: String): Int {
+        val engine = tts ?: return TextToSpeech.ERROR
+        val normalized = language.lowercase(Locale.ROOT)
+        val candidates = if (normalized.startsWith("en")) {
+            listOf(Locale.US, Locale.UK, Locale.ENGLISH, Locale.getDefault())
+        } else {
+            listOf(Locale.SIMPLIFIED_CHINESE, Locale.CHINA, Locale.CHINESE, Locale.getDefault())
+        }
+        for (locale in candidates) {
+            val status = engine.setLanguage(locale)
+            if (status >= TextToSpeech.LANG_AVAILABLE) {
+                return status
+            }
+        }
+        return TextToSpeech.LANG_MISSING_DATA
+    }
+
+    private fun applyVoiceProfile(voice: String) {
+        when (voice) {
+            "young_male" -> {
+                tts?.setSpeechRate(0.88f)
+                tts?.setPitch(0.92f)
+            }
+            "young_female" -> {
+                tts?.setSpeechRate(0.86f)
+                tts?.setPitch(1.06f)
+            }
+            else -> {
+                tts?.setSpeechRate(0.82f)
+                tts?.setPitch(1.02f)
+            }
         }
     }
 

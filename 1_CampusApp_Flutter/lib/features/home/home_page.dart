@@ -640,6 +640,16 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   bool _playing = false;
   String _guideText = '';
   bool _loadingGuide = false;
+  String _storyText = '';
+  bool _loadingStory = false;
+  String _persona = '新生';
+  String _language = 'zh';
+  String _voice = 'gentle_guide';
+  bool _checkingIn = false;
+  String _checkinNotice = '';
+  bool _loadingComments = false;
+  final List<Map<String, dynamic>> _spotComments = [];
+  final TextEditingController _commentController = TextEditingController();
   bool _lookingUpPoi = false;
   String _poiLookupNotice = '';
   int _poiLookupSeq = 0;
@@ -761,12 +771,45 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       _poiLookupNotice = '';
       _triggeredSpot = spot;
       _playing = true;
+      _checkinNotice = '';
     });
 
+    _autoCheckin(spot);
+    _fetchComments(spot);
+    _fetchStoryContent(spot);
     if (shouldFetchGuide) {
       _fetchGuideContent(spot);
     } else {
       _playGuide(spot);
+    }
+  }
+
+  Future<void> _autoCheckin(String spot, {bool manual = false}) async {
+    if (_checkingIn) return;
+    setState(() => _checkingIn = true);
+    try {
+      final res = await NetworkClient.dio.post('/checkin/by-spot-name', data: {
+        'userId': NetworkClient.currentUserId,
+        'spotName': spot,
+      });
+      final ok = res.data['code'] == 200;
+      final spotName = res.data['data']?['spotName']?.toString() ?? spot;
+      if (!mounted) return;
+      setState(() {
+        _checkinNotice = ok ? '已打卡：$spotName' : (res.data['message'] ?? res.data['msg'] ?? '打卡失败').toString();
+      });
+      if (manual) {
+        _showTtsNotice(_checkinNotice);
+      }
+    } catch (e) {
+      debugPrint('鑷姩鎵撳崱澶辫触: $e');
+      if (mounted) {
+        setState(() => _checkinNotice = '未匹配到可打卡景点');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _checkingIn = false);
+      }
     }
   }
 
@@ -898,7 +941,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     try {
       final result = await _ttsChannel.invokeMapMethod<String, dynamic>(
         'speak',
-        {'text': content},
+        {'text': content, 'voice': _voice, 'language': _language},
       );
       if (result?['ok'] == true) {
         return true;
@@ -942,6 +985,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   @override
   void dispose() {
     _stopGuideSpeech();
+    _commentController.dispose();
     _loc.dispose();
     super.dispose();
   }
@@ -1023,6 +1067,36 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     });
     var text = '';
     try {
+      final res = await NetworkClient.dio.post('/ai/guide/dynamic', data: {
+        'spotName': spot,
+        'persona': _persona,
+        'language': _language,
+        'voice': _voice,
+        'style': 'auto',
+        'environment': {
+          'client': 'mobile_app',
+          'scene': 'smart_audio_guide',
+        },
+      });
+      if (res.data['code'] == 200) {
+        text = (res.data['data']['text'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+    if (text.isNotEmpty) {
+      if (!mounted) return;
+      setState(() {
+        _guideText = text;
+        _loadingGuide = false;
+      });
+      if (_triggeredSpot == spot && _playing) {
+        final ok = await _speakGuideText(text);
+        if (mounted && !ok) {
+          setState(() => _playing = false);
+        }
+      }
+      return;
+    }
+    try {
       final res = await NetworkClient.dio.get('/ai/guide/generate',
           queryParameters: {'spotName': spot, 'persona': '新生'});
       if (res.data['code'] == 200) {
@@ -1045,6 +1119,74 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           setState(() => _playing = false);
         }
       }
+    }
+  }
+
+  Future<void> _fetchStoryContent(String spot) async {
+    setState(() => _loadingStory = true);
+    var story = '';
+    try {
+      final res = await NetworkClient.dio.post('/ai/story/generate', data: {
+        'spotName': spot,
+        'persona': _persona,
+        'language': _language,
+      });
+      if (res.data['code'] == 200) {
+        story = (res.data['data']['story'] ?? '').toString().trim();
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _storyText = story.isNotEmpty
+          ? story
+          : '这里还没有生成完整故事。完成打卡并留下评论后，系统会结合景点资料和大家的回忆生成更有现场感的校园故事。';
+      _loadingStory = false;
+    });
+  }
+
+  Future<void> _fetchComments(String spot) async {
+    setState(() => _loadingComments = true);
+    try {
+      final res = await NetworkClient.dio.get('/comment/spot-name', queryParameters: {'spotName': spot});
+      final data = res.data['data'];
+      if (res.data['code'] == 200 && data is List) {
+        if (!mounted) return;
+        setState(() {
+          _spotComments
+            ..clear()
+            ..addAll(data.whereType<Map>().map((item) => Map<String, dynamic>.from(item)));
+        });
+      }
+    } catch (e) {
+      debugPrint('评论加载失败: $e');
+    } finally {
+      if (mounted) setState(() => _loadingComments = false);
+    }
+  }
+
+  Future<void> _submitComment(String spot) async {
+    final content = _commentController.text.trim();
+    if (content.isEmpty) {
+      _showTtsNotice('请输入评论内容');
+      return;
+    }
+    try {
+      final res = await NetworkClient.dio.post('/comment/by-spot-name', data: {
+        'userId': NetworkClient.currentUserId,
+        'spotName': spot,
+        'content': content,
+        'rating': 5,
+      });
+      if (res.data['code'] == 200) {
+        _commentController.clear();
+        _showTtsNotice('评论已提交，审核通过后会展示');
+        _fetchComments(spot);
+      } else {
+        _showTtsNotice((res.data['message'] ?? res.data['msg'] ?? '评论提交失败').toString());
+      }
+    } catch (e) {
+      debugPrint('评论提交失败: $e');
+      _showTtsNotice('评论提交失败，请检查后端服务');
     }
   }
 
@@ -1126,6 +1268,179 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     );
   }
 
+  Widget _buildGuideOptions(String spot, bool expanded) {
+    if (!expanded) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        _optionMenu(
+          icon: Icons.person_outline,
+          value: _persona,
+          items: const {'新生': '新生', '校友': '校友', '游客': '游客'},
+          onChanged: (value) {
+            setState(() => _persona = value);
+            _fetchGuideContent(spot);
+          },
+        ),
+        _optionMenu(
+          icon: Icons.translate,
+          value: _language == 'en' ? 'EN' : '中文',
+          items: const {'zh': '中文', 'en': 'EN'},
+          onChanged: (value) {
+            setState(() => _language = value);
+            _fetchGuideContent(spot);
+          },
+        ),
+        _optionMenu(
+          icon: Icons.record_voice_over_outlined,
+          value: _voiceLabel(_voice),
+          items: const {
+            'gentle_guide': '温柔导游',
+            'young_female': '青年女声',
+            'young_male': '青年男声',
+          },
+          onChanged: (value) {
+            setState(() => _voice = value);
+            if (_playing) {
+              _playGuide(spot);
+            }
+          },
+        ),
+        _actionChip(
+          icon: Icons.flag_outlined,
+          label: _checkingIn ? '打卡中' : '打卡',
+          onTap: _checkingIn ? null : () => _autoCheckin(spot, manual: true),
+        ),
+        IconButton(
+          tooltip: '生成校园故事',
+          onPressed: _loadingStory ? null : () => _fetchStoryContent(spot),
+          icon: _loadingStory
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.auto_stories_outlined),
+          color: AppTheme.primary,
+        ),
+      ]),
+    );
+  }
+
+  Widget _optionMenu({
+    required IconData icon,
+    required String value,
+    required Map<String, String> items,
+    required ValueChanged<String> onChanged,
+  }) {
+    return PopupMenuButton<String>(
+      tooltip: value,
+      onSelected: onChanged,
+      itemBuilder: (context) => items.entries
+          .map((entry) => PopupMenuItem(value: entry.key, child: Text(entry.value)))
+          .toList(),
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 15, color: AppTheme.primary),
+          const SizedBox(width: 4),
+          Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMain)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _actionChip({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.success.withValues(alpha: onTap == null ? 0.08 : 0.14),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.success.withValues(alpha: 0.22)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 15, color: AppTheme.success),
+          const SizedBox(width: 4),
+          Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textMain)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildCommentSection(String spot) {
+    final recent = _spotComments.take(3).toList();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.forum_outlined, size: 16, color: AppTheme.primary),
+          const SizedBox(width: 6),
+          const Text('历史互动评论', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
+          const Spacer(),
+          if (_loadingComments)
+            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+        ]),
+        const SizedBox(height: 8),
+        if (recent.isEmpty)
+          const Text('还没有审核通过的评论，来留下第一段校园记忆吧。', style: TextStyle(fontSize: 12, color: AppTheme.textSub, height: 1.5))
+        else
+          ...recent.map((item) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('“${item['content'] ?? ''}”', style: const TextStyle(fontSize: 12, color: AppTheme.textMain, height: 1.45)),
+              )),
+        Row(children: [
+          Expanded(
+            child: TextField(
+              controller: _commentController,
+              minLines: 1,
+              maxLines: 2,
+              decoration: InputDecoration(
+                hintText: '写下你的校园感想',
+                isDense: true,
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.72),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              ),
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: '提交评论',
+            onPressed: () => _submitComment(spot),
+            icon: const Icon(Icons.send_rounded),
+            color: AppTheme.primary,
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  String _voiceLabel(String voice) {
+    return switch (voice) {
+      'young_male' => '青年男声',
+      'young_female' => '青年女声',
+      _ => '温柔导游',
+    };
+  }
+
   Widget _buildAudioPlayer(String? spot) {
     final hasContent = spot != null;
     final expanded = hasContent && _playing;
@@ -1187,6 +1502,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 ),
               ),
             ]),
+            if (hasContent) _buildGuideOptions(spot, expanded),
             if (hasContent)
               AnimatedContainer(
                 duration: const Duration(milliseconds: 240),
@@ -1203,8 +1519,43 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                     padding: EdgeInsets.all(expanded ? 14 : 10),
                     child: _loadingGuide
                         ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                        : Text(_guideText.isNotEmpty ? _guideText : _getGuideText(spot),
-                        style: TextStyle(fontSize: expanded ? 14 : 13, color: AppTheme.textMain, height: 1.65)),
+                        : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(_guideText.isNotEmpty ? _guideText : _getGuideText(spot),
+                                style: TextStyle(fontSize: expanded ? 14 : 13, color: AppTheme.textMain, height: 1.65)),
+                            if (_checkinNotice.isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Row(children: [
+                                const Icon(Icons.verified_rounded, size: 16, color: AppTheme.success),
+                                const SizedBox(width: 6),
+                                Expanded(child: Text(_checkinNotice, style: const TextStyle(fontSize: 12, color: AppTheme.success, fontWeight: FontWeight.w700))),
+                              ]),
+                            ],
+                            if (_storyText.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warning.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: AppTheme.warning.withValues(alpha: 0.18)),
+                                ),
+                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                  const Row(children: [
+                                    Icon(Icons.auto_stories_outlined, size: 16, color: AppTheme.warning),
+                                    SizedBox(width: 6),
+                                    Text('校园故事', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
+                                  ]),
+                                  const SizedBox(height: 8),
+                                  Text(_storyText, style: const TextStyle(fontSize: 13, color: AppTheme.textMain, height: 1.65)),
+                                ]),
+                              ),
+                            ],
+                            if (expanded) ...[
+                              const SizedBox(height: 12),
+                              _buildCommentSection(spot),
+                            ],
+                          ]),
                   ),
                 ),
               ),

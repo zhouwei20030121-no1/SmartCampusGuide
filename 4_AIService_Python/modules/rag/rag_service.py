@@ -398,7 +398,7 @@ class RAGService:
         """生成AI讲解词：RAG检索 + LLM生成"""
         # 1. RAG 检索背景知识
         docs = self.search(spot_name, top_k=5)
-        context = "\n".join([d.get("content", "") for d in docs])
+        context = "\n".join([d.get("answer") or d.get("content", "") for d in docs])
 
         # 2. 组装 Prompt
         persona_map = {
@@ -479,6 +479,233 @@ class RAGService:
             f"根据校内知识库资料，{clean_context}"
             f"你可以把这里当作认识校园的一处切入点：先观察它的功能定位、周边道路和附近建筑，"
             f"再结合自己的行程继续前往下一个地点。以上内容来自当前知识库整理，若涉及开放时间、门禁或临时安排，请以现场通知为准。"
+        )
+
+
+    async def generate_dynamic_guide(
+        self,
+        spot_name: str,
+        persona: str = "新生",
+        language: str = "zh",
+        style: str = "auto",
+        voice: str = "gentle_guide",
+        environment: dict[str, Any] | None = None,
+        top_k: int = 5,
+    ) -> dict[str, Any]:
+        """RAG grounded guide generation with persona, language and voice metadata."""
+        normalized_language = (language or "zh").lower()
+        normalized_persona = self._normalize_persona(persona)
+        docs = self.search(spot_name, top_k=top_k)
+        context = self._format_context(docs)
+        selected_style = self._resolve_style(normalized_persona, style)
+        env_text = self._format_environment(environment or {})
+        text = ""
+
+        if settings.OPENAI_API_KEY:
+            try:
+                prompt = (
+                    "你是西南大学智能校园导览系统里的 AI 虚拟导游“西小导”。\n"
+                    f"当前景点：{spot_name}\n"
+                    f"用户身份：{normalized_persona}\n"
+                    f"讲解风格：{selected_style}\n"
+                    f"环境状态：{env_text}\n"
+                    f"检索增强资料：\n{context}\n\n"
+                    "请基于资料生成一段 450 到 700 字的中文讲解词。必须包含具体事实、空间位置、用途、历史或校园生活关联；"
+                    "不要只写欢迎词。语气自然，适合 TTS 播报，多用短句和自然停顿。若资料不足，请明确说资料有限，"
+                    "并围绕当前地点功能、周边环境和参观建议展开。不要输出 Markdown。"
+                )
+                text = await self._complete_text(prompt, temperature=0.72, max_tokens=1200)
+            except Exception as exc:
+                logger.warning("Dynamic guide generation failed: %s", exc)
+
+        if not text:
+            guide = await self.generate_guide(spot_name, normalized_persona)
+            text = str(guide.get("text", "")).strip()
+
+        translated = None
+        if normalized_language not in {"zh", "zh-cn", "cn"}:
+            translation = await self.translate_text(text, normalized_language, "zh")
+            translated = translation.get("text", text)
+
+        return {
+            "spot_name": spot_name,
+            "text": translated or text,
+            "original_text": text,
+            "persona": normalized_persona,
+            "style": selected_style,
+            "language": normalized_language,
+            "voice": voice,
+            "sources": docs,
+            "grounding": {
+                "retrieval": "hybrid-vector-keyword",
+                "top_k": top_k,
+                "source_count": len(docs),
+            },
+            "tts": {
+                "mode": "client-native-streaming",
+                "voice": voice,
+                "chunking": "sentence",
+            },
+        }
+
+    async def translate_text(
+        self,
+        text: str,
+        target_language: str = "en",
+        source_language: str = "zh",
+    ) -> dict[str, Any]:
+        """Translate guide text while keeping a compact fallback for offline demos."""
+        clean_text = (text or "").strip()
+        target = (target_language or "en").lower()
+        source = (source_language or "zh").lower()
+        if not clean_text:
+            return {"text": "", "target_language": target, "source_language": source}
+        if target in {source, "zh", "zh-cn", "cn"} and source in {"zh", "zh-cn", "cn"}:
+            return {"text": clean_text, "target_language": target, "source_language": source}
+
+        if settings.OPENAI_API_KEY:
+            try:
+                prompt = (
+                    f"Translate the following campus guide script from {source} to {target}. "
+                    "Keep proper names accurate, keep a warm audio-guide tone, and do not add facts.\n\n"
+                    f"{clean_text}"
+                )
+                translated = await self._complete_text(prompt, temperature=0.2, max_tokens=1200)
+                if translated:
+                    return {
+                        "text": translated,
+                        "target_language": target,
+                        "source_language": source,
+                        "fallback": False,
+                    }
+            except Exception as exc:
+                logger.warning("Guide translation failed: %s", exc)
+
+        fallback = self._english_fallback_from_text(clean_text) if target.startswith("en") else clean_text
+        return {
+            "text": fallback,
+            "target_language": target,
+            "source_language": source,
+            "fallback": True,
+        }
+
+    async def generate_story(
+        self,
+        spot_name: str,
+        persona: str = "新生",
+        comments: list[str] | None = None,
+        language: str = "zh",
+        time_context: str | None = None,
+    ) -> dict[str, Any]:
+        """Create an evolving campus story from comments and grounded campus facts."""
+        normalized_persona = self._normalize_persona(persona)
+        docs = self.search(spot_name, top_k=5)
+        safe_comments = [c.strip()[:300] for c in (comments or []) if c and c.strip()][:8]
+        comments_text = "\n".join(f"- {item}" for item in safe_comments) or "暂无用户评论。"
+        context = self._format_context(docs)
+        time_text = time_context or _current_date()
+        story = ""
+
+        if settings.OPENAI_API_KEY:
+            try:
+                prompt = (
+                    "你是校园故事策划助手，请基于检索资料和用户评论生成一段有校园气质的趣味故事。\n"
+                    f"景点：{spot_name}\n用户身份：{normalized_persona}\n时间节点：{time_text}\n"
+                    f"检索资料：\n{context}\n"
+                    f"用户评论：\n{comments_text}\n\n"
+                    "要求：300 到 500 字，事实和故事感兼具；要把评论中的情绪提炼成主题，但不要编造具体人物隐私；"
+                    "结尾给出一句适合继续打卡或语音播报的自然引导。不要输出 Markdown。"
+                )
+                story = await self._complete_text(prompt, temperature=0.78, max_tokens=900)
+            except Exception as exc:
+                logger.warning("Story generation failed: %s", exc)
+
+        if not story:
+            story = self._template_story(spot_name, normalized_persona, safe_comments)
+
+        if (language or "zh").lower().startswith("en"):
+            translated = await self.translate_text(story, "en", "zh")
+            story = translated.get("text", story)
+
+        return {
+            "spot_name": spot_name,
+            "story": story,
+            "persona": normalized_persona,
+            "language": language,
+            "comments_used": len(safe_comments),
+            "sources": docs,
+        }
+
+    async def _complete_text(
+        self,
+        prompt: str,
+        temperature: float = 0.7,
+        max_tokens: int = 900,
+    ) -> str:
+        async with httpx.AsyncClient(timeout=35.0) as client:
+            resp = await client.post(
+                f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+                json={
+                    "model": settings.OPENAI_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": temperature,
+                    "max_tokens": max(settings.OPENAI_MAX_TOKENS, max_tokens),
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return str(data["choices"][0]["message"]["content"]).strip()
+
+    def _normalize_persona(self, persona: str) -> str:
+        value = (persona or "新生").strip()
+        aliases = {
+            "freshman": "新生",
+            "student": "新生",
+            "alumni": "校友",
+            "visitor": "游客",
+            "tourist": "游客",
+        }
+        return aliases.get(value.lower(), value)
+
+    def _resolve_style(self, persona: str, style: str) -> str:
+        if style and style != "auto":
+            return style
+        return {
+            "新生": "热情引导风格，像学长学姐带路，兼顾实用提示",
+            "校友": "怀旧叙事风格，突出校园记忆和时间感",
+            "游客": "正式官方风格，兼顾历史文化与参观价值",
+        }.get(persona, "亲切自然的校园导览风格")
+
+    def _format_environment(self, environment: dict[str, Any]) -> str:
+        if not environment:
+            return "未提供实时环境状态"
+        pairs = [f"{key}={value}" for key, value in environment.items() if value not in (None, "")]
+        return "，".join(pairs) if pairs else "未提供实时环境状态"
+
+    def _template_story(self, spot_name: str, persona: str, comments: list[str]) -> str:
+        comments_hint = "、".join(comments[:3]) if comments else "这里还在等待第一批故事被写下"
+        opening = {
+            "新生": "给新同学的小故事",
+            "校友": "给老西大人的回忆片段",
+            "游客": "给来访者的校园札记",
+        }.get(persona, "校园故事")
+        return (
+            f"{opening}：{spot_name}最动人的地方，往往不只在建筑本身，也在来来往往的人留下的记忆里。"
+            f"有人提到{comments_hint}，这些细碎的感受像路标一样，把这个地点和一天里的阳光、脚步声、"
+            f"课堂前后的匆忙连在一起。你现在站在这里，可以先看看周围的道路和建筑，再想象不同年份的同学"
+            f"从这里经过：有人第一次认路，有人赶去上课，也有人毕业多年后重新回到这里。"
+            f"如果愿意，不妨在这里完成一次打卡，把你自己的校园一句话也留给后来的人。"
+        )
+
+    def _english_fallback_from_text(self, text: str) -> str:
+        spot_match = re.search(r"来到([^，。,.!！?？]{2,30})", text)
+        spot_name = spot_match.group(1) if spot_match else "this campus spot"
+        return (
+            f"Welcome to {spot_name}. This audio guide is generated from the campus knowledge base and the current tour context. "
+            "The detailed English translation service is not available right now, so this version gives you a practical overview: "
+            "please notice the function of this place, the nearby roads and buildings, and how students use this area in daily campus life. "
+            "You can complete a check-in here, read other visitors' comments, and leave your own memory to help the campus story keep growing."
         )
 
 

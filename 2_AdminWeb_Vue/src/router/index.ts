@@ -45,6 +45,12 @@ const routes = [
         meta: { title: '讲解配置' },
       },
       {
+        path: 'ai-workbench',
+        name: 'AiGuideWorkbench',
+        component: () => import('@/views/ai/AiGuideWorkbench.vue'),
+        meta: { title: 'AI动态讲解工作台' },
+      },
+      {
         path: 'routes',
         name: 'RouteConfig',
         component: () => import('@/views/route/RouteConfig.vue'),

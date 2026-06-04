@@ -47,6 +47,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _handleLogout() {
     NetworkClient.currentAccount = '';
+    NetworkClient.currentToken = '';
+    NetworkClient.currentUserId = 1;
     Navigator.pushNamedAndRemoveUntil(context, AppRouter.login, (route) => false);
   }
 
