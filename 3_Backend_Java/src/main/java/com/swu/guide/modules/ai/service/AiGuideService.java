@@ -48,7 +48,7 @@ public class AiGuideService {
         try {
             String prompt = buildPrompt(spotName, persona);
             String result = llmGateway.chatSimple(prompt,
-                    "请为「" + spotName + "」生成一段200-300字的校园导览讲解词。要求：口语化、生动有趣、适合语音播报、包含建筑特色和历史背景。");
+                    "请为「" + spotName + "」生成一段300-450字的校园导览讲解词。要求：像一位亲切的学长学姐在带路，语气自然、短句多、适合语音播报，不要像新闻播音稿；尽量包含地点功能、周边环境、建筑特色或历史背景。");
             if (result != null && !result.isBlank()) return result;
         } catch (Exception ignored) {}
 
@@ -62,7 +62,7 @@ public class AiGuideService {
             case "游客" -> "用专业、生动的语气，介绍校园文化和建筑特色";
             default -> "用热情、憧憬的语气，欢迎新同学探索校园";
         };
-        return "你是西南大学虚拟导游「西小导」。用户是" + persona + "。" + style + "。";
+        return "你是西南大学虚拟导游「西小导」。用户是" + persona + "。" + style + "。请像学长学姐一样自然讲解，少用套话，多用短句和停顿。";
     }
 
     private String templateGuide(String spotName, String persona) {

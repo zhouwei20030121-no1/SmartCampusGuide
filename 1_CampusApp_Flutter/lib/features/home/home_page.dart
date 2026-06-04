@@ -634,6 +634,8 @@ class _TabSmartAudio extends StatefulWidget {
 }
 
 class _TabSmartAudioState extends State<_TabSmartAudio> {
+  static const MethodChannel _ttsChannel = MethodChannel('smart_campus_guide/tts');
+
   final LocationService _loc = LocationService();
   bool _playing = false;
   String _guideText = '';
@@ -738,6 +740,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   void _moveUserTo(LatLng pos) {
     _loc.latitude = pos.latitude;
     _loc.longitude = pos.longitude;
+    _stopGuideSpeech();
 
     setState(() {
       _userPos = pos;
@@ -750,6 +753,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   void _triggerGuide(String spot, {double? distance}) {
     final shouldFetchGuide = spot != _triggeredSpot;
+    _stopGuideSpeech();
 
     setState(() {
       _nearbySpot = spot;
@@ -761,6 +765,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
     if (shouldFetchGuide) {
       _fetchGuideContent(spot);
+    } else {
+      _playGuide(spot);
     }
   }
 
@@ -843,6 +849,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   void _showPoiNotice(String notice) {
+    _stopGuideSpeech();
     setState(() {
       _lookingUpPoi = false;
       _poiLookupNotice = notice;
@@ -880,8 +887,61 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     );
   }
 
+  String _currentGuideText(String spot) {
+    final generated = _guideText.trim();
+    return generated.isNotEmpty ? generated : _getGuideText(spot);
+  }
+
+  Future<bool> _speakGuideText(String text) async {
+    final content = text.trim();
+    if (content.isEmpty) return false;
+    try {
+      final result = await _ttsChannel.invokeMapMethod<String, dynamic>(
+        'speak',
+        {'text': content},
+      );
+      if (result?['ok'] == true) {
+        return true;
+      }
+      _showTtsNotice(result?['reason']?.toString() ?? 'TTS 播放失败');
+    } catch (e) {
+      _showTtsNotice('TTS 通道未生效，请停止 App 后重新 Run');
+      debugPrint('TTS 播放失败: $e');
+    }
+    return false;
+  }
+
+  Future<void> _stopGuideSpeech() async {
+    try {
+      await _ttsChannel.invokeMethod('stop');
+    } catch (e) {
+      debugPrint('TTS 停止失败: $e');
+    }
+  }
+
+  Future<void> _playGuide(String spot) async {
+    setState(() => _playing = true);
+    final ok = await _speakGuideText(_currentGuideText(spot));
+    if (mounted && !ok) {
+      setState(() => _playing = false);
+    }
+  }
+
+  Future<void> _pauseGuide() async {
+    setState(() => _playing = false);
+    await _stopGuideSpeech();
+  }
+
+  void _showTtsNotice(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   @override
   void dispose() {
+    _stopGuideSpeech();
     _loc.dispose();
     super.dispose();
   }
@@ -928,7 +988,14 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         if (_triggeredSpot != null)
           Positioned(top: 76, left: 16, right: 16, child: _buildTriggerBanner(_triggeredSpot!)),
         // 底部音频
-        Positioned(bottom: 110, left: 16, right: 85, child: _buildAudioPlayer(_triggeredSpot)),
+        AnimatedPositioned(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          bottom: 110,
+          left: 16,
+          right: _playing ? 16 : 85,
+          child: _buildAudioPlayer(_triggeredSpot),
+        ),
       ],
     );
   }
@@ -954,16 +1021,30 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       _loadingGuide = true;
       _guideText = '';
     });
+    var text = '';
     try {
       final res = await NetworkClient.dio.get('/ai/guide/generate',
           queryParameters: {'spotName': spot, 'persona': '新生'});
       if (res.data['code'] == 200) {
-        setState(() => _guideText = res.data['data']['text'] ?? '');
+        text = (res.data['data']['text'] ?? '').toString().trim();
       }
     } catch (_) {
-      setState(() => _guideText = _getGuideText(spot));
+      text = _getGuideText(spot);
     } finally {
-      setState(() => _loadingGuide = false);
+      if (!mounted) return;
+      if (text.isEmpty) {
+        text = _getGuideText(spot);
+      }
+      setState(() {
+        _guideText = text;
+        _loadingGuide = false;
+      });
+      if (_triggeredSpot == spot && _playing) {
+        final ok = await _speakGuideText(text);
+        if (mounted && !ok) {
+          setState(() => _playing = false);
+        }
+      }
     }
   }
 
@@ -1031,8 +1112,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textMain, fontSize: 14))),
             GestureDetector(
               onTap: () {
-                setState(() => _triggeredSpot = null);
-                _centerCameraOnUser(_userPos);
+                _stopGuideSpeech();
+                setState(() {
+                  _triggeredSpot = null;
+                  _playing = false;
+                });
               },
               child: const Icon(Icons.close, size: 18, color: AppTheme.textSub),
             ),
@@ -1044,6 +1128,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   Widget _buildAudioPlayer(String? spot) {
     final hasContent = spot != null;
+    final expanded = hasContent && _playing;
+    final textHeight = expanded
+        ? math.min(260.0, MediaQuery.of(context).size.height * 0.30)
+        : 75.0;
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -1078,7 +1166,15 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 ]),
               ),
               GestureDetector(
-                onTap: () => hasContent ? setState(() => _playing = !_playing) : null,
+                onTap: hasContent
+                    ? () {
+                        if (_playing) {
+                          _pauseGuide();
+                        } else {
+                          _playGuide(spot!);
+                        }
+                      }
+                    : null,
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -1092,9 +1188,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               ),
             ]),
             if (hasContent)
-              Container(
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
                 margin: const EdgeInsets.only(top: 10),
-                height: 75,
+                height: textHeight,
                 decoration: BoxDecoration(
                   color: AppTheme.primary.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
@@ -1102,11 +1200,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(10),
+                    padding: EdgeInsets.all(expanded ? 14 : 10),
                     child: _loadingGuide
                         ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
                         : Text(_guideText.isNotEmpty ? _guideText : _getGuideText(spot),
-                        style: const TextStyle(fontSize: 13, color: AppTheme.textMain, height: 1.6)),
+                        style: TextStyle(fontSize: expanded ? 14 : 13, color: AppTheme.textMain, height: 1.65)),
                   ),
                 ),
               ),

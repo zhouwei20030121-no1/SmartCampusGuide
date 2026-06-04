@@ -397,7 +397,7 @@ class RAGService:
     async def generate_guide(self, spot_name: str, persona: str = "新生") -> dict:
         """生成AI讲解词：RAG检索 + LLM生成"""
         # 1. RAG 检索背景知识
-        docs = self.search(spot_name, top_k=3) if self.index else []
+        docs = self.search(spot_name, top_k=5)
         context = "\n".join([d.get("content", "") for d in docs])
 
         # 2. 组装 Prompt
@@ -412,7 +412,7 @@ class RAGService:
             f"你是西南大学的虚拟导游「西小导」。\n"
             f"用户身份：{persona}。请{style}。\n"
             f"请结合以下背景知识，向用户讲解「{spot_name}」。\n"
-            f"要求：口语化，适合TTS语音播报，控制在150字以内。\n"
+            f"要求：口语化，适合TTS语音播报，控制在350到500字；语气像一位亲切的学长学姐在带路，不要像新闻播音稿，也不要堆砌口号；多用短句、逗号和自然停顿；必须优先使用背景知识里的具体信息，不要只说泛泛的欢迎词；如果背景知识不足，要明确说资料有限，并围绕地点功能、周边环境和参观提示展开。\n"
             f"背景知识：\n{context if context else spot_name + '是西南大学校园内的重要地点。'}"
         )
 
@@ -420,16 +420,17 @@ class RAGService:
         text = ""
         try:
             import httpx
-            api_key = getattr(self, '_deepseek_key', None) or ""
+            api_key = settings.OPENAI_API_KEY
             if api_key:
                 async with httpx.AsyncClient(timeout=30) as client:
                     resp = await client.post(
-                        "https://api.deepseek.com/chat/completions",
+                        f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions",
                         headers={"Authorization": f"Bearer {api_key}"},
                         json={
-                            "model": "deepseek-chat",
+                            "model": settings.OPENAI_MODEL,
                             "messages": [{"role": "user", "content": prompt}],
-                            "temperature": 0.7, "max_tokens": 300
+                            "temperature": 0.7,
+                            "max_tokens": max(settings.OPENAI_MAX_TOKENS, 900),
                         }
                     )
                     if resp.status_code == 200:
@@ -440,7 +441,11 @@ class RAGService:
 
         # 4. 降级：模板生成
         if not text:
-            text = self._template_guide(spot_name, persona)
+            text = (
+                self._template_guide_from_context(spot_name, persona, context)
+                if context
+                else self._template_guide(spot_name, persona)
+            )
 
         return {"spot_name": spot_name, "text": text, "persona": persona}
 
@@ -456,6 +461,25 @@ class RAGService:
                     f"这里是校园内最具代表性的建筑之一，体现了西大深厚的历史文化底蕴。",
         }
         return templates.get(persona, templates["新生"])
+
+    def _template_guide_from_context(self, spot_name: str, persona: str, context: str) -> str:
+        """Use retrieved campus knowledge directly when the LLM is unavailable."""
+        clean_context = re.sub(r"\s+", " ", context).strip()
+        if len(clean_context) > 620:
+            clean_context = clean_context[:620].rstrip("，。；;、 ") + "。"
+
+        persona_opening = {
+            "新生": "同学你好",
+            "游客": "欢迎参观",
+            "校友": "欢迎回到西大",
+        }.get(persona, "同学你好")
+
+        return (
+            f"{persona_opening}，现在我们来到{spot_name}。"
+            f"根据校内知识库资料，{clean_context}"
+            f"你可以把这里当作认识校园的一处切入点：先观察它的功能定位、周边道路和附近建筑，"
+            f"再结合自己的行程继续前往下一个地点。以上内容来自当前知识库整理，若涉及开放时间、门禁或临时安排，请以现场通知为准。"
+        )
 
 
 rag_service = RAGService()
