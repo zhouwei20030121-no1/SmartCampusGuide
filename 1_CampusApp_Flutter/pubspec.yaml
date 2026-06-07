@@ -27,6 +27,10 @@ dependencies:
   video_player: ^2.8.2          # 核心视频播放能力
   chewie: ^1.7.5                # 封装好的视频播放器UI控制栏
 
+  flutter_pdfview: ^1.3.2
+  path_provider: ^2.1.3
+
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

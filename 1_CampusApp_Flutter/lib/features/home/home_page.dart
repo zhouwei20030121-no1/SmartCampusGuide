@@ -14,8 +14,12 @@ import '../map/map_page.dart';
 import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
 import '../route/amap_route_api.dart';
-import '../spot/spot_model.dart'; // 引入数据模型
+import '../spot/spot_model.dart';
 import '../story/campus_story_page.dart';
+import '../../features/cache/offline_download_page.dart';
+// 🌟 1. 导入公告列表页
+import '../../features/announcement/announcement_list_page.dart';
+
 
 const Color _schoolBlue = Color(0xFF023D83);
 
@@ -519,12 +523,13 @@ class _TabHomeState extends State<_TabHome> {
           _GridButton(
             icon: Icons.cloud_download_outlined,
             label: '离线下载',
-            onTap: () {},
+            onTap: () => Navigator.pushNamed(context, '/offline_download'),
           ),
           _GridButton(
             icon: Icons.campaign_outlined,
             label: '校园公告',
-            onTap: () {},
+            // 🌟 修复：跳转到公告列表页
+            onTap: () => Navigator.pushNamed(context, '/announcement'),
           ),
         ],
       ),
@@ -856,7 +861,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
         final name = candidate['name']!.toString().trim();
         final distance =
-            double.tryParse(candidate['distance']?.toString() ?? '');
+        double.tryParse(candidate['distance']?.toString() ?? '');
         final poiPos =
             _parseAmapLocation(candidate['location']?.toString()) ?? pos;
         _selectedPoiName = name;
@@ -1169,56 +1174,56 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             Expanded(
               child: stories.isEmpty
                   ? ListView(
-                      controller: controller,
-                      children: const [
-                        SizedBox(height: 42),
-                        Icon(Icons.auto_stories_outlined, size: 48, color: AppTheme.primary),
-                        SizedBox(height: 12),
-                        Text(
-                          '这个地点暂时还没有校园故事。你可以在“我的-写校园故事”里补充一段，其他人讲解时也会看到。',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 14, height: 1.6, color: AppTheme.textSub),
-                        ),
-                      ],
-                    )
+                controller: controller,
+                children: const [
+                  SizedBox(height: 42),
+                  Icon(Icons.auto_stories_outlined, size: 48, color: AppTheme.primary),
+                  SizedBox(height: 12),
+                  Text(
+                    '这个地点暂时还没有校园故事。你可以在“我的-写校园故事”里补充一段，其他人讲解时也会看到。',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, height: 1.6, color: AppTheme.textSub),
+                  ),
+                ],
+              )
                   : ListView.separated(
-                      controller: controller,
-                      itemCount: stories.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final story = stories[index];
-                        final title = (story['title'] ?? story['spotName'] ?? '校园故事').toString();
-                        final content = (story['storyContent'] ?? story['story'] ?? '').toString();
-                        return InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => CampusStoryDetailPage(story: story)),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primary.withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
-                            ),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textMain)),
-                              const SizedBox(height: 8),
-                              Text(
-                                content,
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13, height: 1.55, color: AppTheme.textSub),
-                              ),
-                            ]),
-                          ),
-                        );
-                      },
+                controller: controller,
+                itemCount: stories.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final story = stories[index];
+                  final title = (story['title'] ?? story['spotName'] ?? '校园故事').toString();
+                  final content = (story['storyContent'] ?? story['story'] ?? '').toString();
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => CampusStoryDetailPage(story: story)),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
+                      ),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textMain)),
+                        const SizedBox(height: 8),
+                        Text(
+                          content,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13, height: 1.55, color: AppTheme.textSub),
+                        ),
+                      ]),
                     ),
+                  );
+                },
+              ),
             ),
           ]),
         ),
@@ -1483,9 +1488,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           const Text('还没有审核通过的评论，来留下第一段校园记忆吧。', style: TextStyle(fontSize: 12, color: AppTheme.textSub, height: 1.5))
         else
           ...recent.map((item) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text('“${item['content'] ?? ''}”', style: const TextStyle(fontSize: 12, color: AppTheme.textMain, height: 1.45)),
-              )),
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text('“${item['content'] ?? ''}”', style: const TextStyle(fontSize: 12, color: AppTheme.textMain, height: 1.45)),
+          )),
         Row(children: [
           Expanded(
             child: TextField(
@@ -1575,12 +1580,12 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               GestureDetector(
                 onTap: hasContent
                     ? () {
-                        if (_playing) {
-                          _pauseGuide();
-                        } else {
-                          _playGuide(spot!);
-                        }
-                      }
+                  if (_playing) {
+                    _pauseGuide();
+                  } else {
+                    _playGuide(spot!);
+                  }
+                }
                     : null,
                 child: Container(
                   padding: const EdgeInsets.all(10),
@@ -1612,21 +1617,21 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                     child: _loadingGuide
                         ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
                         : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            Text(_guideText.isNotEmpty ? _guideText : _getGuideText(spot),
-                                style: TextStyle(fontSize: expanded ? 14 : 13, color: AppTheme.textMain, height: 1.65)),
-                            if (_checkinNotice.isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Row(children: [
-                                const Icon(Icons.verified_rounded, size: 16, color: AppTheme.success),
-                                const SizedBox(width: 6),
-                                Expanded(child: Text(_checkinNotice, style: const TextStyle(fontSize: 12, color: AppTheme.success, fontWeight: FontWeight.w700))),
-                              ]),
-                            ],
-                            if (expanded) ...[
-                              const SizedBox(height: 12),
-                              _buildCommentSection(spot),
-                            ],
-                          ]),
+                      Text(_guideText.isNotEmpty ? _guideText : _getGuideText(spot),
+                          style: TextStyle(fontSize: expanded ? 14 : 13, color: AppTheme.textMain, height: 1.65)),
+                      if (_checkinNotice.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Row(children: [
+                          const Icon(Icons.verified_rounded, size: 16, color: AppTheme.success),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(_checkinNotice, style: const TextStyle(fontSize: 12, color: AppTheme.success, fontWeight: FontWeight.w700))),
+                        ]),
+                      ],
+                      if (expanded) ...[
+                        const SizedBox(height: 12),
+                        _buildCommentSection(spot),
+                      ],
+                    ]),
                   ),
                 ),
               ),
