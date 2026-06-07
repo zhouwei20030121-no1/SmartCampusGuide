@@ -1,13 +1,11 @@
 package com.swu.guide.modules.route.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.swu.guide.common.Result;
+import com.swu.guide.modules.route.entity.RoutePlan;
 import com.swu.guide.modules.route.service.RoutePlanService;
 import com.swu.guide.modules.spot.entity.Spot;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -15,10 +13,73 @@ import java.util.List;
 @RequestMapping("/route")
 public class RoutePlanController {
 
-    @Autowired
-    private RoutePlanService routePlanService;
+    private final RoutePlanService routePlanService;
 
-    // 新增的最优路线规划接口
+    public RoutePlanController(RoutePlanService routePlanService) {
+        this.routePlanService = routePlanService;
+    }
+
+    @GetMapping("/plan/list")
+    public Result<Page<RoutePlan>> list(
+            @RequestParam(defaultValue = "") String keyword,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return Result.ok(routePlanService.searchRoutes(keyword, page, size));
+    }
+
+    @GetMapping("/plan/{id}")
+    public Result<RoutePlan> getById(@PathVariable Long id) {
+        RoutePlan routePlan = routePlanService.getDetailById(id);
+        if (routePlan == null) {
+            return Result.fail("Route plan not found");
+        }
+        return Result.ok(routePlan);
+    }
+
+    @PostMapping("/plan")
+    public Result<RoutePlan> save(@RequestBody RoutePlan routePlan) {
+        routePlan.setId(null);
+        routePlanService.saveWithSpots(routePlan, routePlan.getSpotIds());
+        return Result.ok(routePlanService.getDetailById(routePlan.getId()));
+    }
+
+    @PutMapping("/plan/{id}")
+    public Result<RoutePlan> update(@PathVariable Long id, @RequestBody RoutePlan routePlan) {
+        if (routePlanService.getById(id) == null) {
+            return Result.fail("Route plan not found");
+        }
+
+        routePlan.setId(id);
+        routePlanService.updateWithSpots(routePlan, routePlan.getSpotIds());
+        return Result.ok(routePlanService.getDetailById(id));
+    }
+
+    @PatchMapping("/plan/{id}/status")
+    public Result<Void> updateStatus(@PathVariable Long id, @RequestBody RoutePlan routePlan) {
+        if (routePlanService.getById(id) == null) {
+            return Result.fail("Route plan not found");
+        }
+        if (routePlan.getStatus() == null) {
+            return Result.fail("Status is required");
+        }
+
+        RoutePlan update = new RoutePlan();
+        update.setId(id);
+        update.setStatus(routePlan.getStatus());
+        routePlanService.updateById(update);
+        return Result.ok();
+    }
+
+    @DeleteMapping("/plan/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        if (routePlanService.getById(id) == null) {
+            return Result.fail("Route plan not found");
+        }
+
+        routePlanService.removeById(id);
+        return Result.ok();
+    }
+
     @GetMapping("/plan/optimal")
     public Result<List<Spot>> getOptimalRoute(
             @RequestParam("startId") Long startId,
@@ -28,11 +89,9 @@ public class RoutePlanController {
         List<Spot> optimalPath = routePlanService.calculateOptimalRoute(startId, endId, isPopularityFirst);
 
         if (optimalPath == null || optimalPath.isEmpty()) {
-            // 已修复：改为调用 Result.fail()
-            return Result.fail("无法规划出可用路线");
+            return Result.fail("Unable to plan a route");
         }
 
-        // 已修复：改为调用 Result.ok()
         return Result.ok(optimalPath);
     }
 }
