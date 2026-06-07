@@ -68,7 +68,7 @@
               type="success" 
               size="small" 
               @click="handleGenerate" 
-              :loading="genLoading"
+              :disabled="!form.spotId"
               style="margin-left: 10px;"
             >
               <el-icon><MagicStick /></el-icon>
@@ -261,6 +261,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { UploadProps } from 'element-plus'
 import {
@@ -275,11 +276,12 @@ import {
 } from '@element-plus/icons-vue'
 import request from '@/api/request'
 
+const router = useRouter()
+
 // 景点列表
 const spots = ref<any[]>([])
 
 // 加载状态
-const genLoading = ref(false)
 const saveLoading = ref(false)
 const loadingContent = ref(false)
 const audioUploading = ref(false)
@@ -333,14 +335,12 @@ const fetchSpots = async () => {
 // 景点选择改变 - 自动加载当前语言的内容
 const handleSpotChange = (spotId: string) => {
   form.spotId = spotId
-  // 自动静默加载内容，不显示消息提示
   handleLoadContent(false)
 }
 
 // 语言切换 - 自动加载新语言的内容
 const handleLanguageChange = () => {
   if (form.spotId) {
-    // 显示消息提示
     handleLoadContent(true)
   }
 }
@@ -358,32 +358,38 @@ const insertTag = (openTag: string, closeTag: string) => {
   form.scriptContent = form.scriptContent.substring(0, start) + newText + form.scriptContent.substring(end)
 }
 
-// AI生成文案
-const handleGenerate = async () => {
+// AI生成文案 - 跳转到AI工作台
+const handleGenerate = () => {
   if (!form.spotId) {
     ElMessage.warning('请先选择景点')
     return
   }
-  
-  genLoading.value = true
-  try {
-    const response = await request.post('/guide/content/generate', { 
-      spotId: Number(form.spotId), 
-      language: form.language 
-    })
-    const data = response || (response as any).data
-    form.scriptContent = typeof data === 'string' ? data : (data?.script || data?.scriptContent || '')
-    ElMessage.success('AI 文案生成成功')
-  } catch (error) {
-    console.error('生成文案失败:', error)
-    ElMessage.error('生成失败，请检查 AI 服务')
-  } finally {
-    genLoading.value = false
-  }
+
+  // 获取当前选中的景点名称
+  const spot = spots.value.find(s => s.id == form.spotId)
+  const spotName = spot ? spot.name : ''
+
+  // 保存当前表单状态，以便返回时恢复
+  sessionStorage.setItem('contentEditState', JSON.stringify({
+    id: form.id,
+    spotId: form.spotId,
+    language: form.language,
+    title: form.title,
+    scriptContent: form.scriptContent,
+    audioUrl: form.audioUrl,
+    audioName: form.audioName,
+    videoUrl: form.videoUrl,
+    videoName: form.videoName,
+  }))
+
+  // 跳转到AI工作台，并通过query传递景点名称
+  router.push({
+    path: '/ai-workbench',
+    query: { spotName }
+  })
 }
 
 // 加载已有内容
-// showMessage: true 显示消息提示，false 静默加载
 const handleLoadContent = async (showMessage = true) => {
   if (!form.spotId) {
     if (showMessage) ElMessage.warning('请先选择景点')
@@ -407,7 +413,6 @@ const handleLoadContent = async (showMessage = true) => {
       form.videoName = data.videoName || ''
       if (showMessage) ElMessage.success('内容加载成功')
     } else {
-      // 没有已有内容，清空表单
       form.id = null
       form.title = ''
       form.scriptContent = ''
@@ -462,7 +467,6 @@ const handleAudioUploadSuccess: UploadProps['onSuccess'] = async (response: any)
   }
   
   if (audioUrl) {
-    // 如果有旧音频，先删除
     if (form.audioUrl) {
       try {
         await request.delete('/upload/media', {
@@ -517,7 +521,6 @@ const handleVideoUploadSuccess: UploadProps['onSuccess'] = async (response: any)
   }
   
   if (videoUrl) {
-    // 如果有旧视频，先删除
     if (form.videoUrl) {
       try {
         await request.delete('/upload/media', {
@@ -550,7 +553,6 @@ const removeAudio = async () => {
       await request.delete('/upload/media', {
         params: { url: form.audioUrl }
       })
-      console.log('音频文件已删除:', form.audioUrl)
     } catch (error) {
       console.error('删除音频文件失败:', error)
     }
@@ -568,7 +570,6 @@ const removeVideo = async () => {
       await request.delete('/upload/media', {
         params: { url: form.videoUrl }
       })
-      console.log('视频文件已删除:', form.videoUrl)
     } catch (error) {
       console.error('删除视频文件失败:', error)
     }
@@ -599,16 +600,12 @@ const handleSave = async () => {
       videoName: form.videoName,
     }
     
-    console.log('保存数据:', submitData)
-    
     let response
     if (form.id) {
       response = await request.put(`/guide/content/${form.id}`, submitData)
     } else {
       response = await request.post('/guide/content', submitData)
     }
-    
-    console.log('保存响应:', response)
     
     if (response && response.id) {
       form.id = response.id
@@ -636,236 +633,71 @@ const handleReset = () => {
 
 onMounted(() => {
   fetchSpots()
+  
+  // 检查是否有保存的表单状态（从AI工作台返回）
+  const savedState = sessionStorage.getItem('contentEditState')
+  if (savedState) {
+    try {
+      const state = JSON.parse(savedState)
+      form.id = state.id
+      form.spotId = state.spotId
+      form.language = state.language
+      form.title = state.title
+      form.scriptContent = state.scriptContent || ''
+      form.audioUrl = state.audioUrl || ''
+      form.audioName = state.audioName || ''
+      form.videoUrl = state.videoUrl || ''
+      form.videoName = state.videoName || ''
+      sessionStorage.removeItem('contentEditState')
+      
+      // 检查是否有AI工作台生成的文案
+      const aiContent = sessionStorage.getItem('aiGeneratedContent')
+      if (aiContent) {
+        form.scriptContent = aiContent
+        sessionStorage.removeItem('aiGeneratedContent')
+        ElMessage.success('已自动填入AI生成的讲解文案')
+      }
+    } catch (e) {
+      console.error('恢复表单状态失败:', e)
+    }
+  }
 })
 </script>
 
 <style scoped>
-.page-container {
-  padding: 20px;
-}
-
-.main-card {
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-}
-
-.card-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.card-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #1A5276;
-}
-
-.card-desc {
-  font-size: 13px;
-  color: #999;
-}
-
-.content-form {
-  max-width: 900px;
-}
-
-/* 区域标题样式 */
-.section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1A5276;
-  margin: 24px 0 16px 0;
-  padding-bottom: 8px;
-  border-bottom: 2px solid rgba(26, 82, 118, 0.2);
-  position: relative;
-}
-
-.section-title::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 60px;
-  height: 2px;
-  background: #1A5276;
-  border-radius: 1px;
-}
-
-.editor-toolbar {
-  margin-bottom: 10px;
-  display: flex;
-  align-items: center;
-}
-
-.script-textarea {
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.word-count {
-  margin-top: 5px;
-  font-size: 12px;
-  color: #999;
-  text-align: right;
-}
-
-/* 多媒体上传样式 */
-.media-upload-container {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-}
-
-.media-preview {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  border: 1px solid rgba(26, 82, 118, 0.15);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.5);
-}
-
-.media-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  background: rgba(26, 82, 118, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.media-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.media-name {
-  font-size: 14px;
-  color: #333;
-  font-weight: 500;
-}
-
-.audio-player {
-  width: 100%;
-  max-width: 400px;
-  height: 40px;
-}
-
-.video-player {
-  width: 300px;
-  height: 200px;
-  border-radius: 8px;
-  background: #000;
-  object-fit: cover;
-}
-
-.media-uploader {
-  display: inline-block;
-}
-
-.upload-tip {
-  font-size: 12px;
-  color: #999;
-  margin-top: 5px;
-}
-
-/* 预览样式 */
-.content-preview {
-  margin-bottom: 20px;
-}
-
-.preview-card {
-  border: 1px solid rgba(26, 82, 118, 0.15);
-  border-radius: 12px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.5);
-}
-
-.preview-header {
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #1A5276;
-  background: rgba(26, 82, 118, 0.05);
-  border-bottom: 1px solid rgba(26, 82, 118, 0.1);
-}
-
-.preview-body {
-  padding: 20px;
-}
-
-.preview-title {
-  font-size: 20px;
-  color: #1A5276;
-  margin-bottom: 16px;
-  font-weight: 600;
-}
-
-.preview-text {
-  line-height: 1.8;
-  color: #333;
-  margin-bottom: 20px;
-  font-size: 14px;
-}
-
-.preview-media {
-  margin-top: 16px;
-  padding: 16px;
-  background: rgba(26, 82, 118, 0.03);
-  border-radius: 10px;
-}
-
-.preview-media p {
-  margin-bottom: 10px;
-  font-weight: 500;
-  font-size: 14px;
-  color: #555;
-}
-
-.preview-video {
-  max-width: 100%;
-  max-height: 300px;
-  border-radius: 8px;
-}
-
-/* 操作按钮 */
-.action-buttons {
-  display: flex;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-/* 全局样式调整 */
-:deep(.el-input__inner),
-:deep(.el-textarea__inner) {
-  border-radius: 8px;
-}
-
-:deep(.el-select .el-input__inner) {
-  border-radius: 8px;
-}
-
-:deep(.el-radio-button__inner) {
-  padding: 8px 20px;
-}
-
-:deep(.el-button) {
-  border-radius: 8px;
-}
-
-:deep(.el-form-item__label) {
-  font-weight: 500;
-  color: #555;
-}
+.page-container { padding: 20px; }
+.main-card { border-radius: 20px; background: rgba(255,255,255,0.55); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.45); }
+.card-header { display: flex; flex-direction: column; gap: 4px; }
+.card-title { font-size: 20px; font-weight: 600; color: #1A5276; }
+.card-desc { font-size: 13px; color: #999; }
+.content-form { max-width: 900px; }
+.section-title { font-size: 16px; font-weight: 600; color: #1A5276; margin: 24px 0 16px 0; padding-bottom: 8px; border-bottom: 2px solid rgba(26,82,118,0.2); position: relative; }
+.section-title::after { content: ''; position: absolute; bottom: -2px; left: 0; width: 60px; height: 2px; background: #1A5276; border-radius: 1px; }
+.editor-toolbar { margin-bottom: 10px; display: flex; align-items: center; }
+.script-textarea { font-family: 'Courier New', monospace; font-size: 14px; line-height: 1.6; }
+.word-count { margin-top: 5px; font-size: 12px; color: #999; text-align: right; }
+.media-upload-container { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.media-preview { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border: 1px solid rgba(26,82,118,0.15); border-radius: 10px; background: rgba(255,255,255,0.5); }
+.media-icon { width: 44px; height: 44px; border-radius: 10px; background: rgba(26,82,118,0.08); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.media-info { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.media-name { font-size: 14px; color: #333; font-weight: 500; }
+.audio-player { width: 100%; max-width: 400px; height: 40px; }
+.video-player { width: 300px; height: 200px; border-radius: 8px; background: #000; object-fit: cover; }
+.media-uploader { display: inline-block; }
+.upload-tip { font-size: 12px; color: #999; margin-top: 5px; }
+.content-preview { margin-bottom: 20px; }
+.preview-card { border: 1px solid rgba(26,82,118,0.15); border-radius: 12px; overflow: hidden; background: rgba(255,255,255,0.5); }
+.preview-header { padding: 12px 16px; font-size: 14px; font-weight: 600; color: #1A5276; background: rgba(26,82,118,0.05); border-bottom: 1px solid rgba(26,82,118,0.1); }
+.preview-body { padding: 20px; }
+.preview-title { font-size: 20px; color: #1A5276; margin-bottom: 16px; font-weight: 600; }
+.preview-text { line-height: 1.8; color: #333; margin-bottom: 20px; font-size: 14px; }
+.preview-media { margin-top: 16px; padding: 16px; background: rgba(26,82,118,0.03); border-radius: 10px; }
+.preview-media p { margin-bottom: 10px; font-weight: 500; font-size: 14px; color: #555; }
+.preview-video { max-width: 100%; max-height: 300px; border-radius: 8px; }
+.action-buttons { display: flex; gap: 12px; margin-top: 10px; }
+:deep(.el-input__inner), :deep(.el-textarea__inner) { border-radius: 8px; }
+:deep(.el-select .el-input__inner) { border-radius: 8px; }
+:deep(.el-radio-button__inner) { padding: 8px 20px; }
+:deep(.el-button) { border-radius: 8px; }
+:deep(.el-form-item__label) { font-weight: 500; color: #555; }
 </style>

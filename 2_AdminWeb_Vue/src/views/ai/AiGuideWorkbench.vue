@@ -16,7 +16,22 @@
       <div class="grid">
         <label>
           景点名称
-          <input v-model="form.spotName" placeholder="例如：中心图书馆" />
+          <div class="spot-select-wrap">
+            <el-select
+              v-model="form.spotName"
+              filterable
+              clearable
+              placeholder="搜索并选择景点"
+              style="width: 100%"
+            >
+              <el-option
+                v-for="spot in spots"
+                :key="spot.id"
+                :label="spot.name"
+                :value="spot.name"
+              />
+            </el-select>
+          </div>
         </label>
         <label>
           用户身份
@@ -71,6 +86,13 @@
         <button class="secondary" :disabled="loadingStory" @click="generateStoryAndSave">
           生成故事并入库
         </button>
+        <button
+          v-if="guideText"
+          class="copy-btn"
+          @click="goBackWithContent"
+        >
+          复制文案并返回编辑
+        </button>
       </div>
     </section>
 
@@ -107,8 +129,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import request from '@/api/request'
+
+const router = useRouter()
+const route = useRoute()
+
+const spots = ref<any[]>([])
 
 const form = reactive({
   spotName: '中心图书馆',
@@ -129,7 +158,32 @@ const commentDraft = ref('第一次来这里时感觉校园特别大。\n这里�
 
 const guideMeta = computed(() => `${form.persona} / ${form.language} / ${voiceName(form.voice)}`)
 
+// 获取景点列表
+const fetchSpots = async () => {
+  try {
+    const response = await request.get('/spot/list', {
+      params: { page: 1, size: 200 }
+    })
+    const data = (response as any).data || response
+    spots.value = data.records || []
+  } catch (error) {
+    console.error('获取景点列表失败:', error)
+  }
+}
+
+// 从URL参数读取景点名称
+const initSpotName = () => {
+  const spotNameFromQuery = route.query.spotName
+  if (spotNameFromQuery) {
+    form.spotName = spotNameFromQuery as string
+  }
+}
+
 const generateGuide = async () => {
+  if (!form.spotName) {
+    ElMessage.warning('请先选择或输入景点名称')
+    return
+  }
   loadingGuide.value = true
   try {
     const res: any = await request.post('/ai/guide/dynamic', {
@@ -146,6 +200,9 @@ const generateGuide = async () => {
     const data = res?.data || res || {}
     guideText.value = data.text || ''
     sources.value = data.sources || []
+  } catch (error) {
+    console.error('生成讲解词失败:', error)
+    ElMessage.error('生成失败，请重试')
   } finally {
     loadingGuide.value = false
   }
@@ -188,11 +245,24 @@ const generateStoryAndSave = async () => {
   }
 }
 
+// 复制文案并返回内容编辑页面
+const goBackWithContent = () => {
+  // 将生成的讲解词存入 sessionStorage
+  sessionStorage.setItem('aiGeneratedContent', guideText.value)
+  // 返回上一页（内容编辑页面）
+  router.back()
+}
+
 const voiceName = (voice: string) => {
   if (voice === 'young_male') return '青年男声'
   if (voice === 'young_female') return '青年女声'
   return '温柔导游'
 }
+
+onMounted(() => {
+  fetchSpots()
+  initSpotName()
+})
 </script>
 
 <style scoped>
@@ -255,6 +325,10 @@ button {
   color: #1a5276;
 }
 
+.spot-select-wrap {
+  width: 100%;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(180px, 1fr));
@@ -298,6 +372,10 @@ textarea {
 
 button.secondary {
   background: #0f766e;
+}
+
+button.copy-btn {
+  background: #e67e22;
 }
 
 button:disabled {

@@ -494,7 +494,7 @@ const moveSpot = (fromIndex: number, toIndex: number) => {
 const fetchRoutes = async () => {
   loading.value = true
   try {
-    const response = await request.get('/route/plan/list', {
+    const response = await request.get('/route/manage/list', {
       params: {
         keyword: searchKey.value,
         page: page.value,
@@ -561,7 +561,7 @@ const handleAdd = () => {
 const handleEdit = async (row: any) => {
   try {
     loading.value = true
-    const response = await request.get(`/route/plan/${row.id}`)
+    const response = await request.get(`/route/manage/${row.id}`)
     const data = response || (response as any).data
     fillFormData(data || row)
     dialogVisible.value = true
@@ -597,7 +597,7 @@ const fillFormData = (row: any) => {
 const handleViewDetail = async (row: any) => {
   try {
     loading.value = true
-    const response = await request.get(`/route/plan/${row.id}`)
+    const response = await request.get(`/route/manage/${row.id}`)
     const data = response || (response as any).data
     currentRoute.value = data || row
     detailDialogVisible.value = true
@@ -623,7 +623,7 @@ const handleDelete = (row: any) => {
     }
   ).then(async () => {
     try {
-      await request.delete(`/route/plan/${row.id}`)
+      await request.delete(`/route/manage/${row.id}`)
       ElMessage.success('删除成功')
       if (tableData.value.length === 1 && page.value > 1) page.value--
       fetchRoutes()
@@ -638,7 +638,7 @@ const handleDelete = (row: any) => {
 const handleStatusChange = async (row: any, value: boolean) => {
   try {
     const status = value ? 1 : 0
-    await request.patch(`/route/plan/${row.id}/status`, { status })
+    await request.patch(`/route/manage/${row.id}/status`, { status })
     row.status = status
     ElMessage.success(`已${value ? '启用' : '禁用'}路线：${row.routeName}`)
   } catch (error) {
@@ -665,10 +665,10 @@ const handleSubmit = async () => {
         }
 
         if (isEdit.value) {
-          await request.put(`/route/plan/${formData.id}`, submitData)
+          await request.put(`/route/manage/${formData.id}`, submitData)
           ElMessage.success('路线更新成功')
         } else {
-          await request.post('/route/plan', submitData)
+          await request.post('/route/manage', submitData)
           ElMessage.success('路线创建成功')
         }
         dialogVisible.value = false
@@ -735,282 +735,45 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-container {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header h2 {
-  font-size: 28px;
-  color: #1A5276;
-  margin-bottom: 6px;
-}
-
-.page-header p {
-  color: #64748b;
-  font-size: 14px;
-}
-
-.table-card {
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-}
-
-.toolbar {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.search-input {
-  width: 260px;
-}
-
-.route-name {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.route-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: rgba(26, 82, 118, 0.1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #1A5276;
-}
-
-.spot-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.spot-tag {
-  margin: 2px 0;
-}
-
-.spot-order {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  line-height: 18px;
-  text-align: center;
-  border-radius: 50%;
-  background: #1A5276;
-  color: #fff;
-  font-size: 11px;
-  margin-right: 4px;
-}
-
-.empty-text {
-  color: #999;
-  font-size: 13px;
-}
-
-.time-text {
-  font-size: 13px;
-  color: #666;
-}
-
-.pagination-wrap {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-/* 表单样式 */
-.route-form {
-  max-height: 550px;
-  overflow-y: auto;
-  padding-right: 10px;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #1A5276;
-  margin: 20px 0 14px 0;
-  padding-bottom: 6px;
-  border-bottom: 2px solid rgba(26, 82, 118, 0.15);
-}
-
-.unit-text {
-  margin-left: 8px;
-  color: #999;
-  font-size: 12px;
-}
-
-/* 景点选择区域 */
-.spot-selection-area {
-  width: 100%;
-}
-
-.spot-select-header {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 12px;
-}
-
-.spot-count {
-  font-size: 13px;
-  color: #666;
-}
-
-.selected-spots {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.spot-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid rgba(26, 82, 118, 0.12);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.6);
-  transition: all 0.2s;
-}
-
-.spot-item:hover {
-  border-color: rgba(26, 82, 118, 0.3);
-  background: rgba(26, 82, 118, 0.03);
-}
-
-.spot-order-badge {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #1A5276;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.spot-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.spot-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: #333;
-}
-
-.spot-category {
-  font-size: 12px;
-  color: #999;
-}
-
-.spot-actions {
-  display: flex;
-  gap: 4px;
-}
-
-.empty-spots {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 30px;
-  color: #c0c4cc;
-  border: 2px dashed #e4e7ed;
-  border-radius: 10px;
-  gap: 8px;
-}
-
-/* 详情样式 */
-.route-detail {
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.detail-name {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1A5276;
-}
-
-.description-text {
-  line-height: 1.8;
-  color: #666;
-}
-
-.route-spots-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.route-spot-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
-}
-
-.route-spot-order {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #1A5276;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  flex-shrink: 0;
-  font-size: 13px;
-}
-
-.route-spot-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.route-spot-name {
-  font-weight: 500;
-  font-size: 14px;
-}
-
-.route-spot-desc {
-  font-size: 12px;
-  color: #999;
-}
-
-.dialog-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-:deep(.el-table__row .el-button + .el-button) {
-  margin-left: 4px;
-}
+.page-container { display: flex; flex-direction: column; gap: 20px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; }
+.page-header h2 { font-size: 28px; color: #1A5276; margin-bottom: 6px; }
+.page-header p { color: #64748b; font-size: 14px; }
+.table-card { border-radius: 20px; background: rgba(255,255,255,0.55); backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.45); }
+.toolbar { display: flex; gap: 12px; margin-bottom: 20px; }
+.search-input { width: 260px; }
+.route-name { display: flex; align-items: center; gap: 10px; }
+.route-icon { width: 32px; height: 32px; border-radius: 8px; background: rgba(26,82,118,0.1); display: flex; align-items: center; justify-content: center; color: #1A5276; }
+.spot-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.spot-tag { margin: 2px 0; }
+.spot-order { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #1A5276; color: #fff; font-size: 11px; margin-right: 4px; }
+.empty-text { color: #999; font-size: 13px; }
+.time-text { font-size: 13px; color: #666; }
+.pagination-wrap { margin-top: 20px; display: flex; justify-content: flex-end; }
+.route-form { max-height: 550px; overflow-y: auto; padding-right: 10px; }
+.section-title { font-size: 15px; font-weight: 600; color: #1A5276; margin: 20px 0 14px 0; padding-bottom: 6px; border-bottom: 2px solid rgba(26,82,118,0.15); }
+.unit-text { margin-left: 8px; color: #999; font-size: 12px; }
+.spot-selection-area { width: 100%; }
+.spot-select-header { display: flex; align-items: center; gap: 15px; margin-bottom: 12px; }
+.spot-count { font-size: 13px; color: #666; }
+.selected-spots { display: flex; flex-direction: column; gap: 8px; }
+.spot-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid rgba(26,82,118,0.12); border-radius: 10px; background: rgba(255,255,255,0.6); transition: all 0.2s; }
+.spot-item:hover { border-color: rgba(26,82,118,0.3); background: rgba(26,82,118,0.03); }
+.spot-order-badge { width: 28px; height: 28px; border-radius: 50%; background: #1A5276; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.spot-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.spot-name { font-size: 14px; font-weight: 500; color: #333; }
+.spot-category { font-size: 12px; color: #999; }
+.spot-actions { display: flex; gap: 4px; }
+.empty-spots { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; color: #c0c4cc; border: 2px dashed #e4e7ed; border-radius: 10px; gap: 8px; }
+.route-detail { max-height: 500px; overflow-y: auto; }
+.detail-name { font-size: 18px; font-weight: 600; color: #1A5276; }
+.description-text { line-height: 1.8; color: #666; }
+.route-spots-detail { display: flex; flex-direction: column; gap: 10px; }
+.route-spot-item { display: flex; align-items: center; gap: 12px; padding: 10px; border: 1px solid #e4e7ed; border-radius: 8px; }
+.route-spot-order { width: 28px; height: 28px; border-radius: 50%; background: #1A5276; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; flex-shrink: 0; font-size: 13px; }
+.route-spot-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.route-spot-name { font-weight: 500; font-size: 14px; }
+.route-spot-desc { font-size: 12px; color: #999; }
+.dialog-footer { display: flex; justify-content: flex-end; gap: 12px; }
+:deep(.el-table__row .el-button + .el-button) { margin-left: 4px; }
 </style>
