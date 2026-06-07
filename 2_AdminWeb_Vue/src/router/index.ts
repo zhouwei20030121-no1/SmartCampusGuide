@@ -75,10 +75,17 @@ const routes = [
         meta: { title: '语料库管理' },
       },
       {
+        path: 'announcement-manage',
+        name: 'AnnouncementManage',
+        component: () => import('@/views/announcement/AnnouncementManage.vue'),
+        meta: { title: '校园公告管理' },
+      },
+      {
         path: '/bus',
         name: 'Bus',
         component: () => import('@/views/bus/BusManage.vue'),
       }
+
     ],
   },
 ]

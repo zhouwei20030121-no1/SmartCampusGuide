@@ -53,6 +53,7 @@ const navItems = [
   { label: '校园故事', path: '/stories' },
   { label: '评论审核', path: '/comments' },
   { label: '语料库', path: '/corpus' },
+  { label: '校园公告', path: '/announcement-manage' }, // 🌟 新增
 ]
 
 const getUsername = () => {

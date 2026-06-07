@@ -16,5 +16,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
         // 映射 /images/** 到 classpath:/static/images/
         registry.addResourceHandler("/images/**")
                 .addResourceLocations("classpath:/static/images/");
+                // 将本地上传目录映射到 URL，这样浏览器才能通过 http://localhost:8080/uploads/pdf/xxx.pdf 访问
+        registry.addResourceHandler("/uploads/pdf/**")
+                .addResourceLocations("file:" + System.getProperty("user.dir") + "/uploads/pdf/");
     }
 }
