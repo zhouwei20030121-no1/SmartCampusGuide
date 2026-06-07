@@ -36,13 +36,55 @@ public class CheckinController {
         if (spotName.isBlank()) {
             return Result.fail("spotName 不能为空");
         }
-        Spot spot = spotService.getOne(new LambdaQueryWrapper<Spot>()
-                .like(Spot::getName, spotName)
-                .last("limit 1"));
+        Spot spot = findSpotByLooseName(spotName);
         if (spot == null) {
             return Result.fail("景点不存在，无法打卡");
         }
         return Result.ok(checkinService.doCheckin(userId, spot.getId()));
+    }
+
+    private Spot findSpotByLooseName(String spotName) {
+        Spot direct = spotService.getOne(new LambdaQueryWrapper<Spot>()
+                .like(Spot::getName, spotName)
+                .last("limit 1"));
+        if (direct != null) return direct;
+
+        String target = normalizeSpotName(spotName);
+        return spotService.list().stream()
+                .filter(spot -> {
+                    String candidate = normalizeSpotName(spot.getName());
+                    return target.contains(candidate)
+                            || candidate.contains(target)
+                            || hasUsefulOverlap(target, candidate);
+                })
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String normalizeSpotName(String name) {
+        if (name == null) return "";
+        return name
+                .replaceAll("[\\s　]", "")
+                .replace("西南大学", "")
+                .replace("北碚校区", "")
+                .replace("北碚", "")
+                .replace("校区", "")
+                .replaceAll("[()（）]", "")
+                .replace("教学楼", "")
+                .replace("学院", "")
+                .replace("学部", "")
+                .toLowerCase();
+    }
+
+    private boolean hasUsefulOverlap(String left, String right) {
+        if (left.length() < 2 || right.length() < 2) return false;
+        int hit = 0;
+        for (int i = 0; i < left.length() - 1; i++) {
+            if (right.contains(left.substring(i, i + 2))) {
+                hit++;
+            }
+        }
+        return hit >= 2;
     }
 
     @GetMapping("/badges/{userId}")

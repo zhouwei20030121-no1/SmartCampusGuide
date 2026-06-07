@@ -15,6 +15,7 @@ import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
 import '../route/amap_route_api.dart';
 import '../spot/spot_model.dart'; // 引入数据模型
+import '../story/campus_story_page.dart';
 
 const Color _schoolBlue = Color(0xFF023D83);
 
@@ -508,7 +509,7 @@ class _TabHomeState extends State<_TabHome> {
           _GridButton(
             icon: Icons.auto_stories_outlined,
             label: '校园故事',
-            onTap: () => Navigator.pushNamed(context, '/checkin'),
+            onTap: () => Navigator.pushNamed(context, '/story'),
           ),
           _GridButton(
             icon: Icons.directions_bus_filled_outlined,
@@ -640,7 +641,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   bool _playing = false;
   String _guideText = '';
   bool _loadingGuide = false;
-  String _storyText = '';
   bool _loadingStory = false;
   String _persona = '新生';
   String _language = 'zh';
@@ -776,7 +776,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
     _autoCheckin(spot);
     _fetchComments(spot);
-    _fetchStoryContent(spot);
     if (shouldFetchGuide) {
       _fetchGuideContent(spot);
     } else {
@@ -1098,7 +1097,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     }
     try {
       final res = await NetworkClient.dio.get('/ai/guide/generate',
-          queryParameters: {'spotName': spot, 'persona': '新生'});
+          queryParameters: {'spotName': spot, 'persona': _persona, 'language': _language});
       if (res.data['code'] == 200) {
         text = (res.data['data']['text'] ?? '').toString().trim();
       }
@@ -1122,26 +1121,109 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     }
   }
 
-  Future<void> _fetchStoryContent(String spot) async {
+  Future<void> _openStoryDialog(String spot) async {
     setState(() => _loadingStory = true);
-    var story = '';
+    final stories = <Map<String, dynamic>>[];
     try {
-      final res = await NetworkClient.dio.post('/ai/story/generate', data: {
+      final res = await NetworkClient.dio.get('/ai/story/list', queryParameters: {
         'spotName': spot,
-        'persona': _persona,
         'language': _language,
+        'page': 1,
+        'size': 30,
       });
-      if (res.data['code'] == 200) {
-        story = (res.data['data']['story'] ?? '').toString().trim();
+      final records = res.data['data']?['records'];
+      if (records is List) {
+        stories.addAll(records.whereType<Map>().map((item) => Map<String, dynamic>.from(item)));
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('校园故事列表加载失败: $e');
+    } finally {
+      if (mounted) setState(() => _loadingStory = false);
+    }
     if (!mounted) return;
-    setState(() {
-      _storyText = story.isNotEmpty
-          ? story
-          : '这里还没有生成完整故事。完成打卡并留下评论后，系统会结合景点资料和大家的回忆生成更有现场感的校园故事。';
-      _loadingStory = false;
-    });
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.58,
+        minChildSize: 0.36,
+        maxChildSize: 0.88,
+        builder: (context, controller) => Container(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.92),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.auto_stories_outlined, color: AppTheme.warning),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('$spot 的校园故事',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppTheme.textMain)),
+              ),
+              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+            ]),
+            const SizedBox(height: 10),
+            Expanded(
+              child: stories.isEmpty
+                  ? ListView(
+                      controller: controller,
+                      children: const [
+                        SizedBox(height: 42),
+                        Icon(Icons.auto_stories_outlined, size: 48, color: AppTheme.primary),
+                        SizedBox(height: 12),
+                        Text(
+                          '这个地点暂时还没有校园故事。你可以在“我的-写校园故事”里补充一段，其他人讲解时也会看到。',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 14, height: 1.6, color: AppTheme.textSub),
+                        ),
+                      ],
+                    )
+                  : ListView.separated(
+                      controller: controller,
+                      itemCount: stories.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final story = stories[index];
+                        final title = (story['title'] ?? story['spotName'] ?? '校园故事').toString();
+                        final content = (story['storyContent'] ?? story['story'] ?? '').toString();
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () {
+                            Navigator.pop(context);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => CampusStoryDetailPage(story: story)),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primary.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
+                            ),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textMain)),
+                              const SizedBox(height: 8),
+                              Text(
+                                content,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 13, height: 1.55, color: AppTheme.textSub),
+                              ),
+                            ]),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchComments(String spot) async {
@@ -1284,8 +1366,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         ),
         _optionMenu(
           icon: Icons.translate,
-          value: _language == 'en' ? 'EN' : '中文',
-          items: const {'zh': '中文', 'en': 'EN'},
+          value: _languageLabel(_language),
+          items: const {'zh': '中文', 'en': 'EN', 'ja': '日本語', 'fr': 'FR', 'ko': '한국어'},
           onChanged: (value) {
             setState(() => _language = value);
             _fetchGuideContent(spot);
@@ -1312,8 +1394,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           onTap: _checkingIn ? null : () => _autoCheckin(spot, manual: true),
         ),
         IconButton(
-          tooltip: '生成校园故事',
-          onPressed: _loadingStory ? null : () => _fetchStoryContent(spot),
+          tooltip: '查看校园故事',
+          onPressed: _loadingStory ? null : () => _openStoryDialog(spot),
           icon: _loadingStory
               ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
               : const Icon(Icons.auto_stories_outlined),
@@ -1441,6 +1523,16 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     };
   }
 
+  String _languageLabel(String language) {
+    return switch (language) {
+      'en' => 'EN',
+      'ja' => '日本語',
+      'fr' => 'FR',
+      'ko' => '한국어',
+      _ => '中文',
+    };
+  }
+
   Widget _buildAudioPlayer(String? spot) {
     final hasContent = spot != null;
     final expanded = hasContent && _playing;
@@ -1529,27 +1621,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                                 const SizedBox(width: 6),
                                 Expanded(child: Text(_checkinNotice, style: const TextStyle(fontSize: 12, color: AppTheme.success, fontWeight: FontWeight.w700))),
                               ]),
-                            ],
-                            if (_storyText.isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.warning.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: AppTheme.warning.withValues(alpha: 0.18)),
-                                ),
-                                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                  const Row(children: [
-                                    Icon(Icons.auto_stories_outlined, size: 16, color: AppTheme.warning),
-                                    SizedBox(width: 6),
-                                    Text('校园故事', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
-                                  ]),
-                                  const SizedBox(height: 8),
-                                  Text(_storyText, style: const TextStyle(fontSize: 13, color: AppTheme.textMain, height: 1.65)),
-                                ]),
-                              ),
                             ],
                             if (expanded) ...[
                               const SizedBox(height: 12),

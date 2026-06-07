@@ -4,9 +4,10 @@
       <div class="panel-head">
         <div>
           <h2>AI动态讲解工作台</h2>
-          <p>RAG 检索、用户风格、多语种与音色参数联调</p>
+          <p>用于调试 DeepSeek/RAG 生成效果：检查不同身份、语言、音色和风格下的讲解词与校园故事。</p>
         </div>
         <div class="quick-links">
+          <router-link to="/stories">校园故事库</router-link>
           <router-link to="/corpus">语料库</router-link>
           <router-link to="/comments">评论审核</router-link>
         </div>
@@ -30,6 +31,9 @@
           <select v-model="form.language">
             <option value="zh">中文</option>
             <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="fr">Français</option>
+            <option value="ko">한국어</option>
           </select>
         </label>
         <label>
@@ -63,6 +67,9 @@
         </button>
         <button class="secondary" :disabled="loadingStory" @click="generateStory">
           {{ loadingStory ? '生成中...' : '生成校园故事' }}
+        </button>
+        <button class="secondary" :disabled="loadingStory" @click="generateStoryAndSave">
+          生成故事并入库
         </button>
       </div>
     </section>
@@ -158,6 +165,24 @@ const generateStory = async () => {
     const data = res?.data || res || {}
     storyText.value = data.story || ''
     if (data.sources) sources.value = data.sources
+  } finally {
+    loadingStory.value = false
+  }
+}
+
+const generateStoryAndSave = async () => {
+  loadingStory.value = true
+  try {
+    const comments = commentDraft.value.split('\n').map(item => item.trim()).filter(Boolean)
+    const res: any = await request.post('/ai/story/generate-save', {
+      spotName: form.spotName,
+      persona: form.persona,
+      language: form.language,
+      comments,
+      timeContext: form.environment,
+    })
+    const data = res?.data || res || {}
+    storyText.value = data.storyContent || ''
   } finally {
     loadingStory.value = false
   }

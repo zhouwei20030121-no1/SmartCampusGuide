@@ -102,6 +102,11 @@ public class CommentController {
         return Result.ok(commentService.getBySpotId(spot.getId()));
     }
 
+    @GetMapping("/user/{userId}")
+    public Result<List<Comment>> getByUser(@PathVariable Long userId) {
+        return Result.ok(commentService.getByUserId(userId));
+    }
+
     /**
      * 审核评论（后台管理用）
      */

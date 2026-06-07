@@ -74,12 +74,14 @@ public class LlmController {
     @GetMapping("/guide/generate")
     public Result<Map<String, Object>> generateGuide(
             @RequestParam String spotName,
-            @RequestParam(defaultValue = "新生") String persona) {
-        String text = aiGuideService.generateGuide(spotName, persona);
+            @RequestParam(defaultValue = "新生") String persona,
+            @RequestParam(defaultValue = "zh") String language) {
+        String text = aiGuideService.generateGuide(spotName, persona, language);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("spotName", spotName);
         result.put("text", text);
         result.put("persona", persona);
+        result.put("language", language);
         return Result.ok(result);
     }
 

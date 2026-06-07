@@ -109,6 +109,18 @@ public class CommentServiceImpl
         return this.list(wrapper);
     }
 
+    @Override
+    public List<Comment> getByUserId(Long userId) {
+        LambdaQueryWrapper<Comment> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Comment::getUserId, userId)
+                .orderByDesc(Comment::getId);
+        List<Comment> comments = this.list(wrapper);
+        for (Comment comment : comments) {
+            fillDisplayInfo(comment);
+        }
+        return comments;
+    }
+
     /**
      * 填充展示信息
      */

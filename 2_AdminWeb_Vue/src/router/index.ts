@@ -51,6 +51,12 @@ const routes = [
         meta: { title: 'AI动态讲解工作台' },
       },
       {
+        path: 'stories',
+        name: 'StoryManage',
+        component: () => import('@/views/ai/StoryManage.vue'),
+        meta: { title: '校园故事管理' },
+      },
+      {
         path: 'routes',
         name: 'RouteConfig',
         component: () => import('@/views/route/RouteConfig.vue'),

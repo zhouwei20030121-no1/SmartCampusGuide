@@ -14,6 +14,7 @@ import '../../features/home/home_page.dart';
 import '../../features/home/search_page.dart';
 import '../../features/bus/bus_schedule_page.dart';
 import '../../features/spot/spot_list_page.dart';
+import '../../features/story/campus_story_page.dart';
 
 class AppRouter {
   static const String busSchedule = '/bus';
@@ -28,6 +29,7 @@ class AppRouter {
   static const String aiVision = '/ai_vision';
   static const String routePlan = '/route';
   static const String checkin = '/checkin';
+  static const String campusStory = '/story';
   static const String search = '/search';
   static const String spotList = '/spot/list';
 
@@ -61,6 +63,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const RoutePage());
       case checkin:
         return MaterialPageRoute(builder: (_) => const CheckinPage());
+      case campusStory:
+        return MaterialPageRoute(builder: (_) => const CampusStoryPage());
       case busSchedule:
         return MaterialPageRoute(builder: (_) => const BusSchedulePage());
       case search:
