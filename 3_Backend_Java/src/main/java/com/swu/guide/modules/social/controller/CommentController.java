@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.swu.guide.common.Result;
 import com.swu.guide.modules.social.entity.Comment;
 import com.swu.guide.modules.social.service.CommentService;
+import com.swu.guide.modules.spot.entity.Spot;
+import com.swu.guide.modules.spot.service.SpotService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -14,9 +16,11 @@ import java.util.Map;
 public class CommentController {
 
     private final CommentService commentService;
+    private final SpotService spotService;
 
-    public CommentController(CommentService commentService) {
+    public CommentController(CommentService commentService, SpotService spotService) {
         this.commentService = commentService;
+        this.spotService = spotService;
     }
 
     /**
@@ -27,6 +31,34 @@ public class CommentController {
         comment.setStatus(0);
         comment.setId(null);
         commentService.save(comment);
+        return Result.ok(comment);
+    }
+
+    @PostMapping("/by-spot-name")
+    public Result<Comment> addBySpotName(@RequestBody Map<String, Object> params) {
+        String spotName = String.valueOf(params.getOrDefault("spotName", "")).trim();
+        if (spotName.isBlank()) {
+            return Result.fail("spotName 不能为空");
+        }
+        Spot spot = spotService.lambdaQuery()
+                .like(Spot::getName, spotName)
+                .last("limit 1")
+                .one();
+        if (spot == null) {
+            return Result.fail("景点不存在，无法评论");
+        }
+        Comment comment = new Comment();
+        comment.setId(null);
+        comment.setUserId(Long.valueOf(params.getOrDefault("userId", 1).toString()));
+        comment.setSpotId(spot.getId());
+        comment.setContent(String.valueOf(params.getOrDefault("content", "")).trim());
+        comment.setRating(Double.valueOf(params.getOrDefault("rating", 5).toString()));
+        comment.setStatus(0);
+        if (comment.getContent().isBlank()) {
+            return Result.fail("评论内容不能为空");
+        }
+        commentService.save(comment);
+        comment.setSpotName(spot.getName());
         return Result.ok(comment);
     }
 
@@ -56,6 +88,23 @@ public class CommentController {
     @GetMapping("/spot/{spotId}")
     public Result<List<Comment>> getBySpot(@PathVariable Long spotId) {
         return Result.ok(commentService.getBySpotId(spotId));
+    }
+
+    @GetMapping("/spot-name")
+    public Result<List<Comment>> getBySpotName(@RequestParam String spotName) {
+        Spot spot = spotService.lambdaQuery()
+                .like(Spot::getName, spotName)
+                .last("limit 1")
+                .one();
+        if (spot == null) {
+            return Result.ok(List.of());
+        }
+        return Result.ok(commentService.getBySpotId(spot.getId()));
+    }
+
+    @GetMapping("/user/{userId}")
+    public Result<List<Comment>> getByUser(@PathVariable Long userId) {
+        return Result.ok(commentService.getByUserId(userId));
     }
 
     /**

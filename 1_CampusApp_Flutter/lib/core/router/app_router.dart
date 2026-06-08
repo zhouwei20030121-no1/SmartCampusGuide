@@ -14,6 +14,10 @@ import '../../features/home/home_page.dart';
 import '../../features/home/search_page.dart';
 import '../../features/bus/bus_schedule_page.dart';
 import '../../features/spot/spot_list_page.dart';
+import '../../features/story/campus_story_page.dart';
+import '../../features/cache/offline_download_page.dart';
+// 🌟 1. 必须导入这个公告列表页
+import '../../features/announcement/announcement_list_page.dart';
 
 class AppRouter {
   static const String busSchedule = '/bus';
@@ -28,8 +32,12 @@ class AppRouter {
   static const String aiVision = '/ai_vision';
   static const String routePlan = '/route';
   static const String checkin = '/checkin';
+  static const String campusStory = '/story';
   static const String search = '/search';
   static const String spotList = '/spot/list';
+  static const String offlineDownload = '/offline_download';
+  // 🌟 2. 定义公告路由常量
+  static const String announcement = '/announcement';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -61,6 +69,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const RoutePage());
       case checkin:
         return MaterialPageRoute(builder: (_) => const CheckinPage());
+      case campusStory:
+        return MaterialPageRoute(builder: (_) => const CampusStoryPage());
       case busSchedule:
         return MaterialPageRoute(builder: (_) => const BusSchedulePage());
       case search:
@@ -72,6 +82,11 @@ class AppRouter {
         );
       case spotList:
         return MaterialPageRoute(builder: (_) => const SpotListPage());
+      case offlineDownload:
+        return MaterialPageRoute(builder: (_) => const OfflineDownloadPage());
+    // 🌟 3. 在这里添加 case
+      case announcement:
+        return MaterialPageRoute(builder: (_) => const AnnouncementListPage());
       default:
         return MaterialPageRoute(builder: (_) => const LoginPage());
     }

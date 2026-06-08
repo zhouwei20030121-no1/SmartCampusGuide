@@ -251,6 +251,7 @@
             <!-- 图片预览 -->
             <div v-if="formData.coverImage" class="image-preview-section">
               <el-image
+                :key="imageKey"
                 :src="getFullImageUrl(formData.coverImage)"
                 style="width: 200px; height: 150px"
                 fit="cover"
@@ -363,7 +364,7 @@
 
       </el-form>
 
-      <!-- 底部按钮 - 修改点1：去掉loading，改为disabled -->
+      <!-- 底部按钮 -->
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="dialogVisible = false">取消</el-button>
@@ -499,6 +500,9 @@ const submitLoading = ref(false)
 const uploadLoading = ref(false)
 const deletingImage = ref(false)
 
+// 图片刷新key
+const imageKey = ref(0)
+
 // 表格数据
 const tableData = ref<any[]>([])
 const searchKey = ref('')
@@ -565,16 +569,19 @@ const formRules: FormRules = {
 // 获取完整的图片URL
 const getFullImageUrl = (url: string) => {
   if (!url) return ''
-  
+
+  let fullUrl = ''
+
   if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url
+    fullUrl = url
+  } else if (url.startsWith('/')) {
+    fullUrl = 'http://localhost:8080' + url
+  } else {
+    fullUrl = url
   }
-  
-  if (url.startsWith('/')) {
-    return 'http://localhost:8080' + url
-  }
-  
-  return url
+
+  // 防缓存
+  return `${fullUrl}?t=${Date.now()}`
 }
 
 // 判断是否为本地图片
@@ -788,6 +795,9 @@ const handleUploadSuccess: UploadProps['onSuccess'] = async (response: any) => {
       }
     }
     
+    // 更新图片key强制刷新
+    imageKey.value++
+    
     // 更新表单中的图片URL
     formData.coverImage = imageUrl
     urlInput.value = imageUrl
@@ -845,9 +855,11 @@ const handleUrlInput = (value: string) => {
 const applyUrl = () => {
   if (urlInput.value && urlInput.value.trim()) {
     formData.coverImage = urlInput.value.trim()
+    imageKey.value++
     ElMessage.success('URL已应用')
   } else {
     formData.coverImage = ''
+    imageKey.value++
     ElMessage.warning('URL为空，已清空封面图')
   }
 }
@@ -878,6 +890,7 @@ const removeCoverImage = async () => {
   // 清除表单中的URL
   formData.coverImage = ''
   urlInput.value = ''
+  imageKey.value++
   
   // 如果是编辑模式，更新数据库
   if (isEdit.value && formData.id) {
@@ -890,11 +903,10 @@ const removeCoverImage = async () => {
   }
 }
 
-// 提交表单 - 修改点2：添加防重复提交
+// 提交表单
 const handleSubmit = async () => {
   if (!formRef.value) return
   
-  // 防止重复提交
   if (submitLoading.value) return
   
   await formRef.value.validate(async (valid) => {

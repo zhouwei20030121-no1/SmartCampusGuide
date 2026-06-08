@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 import '../../core/storage/local_storage.dart';
 import '../../core/network/network_client.dart';
 
@@ -37,7 +35,8 @@ class CacheService {
       }
       return false;
     } catch (e) {
-      debugPrint('缓存写入数据库报错啦: $e');
+      // 加了一行日志打印，如果再遇到离线保存失败，在控制台一眼就能看出来
+      print('缓存写入数据库报错啦: $e');
       return false;
     }
   }

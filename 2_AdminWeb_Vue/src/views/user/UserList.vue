@@ -10,9 +10,21 @@
 
       <el-table :data="tableData" border stripe v-loading="loading">
         <el-table-column prop="id" label="ID" width="60" />
-        <el-table-column prop="username" label="用户名" min-width="120" />
-        <el-table-column prop="campusId" label="学号/工号" min-width="120" />
+        <el-table-column prop="username" label="用户名" min-width="100" />
+        <el-table-column prop="realName" label="真实姓名" min-width="100" />
+        <el-table-column prop="campusId" label="学号/工号" min-width="110" />
         <el-table-column prop="phone" label="手机号" min-width="120" />
+        <el-table-column label="密码" width="140">
+          <template #default="{ row }">
+            <div class="password-cell">
+              <span>{{ showPassword[row.id] ? row.password : '********' }}</span>
+              <el-button size="small" link @click="togglePassword(row.id)" class="eye-btn">
+                <el-icon v-if="!showPassword[row.id]"><View /></el-icon>
+                <el-icon v-else><Hide /></el-icon>
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="role" label="角色" width="110">
           <template #default="{ row }">
             <el-tag :type="row.role === 1 ? 'danger' : (row.role === 2 ? 'warning' : 'info')">
@@ -46,7 +58,7 @@
           <el-input v-model="form.realName" placeholder="请输入真实姓名" />
         </el-form-item>
         <el-form-item label="密码">
-          <el-input v-model="form.password" type="password" placeholder="编辑时留空则不修改密码" />
+          <el-input v-model="form.password" type="password" placeholder="编辑时留空则不修改密码" show-password />
         </el-form-item>
         <el-form-item label="学号/工号">
           <el-input v-model="form.campusId" placeholder="请输入学号或工号" />
@@ -79,6 +91,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { View, Hide } from '@element-plus/icons-vue'
 import request from '@/api/request'
 
 const loading = ref(false)
@@ -97,6 +110,14 @@ const form = reactive({
   role: 0,
   status: 0
 })
+
+// 密码显示状态
+const showPassword = reactive<Record<number, boolean>>({})
+
+// 切换密码显示
+const togglePassword = (id: number) => {
+  showPassword[id] = !showPassword[id]
+}
 
 const getRoleName = (role: number) => {
   switch (role) {
@@ -170,4 +191,7 @@ onMounted(fetchUsers)
 <style scoped>
 .page-container { padding: 0; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }
+.password-cell { display: flex; align-items: center; gap: 4px; }
+.password-cell span { font-size: 13px; }
+.eye-btn { padding: 2px; }
 </style>

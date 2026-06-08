@@ -49,8 +49,11 @@ const navItems = [
   { label: '内容编辑', path: '/content' },
   { label: '路线管理', path: '/routes' },
   { label: '校车管理', path: '/bus' },
+  { label: 'AI工作台', path: '/ai-workbench' },
+  { label: '校园故事', path: '/stories' },
   { label: '评论审核', path: '/comments' },
   { label: '语料库', path: '/corpus' },
+  { label: '校园公告', path: '/announcement-manage' }, // 🌟 新增
 ]
 
 const getUsername = () => {

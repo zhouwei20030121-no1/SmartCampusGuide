@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-
+import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -83,6 +83,20 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
       body: Stack(
         fit: StackFit.expand,
         children: [
+          // 1. 底层背景：与主页保持一致的校园壁纸
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/bg.jpg',
+              fit: BoxFit.cover,
+            ),
+          ),
+          // 2. 磨砂遮罩
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
+              child: Container(color: Colors.black.withValues(alpha: 0.3)),
+            ),
+          ),
           // 相机预览
           _buildPreview(),
           // 扫描框
@@ -105,8 +119,11 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
   /// 摄像头或图片预览
   Widget _buildPreview() {
     if (_selectedImage != null) {
-      return SizedBox.expand(
-        child: Image.file(_selectedImage!, fit: BoxFit.cover),
+      return Center(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Image.file(_selectedImage!, fit: BoxFit.contain),
+        ),
       );
     }
 
@@ -140,7 +157,15 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
         ),
       );
     }
-    return CameraPreview(_cameraCtrl!);
+    return Center(
+      child: AspectRatio(
+        aspectRatio: 1 / _cameraCtrl!.value.aspectRatio,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: CameraPreview(_cameraCtrl!),
+        ),
+      ),
+    );
   }
 
   /// 扫描框
@@ -659,8 +684,13 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
       final xFile = await ctrl.takePicture();
       if (!mounted) return;
 
+      // 画面静止：将拍到的照片设为预览
+      setState(() {
+        _selectedImage = File(xFile.path);
+      });
+
       // 读取图片字节并转 base64
-      final bytes = await File(xFile.path).readAsBytes();
+      final bytes = await _selectedImage!.readAsBytes();
       final base64Image = base64.encode(bytes);
 
       // 调用视觉识别 API

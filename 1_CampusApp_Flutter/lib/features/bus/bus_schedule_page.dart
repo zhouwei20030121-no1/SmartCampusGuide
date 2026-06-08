@@ -186,13 +186,8 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Column(children: [
-                  Image.asset(
-                    'assets/images/bg.jpg',
-                    height: 80,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) =>
-                        const Icon(Icons.bus_alert, size: 48, color: AppTheme.primary),
-                  ),
+                  Image.asset('assets/images/bg.jpg', height: 80, fit: BoxFit.cover,
+                      errorBuilder: (_, __, _) => const Icon(Icons.bus_alert, size: 48, color: AppTheme.primary)),
                   const SizedBox(height: 14),
                   const Text('请登录微信小程序',
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppTheme.textMain)),
@@ -250,11 +245,8 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: Image.asset(
-              'assets/images/bg.jpg',
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(color: AppTheme.pageBg),
-            ),
+            child: Image.asset('assets/images/bg.jpg', fit: BoxFit.cover,
+              errorBuilder: (_, __, _) => Container(color: AppTheme.pageBg)),
           ),
           Positioned.fill(
             child: BackdropFilter(
@@ -416,7 +408,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppTheme.textMain)),
                       const SizedBox(height: 4),
-                      Text('$start - $end | 约$interval分钟/班', style: const TextStyle(fontSize: 12, color: AppTheme.darkBlue)),
+                      Text('$start - $end | 约${interval}分钟/班', style: const TextStyle(fontSize: 12, color: AppTheme.darkBlue)),
                     ]),
                   ),
                   Icon(expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: AppTheme.darkBlue),
@@ -669,39 +661,67 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
   List<dynamic> _mockData() {
     return [
       {
-        'lineId': 1, 'lineName': '八号门A线', 'directionType': 0,
-        'startTime': '07:30', 'endTime': '22:30', 'intervalMins': 15,
+        'lineId': 1, 'lineName': '1路', 'directionType': 1,
+        'startTime': '07:00', 'endTime': '22:30', 'intervalMins': 20,
+        'fareInfo': '校园一卡通 1元',
         'stations': {
-          '0': _s(['八号门动物医院','经济管理学院','资源环境学院','六号门','园艺园林学院','共青团花园','楠园','校史馆','第二十一教学楼','中心图书馆','第八教学楼','行署楼','田家炳教育书院','圆顶','五号门']),
-          '1': _s(['五号门','圆顶','田家炳教育书院','行署楼','第八教学楼','中心图书馆','第二十一教学楼','校史馆','楠园','共青团花园','园艺园林学院','六号门','资源环境学院','经济管理学院','八号门动物医院']),
+          '0': _s(['六号门','共青团花园','大礼堂','田家炳','五号门','田家炳','大礼堂','共青团花园','六号门']),
         }
       },
       {
-        'lineId': 2, 'lineName': '八号门B线', 'directionType': 0,
-        'startTime': '07:30', 'endTime': '22:30', 'intervalMins': 15,
+        'lineId': 2, 'lineName': '2路', 'directionType': 0,
+        'startTime': '07:00', 'endTime': '18:30', 'intervalMins': 20,
+        'fareInfo': '校园一卡通 1元',
         'stations': {
-          '0': _s(['八号门动物医院','经济管理学院','资源环境学院','六号门','园艺园林学院','共青团花园','楠园','校史馆','第二十一教学楼','中心图书馆','地理科学学院','心理学部','外国语学院','药学院','梅园','橘园','桃园','四新村博士公寓']),
+          '0': _s(['六号门','二号门','共青团花园','楠园','大礼堂','中心图书馆','八教','行署楼','田家炳','西师街','五号门']),
         }
       },
       {
-        'lineId': 3, 'lineName': '音乐学院A线', 'directionType': 0,
-        'startTime': '07:30', 'endTime': '22:30', 'intervalMins': 15,
+        'lineId': 3, 'lineName': '3路', 'directionType': 0,
+        'startTime': '07:00', 'endTime': '22:30', 'intervalMins': 8,
+        'fareInfo': '校园一卡通 1元',
         'stations': {
-          '0': _s(['音乐学院','第八教学楼','地理科学学院','心理学部','外国语学院','药学院','梅园','橘园','桃园','四新村博士公寓']),
+          '0': _s(['后山竹园','工程技术学院','二号门','大礼堂','地科院','五教','梅园','橘园','田家炳','禾丰楼','外办','北区幼儿园','五号门']),
         }
       },
       {
-        'lineId': 5, 'lineName': '新药化大楼A线(循环)', 'directionType': 1,
-        'startTime': '07:30', 'endTime': '22:30', 'intervalMins': 15,
+        'lineId': 4, 'lineName': '4路', 'directionType': 0,
+        'startTime': '07:00', 'endTime': '22:30', 'intervalMins': 8,
+        'fareInfo': '校园一卡通 1元',
         'stations': {
-          '0': _s(['药学院','梅园','橘园','桃园','四新村博士公寓','圆顶','田家炳教育书院','第八教学楼','地理科学学院','心理学部','药学院']),
+          '0': _s(['二号门','大礼堂','地科院','五教','梅园','橘园']),
         }
       },
       {
-        'lineId': 7, 'lineName': '蚕学宫线', 'directionType': 0,
-        'startTime': '07:30', 'endTime': '22:30', 'intervalMins': 15,
+        'lineId': 5, 'lineName': '5路', 'directionType': 0,
+        'startTime': '07:00', 'endTime': '22:30', 'intervalMins': 12,
+        'fareInfo': '校园一卡通 1元',
         'stations': {
-          '0': _s(['蚕学宫','楠园','竹园']),
+          '0': _s(['二号门','博物馆','十五教','八教','田家炳','禾丰楼','外办','北区幼儿园','五号门']),
+        }
+      },
+      {
+        'lineId': 6, 'lineName': '6路', 'directionType': 1,
+        'startTime': '07:00', 'endTime': '18:30', 'intervalMins': 15,
+        'fareInfo': '校园一卡通 1元',
+        'stations': {
+          '0': _s(['后山竹园','工程技术学院','二号门','大礼堂','地科院','五教','梅园','橘园','田家炳','八教','大礼堂','楠园第二食堂','二号门','竹园']),
+        }
+      },
+      {
+        'lineId': 7, 'lineName': '7路', 'directionType': 1,
+        'startTime': '07:00', 'endTime': '22:30', 'intervalMins': 8,
+        'fareInfo': '校园一卡通 1元',
+        'stations': {
+          '0': _s(['二号门','大礼堂','地科院','五教','梅园','橘园','田家炳','八教','大礼堂','楠园第二食堂','二号门']),
+        }
+      },
+      {
+        'lineId': 8, 'lineName': '8路', 'directionType': 1,
+        'startTime': '07:00', 'endTime': '22:30', 'intervalMins': 12,
+        'fareInfo': '校园一卡通 1元',
+        'stations': {
+          '0': _s(['音乐学院','八教','一号门','田家炳','橘园','梅园','外国语学院','音乐学院']),
         }
       },
     ];

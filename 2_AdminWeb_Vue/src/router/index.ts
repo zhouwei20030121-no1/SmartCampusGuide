@@ -45,6 +45,18 @@ const routes = [
         meta: { title: '讲解配置' },
       },
       {
+        path: 'ai-workbench',
+        name: 'AiGuideWorkbench',
+        component: () => import('@/views/ai/AiGuideWorkbench.vue'),
+        meta: { title: 'AI动态讲解工作台' },
+      },
+      {
+        path: 'stories',
+        name: 'StoryManage',
+        component: () => import('@/views/ai/StoryManage.vue'),
+        meta: { title: '校园故事管理' },
+      },
+      {
         path: 'routes',
         name: 'RouteConfig',
         component: () => import('@/views/route/RouteConfig.vue'),
@@ -63,10 +75,17 @@ const routes = [
         meta: { title: '语料库管理' },
       },
       {
+        path: 'announcement-manage',
+        name: 'AnnouncementManage',
+        component: () => import('@/views/announcement/AnnouncementManage.vue'),
+        meta: { title: '校园公告管理' },
+      },
+      {
         path: '/bus',
         name: 'Bus',
         component: () => import('@/views/bus/BusManage.vue'),
       }
+
     ],
   },
 ]

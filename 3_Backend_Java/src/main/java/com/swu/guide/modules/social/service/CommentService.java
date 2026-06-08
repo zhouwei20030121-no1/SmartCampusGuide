@@ -28,4 +28,6 @@ public interface CommentService extends IService<Comment> {
      * 根据景点ID获取已通过的评论（手机端用）
      */
     List<Comment> getBySpotId(Long spotId);
+
+    List<Comment> getByUserId(Long userId);
 }

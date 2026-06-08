@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:dio/dio.dart';
@@ -21,6 +22,27 @@ class NetworkClient {
 
   // 保存当前登录账号，方便个人中心页面拉取后端信息。
   static String currentAccount = '';
+  static int currentUserId = 1;
+  static String currentToken = '';
+
+  static void setLoginSession(String account, String token) {
+    currentAccount = account;
+    currentToken = token;
+    currentUserId = _parseUserIdFromJwt(token) ?? 1;
+  }
+
+  static int? _parseUserIdFromJwt(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      final normalized = base64Url.normalize(parts[1]);
+      final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)));
+      final sub = payload['sub']?.toString();
+      return sub == null ? null : int.tryParse(sub);
+    } catch (_) {
+      return null;
+    }
+  }
 
   static Dio _createDio(String primaryUrl, Duration timeout) {
     final d = Dio(

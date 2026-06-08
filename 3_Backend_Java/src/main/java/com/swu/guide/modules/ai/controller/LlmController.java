@@ -7,6 +7,10 @@ import com.swu.guide.modules.ai.mapper.PromptTemplateMapper;
 import com.swu.guide.modules.ai.service.AiGuideService;
 import com.swu.guide.modules.ai.service.AiSessionService;
 import com.swu.guide.modules.ai.service.LlmGatewayService;
+import com.swu.guide.modules.social.entity.Comment;
+import com.swu.guide.modules.social.service.CommentService;
+import com.swu.guide.modules.spot.entity.Spot;
+import com.swu.guide.modules.spot.service.SpotService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -19,13 +23,18 @@ public class LlmController {
     private final AiSessionService sessionService;
     private final PromptTemplateMapper promptMapper;
     private final AiGuideService aiGuideService;
+    private final CommentService commentService;
+    private final SpotService spotService;
 
     public LlmController(LlmGatewayService llmGateway, AiSessionService sessionService,
-                         PromptTemplateMapper promptMapper, AiGuideService aiGuideService) {
+                         PromptTemplateMapper promptMapper, AiGuideService aiGuideService,
+                         CommentService commentService, SpotService spotService) {
         this.llmGateway = llmGateway;
         this.sessionService = sessionService;
         this.promptMapper = promptMapper;
         this.aiGuideService = aiGuideService;
+        this.commentService = commentService;
+        this.spotService = spotService;
     }
 
     /**
@@ -65,16 +74,71 @@ public class LlmController {
     @GetMapping("/guide/generate")
     public Result<Map<String, Object>> generateGuide(
             @RequestParam String spotName,
-            @RequestParam(defaultValue = "新生") String persona) {
-        String text = aiGuideService.generateGuide(spotName, persona);
+            @RequestParam(defaultValue = "新生") String persona,
+            @RequestParam(defaultValue = "zh") String language) {
+        String text = aiGuideService.generateGuide(spotName, persona, language);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("spotName", spotName);
         result.put("text", text);
         result.put("persona", persona);
+        result.put("language", language);
         return Result.ok(result);
     }
 
     /** 清除会话 */
+    /** RAG + persona + language + voice dynamic guide generation. */
+    @PostMapping("/guide/dynamic")
+    public Result<Map<String, Object>> generateDynamicGuide(@RequestBody Map<String, Object> params) {
+        String spotName = String.valueOf(params.getOrDefault("spotName", params.getOrDefault("spot_name", "")));
+        if (spotName == null || spotName.isBlank()) {
+            return Result.fail("spotName 不能为空");
+        }
+        return Result.ok(aiGuideService.generateDynamicGuide(params));
+    }
+
+    /** Translate guide text between Chinese and English. */
+    @PostMapping("/guide/translate")
+    public Result<Map<String, Object>> translateGuide(@RequestBody Map<String, Object> params) {
+        if (params.get("text") == null || String.valueOf(params.get("text")).isBlank()) {
+            return Result.fail("text 不能为空");
+        }
+        return Result.ok(aiGuideService.translateGuide(params));
+    }
+
+    /** Generate a personalized campus story from spot facts and user comments. */
+    @PostMapping("/story/generate")
+    public Result<Map<String, Object>> generateStory(@RequestBody Map<String, Object> params) {
+        String spotName = String.valueOf(params.getOrDefault("spotName", params.getOrDefault("spot_name", "")));
+        if (spotName == null || spotName.isBlank()) {
+            return Result.fail("spotName 不能为空");
+        }
+        if (!params.containsKey("comments")) {
+            Long spotId = null;
+            if (params.get("spotId") != null) {
+                spotId = Long.valueOf(String.valueOf(params.get("spotId")));
+            } else {
+                Spot spot = spotService.lambdaQuery()
+                        .like(Spot::getName, spotName)
+                        .last("limit 1")
+                        .one();
+                if (spot != null) {
+                    spotId = spot.getId();
+                    params.put("spotId", spotId);
+                }
+            }
+            if (spotId != null) {
+            List<String> comments = commentService.getBySpotId(spotId).stream()
+                    .map(Comment::getContent)
+                    .filter(Objects::nonNull)
+                    .filter(item -> !item.isBlank())
+                    .limit(8)
+                    .toList();
+            params.put("comments", comments);
+            }
+        }
+        return Result.ok(aiGuideService.generateStory(params));
+    }
+
     @DeleteMapping("/session/{sessionId}")
     public Result<Void> clearSession(@PathVariable String sessionId) {
         sessionService.clear(sessionId);
