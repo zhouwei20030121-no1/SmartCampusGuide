@@ -41,6 +41,9 @@ _BUILDING_ALIASES = {
     "袁隆平像": "袁隆平雕像",
     "袁隆平雕塑": "袁隆平雕像",
 }
+_CANONICAL_DESCRIPTIONS = {
+    "袁隆平雕像": "“袁隆平雕像”位于西南大学校园内，用以纪念学校杰出校友袁隆平先生。袁隆平是世界杂交水稻研究的重要开拓者、中国工程院院士，雕像承载着学校农学传统、校友情感和科学报国精神。",
+}
 _VISIBLE_TEXT_HINTS = {
     "中心图书馆": "中心图书馆",
     "中国共产党西南大学委员会": "行署楼A栋",
@@ -76,6 +79,11 @@ def _canonical_from_visible_text(visible_text: str) -> str:
         if keyword in text:
             return building_name
     return ""
+
+
+def _canonical_building_name(building_name: str) -> str:
+    normalized = (building_name or "").strip()
+    return _BUILDING_ALIASES.get(normalized, normalized)
 
 
 class VisionService:
@@ -261,10 +269,27 @@ class VisionService:
                             f"{_CLIP_AUTO_ACCEPT_THRESHOLD:.2f}"
                             f"{'' if margin is None else f'，与第二名差距 {margin:.4f}'}，直接采用图像向量库结果。"
                         )
+                        raw_title = metadata.get("title", "")
+                        canonical_title = _canonical_building_name(raw_title)
+                        description = (
+                            metadata.get("answer", "")
+                            or _CANONICAL_DESCRIPTIONS.get(canonical_title, "")
+                        )
+                        if raw_title != canonical_title:
+                            diagnostics["canonicalized"] = {
+                                "raw_title": raw_title,
+                                "canonical_title": canonical_title,
+                            }
+                            _audit(
+                                request_id,
+                                "clip_title_canonicalized",
+                                raw_title=raw_title,
+                                canonical_title=canonical_title,
+                            )
                         result = {
                             "recognized": True,
-                            "building_name": metadata["title"],
-                            "description": metadata["answer"],
+                            "building_name": canonical_title,
+                            "description": description,
                             "request_id": request_id,
                             "match_source": "clip",
                             "clip_top1_distance": round(float(dist), 6),
@@ -625,8 +650,7 @@ class VisionService:
 
         返回 (建筑名, 描述, 是否识别成功)。
         """
-        normalized_name = (building_name or "").strip()
-        normalized_name = _BUILDING_ALIASES.get(normalized_name, normalized_name)
+        normalized_name = _canonical_building_name(building_name)
         debug_info: dict[str, Any] = {
             "raw_building_name": building_name,
             "normalized_name": normalized_name,
