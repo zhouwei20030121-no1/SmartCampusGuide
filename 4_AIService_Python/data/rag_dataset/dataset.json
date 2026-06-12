@@ -823,7 +823,7 @@
     },
     {
         "building_name": "行署楼A栋",
-        "description": "“行署楼”，因建筑为原川东行署旧址所在地而命名。本楼分A、B两栋，落成于1951年，建筑面积分别为3309㎡和1996㎡，现为学校党政领导和部分机关部门使用。",
+        "description": "“行署楼”，因建筑为原川东行署旧址所在地而命名。本楼分A、B两栋，落成于1951年，建筑面积分别为3309㎡和1996㎡，现为学校党政领导和部分机关部门使用。识别提示：若图片中出现“中国共产党西南大学委员会”“西南大学纪律检查委员会”等学校级机关牌匾，可优先关联为行署楼A栋；单独出现“纪律检查委员会”不能作为充分依据。",
         "image_path": "data/rag_dataset/images/行署楼A栋_2.jpg",
         "source_url": "https://www.swu.edu.cn/info/1153/2336.htm"
     },
@@ -1194,8 +1194,8 @@
         "source_url": "https://www.swu.edu.cn/info/1155/27618.htm"
     },
     {
-        "building_name": "袁隆平",
-        "description": "",
+        "building_name": "袁隆平雕像",
+        "description": "“袁隆平雕像”位于西南大学校园内，用以纪念学校杰出校友袁隆平先生。袁隆平是世界杂交水稻研究的重要开拓者、中国工程院院士，雕像承载着学校农学传统、校友情感和科学报国精神。",
         "image_path": "data/rag_dataset/images/袁隆平_2.jpg",
         "source_url": "https://www.swu.edu.cn/info/1155/27619.htm"
     }
