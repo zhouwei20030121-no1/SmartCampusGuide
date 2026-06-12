@@ -1,8 +1,18 @@
+// lib/features/location/location_service.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../../core/network/network_client.dart';
 
 class LocationService extends ChangeNotifier {
+  // 1. 私有化构造函数，切断外部通过 () 创建独立新实例的途径
+  LocationService._internal();
+
+  // 2. 保存全局唯一的单例实例
+  static final LocationService _instance = LocationService._internal();
+
+  // 3. 工厂构造函数，让全局所有的 LocationService() 调用都指向同一个单例
+  factory LocationService() => _instance;
+
   double _latitude = 29.820;
   double _longitude = 106.421;
   bool _isTracking = false;
@@ -11,11 +21,29 @@ class LocationService extends ChangeNotifier {
   String _nearbySpot = '';
   double _distance = 999;
 
+  // 4. 引入手动操作标记位，防止定时器与地图手动点击发生冲突
+  bool _isManualMode = false;
+
   // 公开属性
   double get latitude => _latitude;
-  set latitude(double v) { _latitude = v; notifyListeners(); }
+  set latitude(double v) {
+    // 5. 核心拦截：如果是模拟器返回的 0.0 错误脏数据，直接丢弃，不予更新
+    if (v == 0.0) return;
+    _latitude = v;
+    _isManualMode = true; // 6. 标记为用户手动控点模式，暂停自动乱跑模拟
+    _simulateProximity(); // 7. 立即在本地触发一次距离检测，让首页和讲解页秒级同步
+    notifyListeners();
+  }
+
   double get longitude => _longitude;
-  set longitude(double v) { _longitude = v; notifyListeners(); }
+  set longitude(double v) {
+    if (v == 0.0) return; // 8. 拦截 0.0 脏数据
+    _longitude = v;
+    _isManualMode = true;
+    _simulateProximity();
+    notifyListeners();
+  }
+
   bool get isTracking => _isTracking;
   String? get triggeredSpot => _triggeredSpot;
   String get geoStatus => _geoStatus;
@@ -27,8 +55,10 @@ class LocationService extends ChangeNotifier {
 
   /// 启动定位与心跳（每5秒向Java后端发送坐标）
   Future<void> startTracking() async {
+    if (_isTracking) return; // 9. 防止重复启动创建多个 Timer 造成内存泄漏
     _isTracking = true;
     _geoStatus = '定位中...';
+    _isManualMode = false; // 10. 启动时默认恢复为队友写的自动模拟行走模式
     notifyListeners();
 
     // 模拟GPS轨迹（实际应接入高德定位SDK）
@@ -47,9 +77,13 @@ class LocationService extends ChangeNotifier {
   }
 
   void _simulateMove(Timer t) {
+    // 11. 如果用户在智能讲解页手动点击了地图或者高德POI，就跳过定时器的自动位移，避免位置被扯回原点
+    if (_isManualMode) return;
+
     // 在25教和樟树林之间缓慢移动（模拟用户行走）
     _latitude += (29.820 - _latitude) * 0.3 + (DateTime.now().second % 2 == 0 ? 0.0003 : -0.0002);
     _longitude += (106.421 - _longitude) * 0.3 + (DateTime.now().second % 3 == 0 ? 0.0002 : -0.0001);
+    _simulateProximity(); // 12. 模拟移动时也同步进行本地账目计算
     notifyListeners();
   }
 
@@ -57,7 +91,7 @@ class LocationService extends ChangeNotifier {
     if (!_isTracking) return;
     try {
       final res = await NetworkClient.dio.post('/api/location/heartbeat', data: {
-        'userId': 'demo_user',
+        'userId': NetworkClient.currentUserId, // 13. 规范化使用统一的登录用户ID
         'lng': _longitude,
         'lat': _latitude,
       });
@@ -111,6 +145,7 @@ class LocationService extends ChangeNotifier {
 
   void clearTrigger() {
     _triggeredSpot = null;
+    _isManualMode = false;
     notifyListeners();
   }
 
