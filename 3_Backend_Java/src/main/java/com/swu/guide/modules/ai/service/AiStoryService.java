@@ -1,6 +1,7 @@
 package com.swu.guide.modules.ai.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.swu.guide.modules.ai.entity.AiStory;
@@ -10,6 +11,7 @@ import com.swu.guide.modules.spot.service.SpotService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -24,6 +26,30 @@ public class AiStoryService extends ServiceImpl<AiStoryMapper, AiStory> {
     }
 
     public Page<AiStory> searchStories(String keyword, Long spotId, String language, int page, int size) {
+        Page<AiStory> result = queryStories(keyword, spotId, language, page, size);
+
+        if (result.getRecords().isEmpty() && StringUtils.hasText(language)) {
+            result = queryStories(keyword, spotId, "", page, size);
+        }
+        if (result.getRecords().isEmpty() && spotId != null && StringUtils.hasText(keyword)) {
+            result = queryStories("", spotId, language, page, size);
+        }
+        if (result.getRecords().isEmpty() && spotId != null && StringUtils.hasText(keyword) && StringUtils.hasText(language)) {
+            result = queryStories("", spotId, "", page, size);
+        }
+        if (result.getRecords().isEmpty() && spotId != null && StringUtils.hasText(keyword)) {
+            result = queryStories(keyword, null, language, page, size);
+        }
+        if (result.getRecords().isEmpty() && spotId != null && StringUtils.hasText(keyword) && StringUtils.hasText(language)) {
+            result = queryStories(keyword, null, "", page, size);
+        }
+
+        result.getRecords().forEach(this::fillSpotName);
+        return result;
+    }
+
+    private Page<AiStory> queryStories(String keyword, Long spotId, String language, int page, int size) {
+        String effectiveKeyword = expandAlias(keyword);
         LambdaQueryWrapper<AiStory> wrapper = new LambdaQueryWrapper<>();
         if (spotId != null) {
             wrapper.eq(AiStory::getSpotId, spotId);
@@ -31,13 +57,11 @@ public class AiStoryService extends ServiceImpl<AiStoryMapper, AiStory> {
         if (StringUtils.hasText(language)) {
             wrapper.eq(AiStory::getLanguage, language);
         }
-        if (StringUtils.hasText(keyword)) {
-            wrapper.and(w -> w.like(AiStory::getTitle, keyword).or().like(AiStory::getStoryContent, keyword));
+        if (StringUtils.hasText(effectiveKeyword)) {
+            wrapper.and(w -> w.like(AiStory::getTitle, effectiveKeyword).or().like(AiStory::getStoryContent, effectiveKeyword));
         }
         wrapper.orderByDesc(AiStory::getUpdateTime).orderByDesc(AiStory::getId);
-        Page<AiStory> result = page(new Page<>(page, size), wrapper);
-        result.getRecords().forEach(this::fillSpotName);
-        return result;
+        return page(new Page<>(page, size), wrapper);
     }
 
     public AiStory getDetail(Long id) {
@@ -83,14 +107,30 @@ public class AiStoryService extends ServiceImpl<AiStoryMapper, AiStory> {
             return Long.valueOf(spotId.toString());
         }
         if (!StringUtils.hasText(spotName)) return null;
-        Spot spot = spotService.lambdaQuery().like(Spot::getName, spotName).last("limit 1").one();
+        String effectiveSpotName = expandAlias(spotName);
+
+        QueryWrapper<Spot> wrapper = new QueryWrapper<>();
+        wrapper.like("name", effectiveSpotName).last("limit 1");
+        List<Spot> spots = spotService.list(wrapper);
+        Spot spot = spots.isEmpty() ? null : spots.get(0);
         if (spot == null) {
+            String normalizedSpotName = normalizeName(effectiveSpotName);
             spot = spotService.list().stream()
-                    .filter(item -> namesMatch(spotName, item.getName()))
+                    .filter(item -> namesMatch(normalizedSpotName, normalizeName(item.getName())))
                     .findFirst()
                     .orElse(null);
         }
         return spot == null ? null : spot.getId();
+    }
+
+    private String expandAlias(String name) {
+        String normalized = normalizeName(name);
+        return switch (normalized) {
+            case "\u4e2d\u56fe", "\u56fe\u4e66\u9986", "\u4e2d\u5fc3\u9986" -> "\u4e2d\u5fc3\u56fe\u4e66\u9986";
+            case "\u516b\u6559", "8\u6559", "\u7b2c\u516b\u6559\u5b66\u697c" -> "\u7b2c\u516b\u6559\u5b66\u697c";
+            case "\u7530\u5bb6\u70b3", "\u7530\u5bb6\u70b3\u4e66\u9662" -> "\u7530\u5bb6\u70b3\u6559\u80b2\u4e66\u9662";
+            default -> name;
+        };
     }
 
     private void fillSpotName(AiStory story) {
@@ -102,23 +142,28 @@ public class AiStoryService extends ServiceImpl<AiStoryMapper, AiStory> {
     }
 
     private boolean namesMatch(String left, String right) {
-        String a = normalizeName(left);
-        String b = normalizeName(right);
-        return a.contains(b) || b.contains(a);
+        if (!StringUtils.hasText(left) || !StringUtils.hasText(right)) {
+            return false;
+        }
+        return left.contains(right) || right.contains(left);
     }
 
     private String normalizeName(String name) {
         if (name == null) return "";
         return name
-                .replaceAll("[\\s　]", "")
-                .replace("西南大学", "")
-                .replace("北碚校区", "")
-                .replaceAll("[()（）]", "")
+                .replaceAll("\\s+", "")
+                .replace("\u3000", "")
+                .replace("\u897f\u5357\u5927\u5b66", "")
+                .replace("\u5317\u789a\u6821\u533a", "")
+                .replace("(", "")
+                .replace(")", "")
+                .replace("\uFF08", "")
+                .replace("\uFF09", "")
                 .toLowerCase();
     }
 
     private String defaultTitle(String spotName, Map<String, Object> params) {
         String language = String.valueOf(params.getOrDefault("language", "zh"));
-        return language.equals("zh") ? spotName + "的校园故事" : "Campus story of " + spotName;
+        return language.equals("zh") ? spotName + "\u7684\u6821\u56ed\u6545\u4e8b" : "Campus story of " + spotName;
     }
 }

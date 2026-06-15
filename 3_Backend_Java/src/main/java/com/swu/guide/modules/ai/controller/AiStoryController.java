@@ -29,6 +29,9 @@ public class AiStoryController {
         if (spotId == null && !spotName.isBlank()) {
             spotId = storyService.resolveSpotId(Map.of(), spotName);
         }
+        if (keyword.isBlank() && !spotName.isBlank()) {
+            keyword = spotName;
+        }
         return Result.ok(storyService.searchStories(keyword, spotId, language, page, size));
     }
 

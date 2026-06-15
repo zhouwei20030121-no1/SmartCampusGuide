@@ -1,13 +1,28 @@
 import base64
+import hashlib
 import json
 import logging
 from pathlib import Path
+import time
 from typing import Any
+from uuid import uuid4
 
 import httpx
 from config import settings
 
 logger = logging.getLogger(__name__)
+audit_logger = logging.getLogger("vision_debug")
+
+_AI_SERVICE_ROOT = Path(__file__).resolve().parents[2]
+_VISION_DEBUG_LOG = _AI_SERVICE_ROOT / "vision_debug.log"
+
+if not audit_logger.handlers:
+    _VISION_DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(_VISION_DEBUG_LOG, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+    audit_logger.addHandler(handler)
+    audit_logger.setLevel(logging.INFO)
+    audit_logger.propagate = False
 
 
 _UNRECOGNIZED_RESULT = {
@@ -18,6 +33,57 @@ _UNRECOGNIZED_RESULT = {
 }
 
 _DENYLIST_NAMES = {"光华楼"}
+_CLIP_REVIEW_THRESHOLD = 0.45
+_CLIP_AUTO_ACCEPT_THRESHOLD = 0.18
+_CLIP_AUTO_ACCEPT_MARGIN = 0.12
+_BUILDING_ALIASES = {
+    "袁隆平": "袁隆平雕像",
+    "袁隆平像": "袁隆平雕像",
+    "袁隆平雕塑": "袁隆平雕像",
+}
+_CANONICAL_DESCRIPTIONS = {
+    "袁隆平雕像": "“袁隆平雕像”位于西南大学校园内，用以纪念学校杰出校友袁隆平先生。袁隆平是世界杂交水稻研究的重要开拓者、中国工程院院士，雕像承载着学校农学传统、校友情感和科学报国精神。",
+}
+_VISIBLE_TEXT_HINTS = {
+    "中心图书馆": "中心图书馆",
+    "中国共产党西南大学委员会": "行署楼A栋",
+    "西南大学纪律检查委员会": "行署楼A栋",
+    "中国共产党西南大学纪律检查委员会": "行署楼A栋",
+}
+
+
+def _audit(request_id: str, event: str, **payload: Any) -> None:
+    """Write a structured vision debug event without storing raw image data."""
+    safe_payload = {"request_id": request_id, "event": event, **payload}
+    try:
+        audit_logger.info(json.dumps(safe_payload, ensure_ascii=False, default=str))
+    except Exception as exc:
+        logger.warning("写入视觉识别调试日志失败: %s", exc)
+
+
+def _normalize_image_base64(image_base64: str) -> str:
+    value = (image_base64 or "").strip()
+    if value.startswith("data:image") and "," in value:
+        return value.split(",", 1)[1].strip()
+    return value
+
+
+def _with_debug(result: dict[str, Any], diagnostics: dict[str, Any]) -> dict[str, Any]:
+    result["debug"] = diagnostics
+    return result
+
+
+def _canonical_from_visible_text(visible_text: str) -> str:
+    text = visible_text or ""
+    for keyword, building_name in _VISIBLE_TEXT_HINTS.items():
+        if keyword in text:
+            return building_name
+    return ""
+
+
+def _canonical_building_name(building_name: str) -> str:
+    normalized = (building_name or "").strip()
+    return _BUILDING_ALIASES.get(normalized, normalized)
 
 
 class VisionService:
@@ -53,8 +119,67 @@ class VisionService:
             self._clip_failed = True
             logger.warning("CLIP 模型加载失败，将仅使用 Qwen-VL: %s", e)
 
-    async def recognize_building(self, image_base64: str) -> dict[str, Any]:
+    async def recognize_building(
+        self,
+        image_base64: str,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
         """识别校园建筑图片，优先调用 CLIP 图像匹配，再调用 Qwen VL，无 Key 时回退 mock"""
+
+        request_id = request_id or f"vision_{uuid4().hex[:10]}"
+        started_at = time.perf_counter()
+        image_base64 = _normalize_image_base64(image_base64)
+        visual_candidates: list[dict[str, Any]] = []
+        image_bytes: bytes | None = None
+        diagnostics: dict[str, Any] = {
+            "request_id": request_id,
+            "model": self._model,
+            "vision_base_url": self._base_url,
+            "has_api_key": bool(self._api_key),
+            "clip_review_threshold": _CLIP_REVIEW_THRESHOLD,
+            "clip_auto_accept_threshold": _CLIP_AUTO_ACCEPT_THRESHOLD,
+            "clip_auto_accept_margin": _CLIP_AUTO_ACCEPT_MARGIN,
+        }
+
+        _audit(
+            request_id,
+            "request_received",
+            base64_length=len(image_base64),
+            model=self._model,
+            vision_base_url=self._base_url,
+            has_api_key=bool(self._api_key),
+        )
+
+        try:
+            image_bytes = base64.b64decode(image_base64, validate=True)
+            image_sha = hashlib.sha256(image_bytes).hexdigest()[:16]
+            diagnostics["image"] = {
+                "base64_length": len(image_base64),
+                "byte_length": len(image_bytes),
+                "sha256": image_sha,
+            }
+            _audit(
+                request_id,
+                "image_decoded",
+                byte_length=len(image_bytes),
+                sha256=image_sha,
+            )
+        except Exception as exc:
+            _audit(request_id, "image_decode_failed", error=str(exc))
+            diagnostics["decision"] = "图片 base64 解码失败，未进入 CLIP/Qwen 识别。"
+            result = {
+                **_UNRECOGNIZED_RESULT,
+                "request_id": request_id,
+                "reason": f"图片 base64 解码失败：{exc}",
+            }
+            _with_debug(result, diagnostics)
+            _audit(
+                request_id,
+                "final_result",
+                elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+                result=result,
+            )
+            return result
 
         # 1. 真正的 Visual RAG: 图像向量直接匹配（懒加载 CLIP 模型）
         self._ensure_clip_loaded()
@@ -62,8 +187,19 @@ class VisionService:
             try:
                 import io
                 from PIL import Image
-                image_bytes = base64.b64decode(image_base64)
                 img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+                _audit(
+                    request_id,
+                    "clip_image_loaded",
+                    image_width=img.width,
+                    image_height=img.height,
+                    image_mode=img.mode,
+                )
+                diagnostics.setdefault("image", {}).update({
+                    "width": img.width,
+                    "height": img.height,
+                    "mode": img.mode,
+                })
                 
                 # 提取用户上传图片的视觉特征向量
                 img_embedding = self._clip_model.encode(img, normalize_embeddings=True).tolist()
@@ -71,36 +207,198 @@ class VisionService:
                 # 在 ChromaDB 中进行视觉相似度检索
                 results = self._image_collection.query(
                     query_embeddings=[img_embedding],
-                    n_results=1,
+                    n_results=5,
                     include=["metadatas", "distances"]
                 )
                 
                 if results['distances'] and results['distances'][0]:
+                    for metadata, dist in zip(results['metadatas'][0], results['distances'][0]):
+                        visual_candidates.append({
+                            "title": metadata.get("title", ""),
+                            "distance": round(float(dist), 4),
+                            "source_file": metadata.get("source_file", ""),
+                            "category": metadata.get("category", ""),
+                        })
+                    diagnostics["clip"] = {
+                        "available": True,
+                        "review_threshold": _CLIP_REVIEW_THRESHOLD,
+                        "auto_accept_threshold": _CLIP_AUTO_ACCEPT_THRESHOLD,
+                        "auto_accept_margin": _CLIP_AUTO_ACCEPT_MARGIN,
+                        "top_candidates": visual_candidates,
+                    }
                     dist = results['distances'][0][0]
+                    second_dist = (
+                        results['distances'][0][1]
+                        if len(results['distances'][0]) > 1
+                        else None
+                    )
+                    margin = (
+                        float(second_dist) - float(dist)
+                        if second_dist is not None
+                        else None
+                    )
                     metadata = results['metadatas'][0][0]
                     logger.info("CLIP Top-1 匹配: %s (距离: %s)", metadata['title'], dist)
+                    _audit(
+                        request_id,
+                        "clip_candidates",
+                        top_candidates=visual_candidates,
+                        top1_title=metadata.get("title", ""),
+                        top1_distance=round(float(dist), 6),
+                        second_distance=round(float(second_dist), 6) if second_dist is not None else None,
+                        margin=round(margin, 6) if margin is not None else None,
+                        review_threshold=_CLIP_REVIEW_THRESHOLD,
+                        auto_accept_threshold=_CLIP_AUTO_ACCEPT_THRESHOLD,
+                        auto_accept_margin=_CLIP_AUTO_ACCEPT_MARGIN,
+                    )
                     
-                    # 适当放宽阈值至 0.45
-                    if dist < 0.45:
-                        logger.info("[MATCH] 距离小于 0.45，判定为同一建筑！")
-                        return {
+                    auto_accept = (
+                        float(dist) <= _CLIP_AUTO_ACCEPT_THRESHOLD
+                        and (
+                            margin is None
+                            or margin >= _CLIP_AUTO_ACCEPT_MARGIN
+                        )
+                    )
+                    if auto_accept:
+                        logger.info(
+                            "[MATCH] 距离 %.4f 且候选间距足够，判定为高置信同一目标！",
+                            float(dist),
+                        )
+                        diagnostics["decision"] = (
+                            f"CLIP Top-1 距离 {float(dist):.4f} 小于阈值 "
+                            f"{_CLIP_AUTO_ACCEPT_THRESHOLD:.2f}"
+                            f"{'' if margin is None else f'，与第二名差距 {margin:.4f}'}，直接采用图像向量库结果。"
+                        )
+                        raw_title = metadata.get("title", "")
+                        canonical_title = _canonical_building_name(raw_title)
+                        description = (
+                            metadata.get("answer", "")
+                            or _CANONICAL_DESCRIPTIONS.get(canonical_title, "")
+                        )
+                        if raw_title != canonical_title:
+                            diagnostics["canonicalized"] = {
+                                "raw_title": raw_title,
+                                "canonical_title": canonical_title,
+                            }
+                            _audit(
+                                request_id,
+                                "clip_title_canonicalized",
+                                raw_title=raw_title,
+                                canonical_title=canonical_title,
+                            )
+                        result = {
                             "recognized": True,
-                            "building_name": metadata["title"],
-                            "description": metadata["answer"],
+                            "building_name": canonical_title,
+                            "description": description,
+                            "request_id": request_id,
+                            "match_source": "clip",
+                            "clip_top1_distance": round(float(dist), 6),
+                            "reason": diagnostics["decision"],
                         }
+                        _with_debug(result, diagnostics)
+                        _audit(
+                            request_id,
+                            "clip_match",
+                            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+                            result=result,
+                        )
+                        _audit(
+                            request_id,
+                            "final_result",
+                            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+                            result=result,
+                        )
+                        return result
                     else:
-                        logger.info("[MISS] 距离大于 0.45，转交视觉模型进行识别...")
+                        logger.info(
+                            "[REVIEW] CLIP 未达到自动采纳条件，转交视觉模型复核..."
+                        )
+                        diagnostics["decision"] = (
+                            f"CLIP Top-1 距离 {float(dist):.4f}"
+                            f"{'' if margin is None else f'，与第二名差距 {margin:.4f}'}，"
+                            "未达到自动采纳条件，继续调用 Qwen-VL。"
+                        )
+                        _audit(
+                            request_id,
+                            "clip_needs_review",
+                            top1_title=metadata.get("title", ""),
+                            top1_distance=round(float(dist), 6),
+                            second_distance=round(float(second_dist), 6) if second_dist is not None else None,
+                            margin=round(margin, 6) if margin is not None else None,
+                            auto_accept_threshold=_CLIP_AUTO_ACCEPT_THRESHOLD,
+                            auto_accept_margin=_CLIP_AUTO_ACCEPT_MARGIN,
+                        )
+                else:
+                    diagnostics["clip"] = {
+                        "available": True,
+                        "review_threshold": _CLIP_REVIEW_THRESHOLD,
+                        "auto_accept_threshold": _CLIP_AUTO_ACCEPT_THRESHOLD,
+                        "auto_accept_margin": _CLIP_AUTO_ACCEPT_MARGIN,
+                        "top_candidates": [],
+                    }
+                    diagnostics["decision"] = "CLIP 图像向量库没有返回候选，继续调用 Qwen-VL。"
+                    _audit(request_id, "clip_empty_result")
             except Exception as e:
                 logger.warning("CLIP 匹配异常: %s", e)
+                diagnostics["clip"] = {"available": False, "error": str(e)}
+                diagnostics["decision"] = "CLIP 图像检索异常，继续调用 Qwen-VL。"
+                _audit(request_id, "clip_error", error=str(e))
+        else:
+            diagnostics["clip"] = {
+                "available": False,
+                "clip_loaded": self._clip_loaded,
+                "clip_failed": self._clip_failed,
+                "has_clip_model": bool(self._clip_model),
+                "has_image_collection": bool(self._image_collection),
+            }
+            diagnostics["decision"] = "CLIP 图像向量库不可用，继续调用 Qwen-VL。"
+            _audit(
+                request_id,
+                "clip_unavailable",
+                clip_loaded=self._clip_loaded,
+                clip_failed=self._clip_failed,
+                has_clip_model=bool(self._clip_model),
+                has_image_collection=bool(self._image_collection),
+            )
 
         # 2. 如果没有高度匹配的原图，则退化使用 Qwen-VL 大模型“裸眼”识别
         if self._api_key:
             try:
-                return await self._recognize_with_qwen_vl(image_base64)
+                result = await self._recognize_with_qwen_vl(
+                    image_base64,
+                    visual_candidates,
+                    request_id=request_id,
+                )
+                result["request_id"] = request_id
+                result.setdefault("match_source", "qwen_vl")
+                qwen_debug = result.pop("debug", {})
+                diagnostics.update(qwen_debug)
+                result["debug"] = diagnostics
+                _audit(
+                    request_id,
+                    "final_result",
+                    elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+                    result=result,
+                )
+                return result
             except Exception as exc:
                 logger.warning("视觉模型调用失败，返回未识别结果：%s", exc)
+                diagnostics["qwen"] = {"called": True, "error": str(exc)}
+                diagnostics["decision"] = "Qwen-VL 调用失败，返回未识别结果。"
+                _audit(request_id, "qwen_call_failed", error=str(exc))
 
-        return self._mock_recognize()
+        result = {
+            **self._mock_recognize(),
+            "request_id": request_id,
+        }
+        _with_debug(result, diagnostics)
+        _audit(
+            request_id,
+            "final_result",
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
+            result=result,
+        )
+        return result
 
     async def scene_qa(self, image_base64: str, question: str) -> str:
         """基于图像的场景问答"""
@@ -113,7 +411,12 @@ class VisionService:
 
         return self._mock_scene_qa(question)
 
-    async def _recognize_with_qwen_vl(self, image_base64: str) -> dict[str, Any]:
+    async def _recognize_with_qwen_vl(
+        self,
+        image_base64: str,
+        visual_candidates: list[dict[str, Any]] | None = None,
+        request_id: str = "",
+    ) -> dict[str, Any]:
         """调用 Qwen VL 识别建筑"""
 
         # 动态加载所有合法建筑名作为候选库
@@ -125,21 +428,63 @@ class VisionService:
                     data = json.load(f)
                     candidate_names = list(set(d.get("building_name", "") for d in data if d.get("building_name")))
                     candidates_str = "、".join(candidate_names)
+                    _audit(
+                        request_id,
+                        "candidate_library_loaded",
+                        candidate_count=len(candidate_names),
+                    )
         except Exception as e:
             logger.warning("无法加载候选建筑列表: %s", e)
+            _audit(request_id, "candidate_library_error", error=str(e))
 
-        prompt_text = (
-            '请识别这张图片中的西南大学校园建筑。\n'
-            + (f'【重要提示】以下是所有西南大学合法的建筑名称（候选库）：{candidates_str}\n\n' if candidates_str else '') +
-            '要求：\n'
-            '1. 只有当图片中出现清晰的西南大学校园建筑、校门、楼宇铭牌，且能和候选库明确对应时，才允许返回建筑名称。\n'
-            '2. 如果图片是瀑布、山水、人物、截图、普通街景、非校园建筑，或者没有可读楼名/明显校园建筑特征，必须返回"未能识别"，禁止猜测。\n'
-            '3. 如果候选库中没有能对上号的建筑，必须返回"未能识别"。\n'
-            '4. 给出一段50-100字的简要介绍。\n'
-            '请严格按以下JSON格式回复，不要输出其他内容：\n'
-            '{"building_name": "建筑名称", "description": "建筑介绍"}'
+        visual_candidates_text = ""
+        if visual_candidates:
+            items = [
+                f"{idx + 1}. {item['title']}（图像距离 {item['distance']}）"
+                for idx, item in enumerate(visual_candidates)
+                if item.get("title")
+            ]
+            if items:
+                visual_candidates_text = (
+                    "【图像检索候选】上传图片与知识库图片最相似的候选如下，距离越小越相似：\n"
+                    + "\n".join(items)
+                    + "\n请优先在这些候选中结合图片中的门牌、题字、楼名、建筑形态判断；"
+                    "如果图片证据不足，不要被候选误导，仍返回“未能识别”。\n\n"
+                )
+        text_hints = "\n".join(
+            f"- 看到“{visible_text}”文字时，优先核验为“{building_name}”。"
+            for visible_text, building_name in _VISIBLE_TEXT_HINTS.items()
         )
 
+        prompt_text = (
+            '请识别这张图片中的西南大学校园建筑、校门、雕像或校园文化景观。\n'
+            + visual_candidates_text
+            + (f'【重要提示】以下是所有西南大学合法的建筑名称（候选库）：{candidates_str}\n\n' if candidates_str else '') +
+            '【必须先读图中文字】\n'
+            '请先转写图片里能看清的中文/英文文字、牌匾、楼名、机构名称、雕像铭牌，再结合图像检索候选判断。'
+            '如果图片文字与候选视觉结果冲突，清晰文字证据优先于纯视觉相似度。\n'
+            f'{text_hints}\n\n'
+            '要求：\n'
+            '1. 只有当图片中出现清晰的西南大学校园建筑、校门、楼宇铭牌、机构牌匾、雕像或校园文化景观，且能和候选库明确对应时，才允许返回名称。\n'
+            '2. 如果图片中能读到“中心图书馆”，必须优先识别为“中心图书馆”，不要被相似楼体候选误导。\n'
+            '3. 如果图片中能读到“中国共产党西南大学委员会”“西南大学纪律检查委员会”等学校级机关牌匾，应结合候选库优先识别为“行署楼A栋”；单独出现“纪律检查委员会”不能作为行署楼A栋的充分依据，因为学院也可能有纪委牌匾。\n'
+            '4. 如果图片主体是袁隆平纪念雕像，应返回“袁隆平雕像”，不要只返回“袁隆平”。\n'
+            '5. 校门识别优先读取门牌/题字文字，例如含弘门、学行门、天生门、学府门、学苑门、文星门、将军门；如果文字只露出一部分，也要结合图像检索候选和门体形态判断。\n'
+            '6. 如果图片是瀑布、山水、人物、截图、普通街景、非校园建筑，或者没有可读楼名/明显校园建筑特征，必须返回"未能识别"，禁止猜测。\n'
+            '7. 如果候选库中没有能对上号的建筑/景观/雕像，必须返回"未能识别"。\n'
+            '8. 给出一段50-100字的简要介绍。\n'
+            '请严格按以下JSON格式回复，不要输出其他内容：\n'
+            '{"building_name": "建筑名称", "visible_text": "图片中读到的文字，没有则为空字符串", "evidence": "判断依据", "description": "建筑介绍"}'
+                )
+
+        _audit(
+            request_id,
+            "qwen_request",
+            model=self._model,
+            visual_candidate_count=len(visual_candidates or []),
+            prompt_chars=len(prompt_text),
+            max_tokens=500,
+        )
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{self._base_url}/chat/completions",
@@ -163,12 +508,27 @@ class VisionService:
                             ],
                         }
                     ],
-                    "max_tokens": 300,
+                    "max_tokens": 500,
                 },
+            )
+            _audit(
+                request_id,
+                "qwen_response_status",
+                status_code=resp.status_code,
+                response_chars=len(resp.text),
             )
             resp.raise_for_status()
             data = resp.json()
             text = data["choices"][0]["message"]["content"].strip()
+            _audit(request_id, "qwen_raw_output", raw_text=text)
+            qwen_debug: dict[str, Any] = {
+                "qwen": {
+                    "called": True,
+                    "status_code": resp.status_code,
+                    "raw_output": text,
+                    "visual_candidate_count": len(visual_candidates or []),
+                }
+            }
 
             # 清理 Markdown 代码块包裹
             if text.startswith("```json"):
@@ -183,21 +543,71 @@ class VisionService:
             try:
                 result = json.loads(text)
                 b_name = result.get("building_name", "未知建筑")
+                visible_text = result.get("visible_text", "")
+                evidence = result.get("evidence", "")
                 description = result.get("description", text)
-                b_name, description, is_recognized = self._verify_and_enrich(b_name, description)
+                _audit(
+                    request_id,
+                    "qwen_parsed_json",
+                    building_name=b_name,
+                    visible_text=visible_text,
+                    evidence=evidence,
+                    description=description,
+                )
+                canonical_from_text = _canonical_from_visible_text(visible_text)
+                if canonical_from_text and canonical_from_text != b_name:
+                    _audit(
+                        request_id,
+                        "qwen_visible_text_override",
+                        visible_text=visible_text,
+                        raw_building_name=b_name,
+                        canonical_building_name=canonical_from_text,
+                    )
+                    b_name = canonical_from_text
+                qwen_debug["qwen"].update({
+                    "parsed_json": True,
+                    "building_name": b_name,
+                    "visible_text": visible_text,
+                    "evidence": evidence,
+                })
+                b_name, description, is_recognized, verify_debug = self._verify_and_enrich(
+                    b_name,
+                    description,
+                    request_id=request_id,
+                )
+                qwen_debug["verification"] = verify_debug
                 return {
                     "recognized": is_recognized,
                     "building_name": b_name,
                     "description": description,
+                    "reason": verify_debug.get("reason", ""),
+                    "debug": qwen_debug,
                 }
             except json.JSONDecodeError:
                 b_name = self._extract_building_name(text)
                 description = text
-                b_name, description, is_recognized = self._verify_and_enrich(b_name, description)
+                _audit(
+                    request_id,
+                    "qwen_json_parse_failed",
+                    extracted_building_name=b_name,
+                    raw_text=text,
+                )
+                qwen_debug["qwen"].update({
+                    "parsed_json": False,
+                    "building_name": b_name,
+                })
+                b_name, description, is_recognized, verify_debug = self._verify_and_enrich(
+                    b_name,
+                    description,
+                    request_id=request_id,
+                )
+                qwen_debug["verification"] = verify_debug
                 return {
                     "recognized": is_recognized,
                     "building_name": b_name,
                     "description": description,
+                    "reason": verify_debug.get("reason", ""),
+                    "debug": qwen_debug,
                 }
 
     async def _qa_with_qwen_vl(self, image_base64: str, question: str) -> str:
@@ -230,40 +640,117 @@ class VisionService:
             data = resp.json()
             return data["choices"][0]["message"]["content"].strip()
 
-    def _verify_and_enrich(self, building_name: str, description: str) -> tuple[str, str, bool]:
+    def _verify_and_enrich(
+        self,
+        building_name: str,
+        description: str,
+        request_id: str = "",
+    ) -> tuple[str, str, bool, dict[str, Any]]:
         """通过 RAG 向量库验证识别结果，用权威知识库覆盖 LLM 可能编造的内容。
 
         返回 (建筑名, 描述, 是否识别成功)。
         """
-        normalized_name = (building_name or "").strip()
+        normalized_name = _canonical_building_name(building_name)
+        debug_info: dict[str, Any] = {
+            "raw_building_name": building_name,
+            "normalized_name": normalized_name,
+        }
         if (
             normalized_name in ["未知建筑", "未能识别", "未识别"]
             or normalized_name in _DENYLIST_NAMES
         ):
+            debug_info.update({
+                "status": "rejected_by_name",
+                "reason": f"视觉模型返回“{normalized_name or '空结果'}”，属于未识别或禁用名称，已拒绝。",
+            })
+            _audit(
+                request_id,
+                "verify_rejected_by_name",
+                raw_building_name=building_name,
+                normalized_name=normalized_name,
+            )
             return (
                 "未能识别",
                 _UNRECOGNIZED_RESULT["description"],
                 False,
+                debug_info,
             )
         try:
             from modules.rag.vector_store import vector_store
             search_results = vector_store.search(normalized_name, top_k=1, threshold=0.4)
+            debug_info["rag_results"] = search_results[:1]
+            _audit(
+                request_id,
+                "verify_rag_search",
+                query=normalized_name,
+                result_count=len(search_results or []),
+                top_result=search_results[0] if search_results else None,
+            )
             if search_results:
                 verified_name = search_results[0].get("title", building_name)
                 if verified_name in _DENYLIST_NAMES:
+                    debug_info.update({
+                        "status": "rejected_by_denylist",
+                        "verified_name": verified_name,
+                        "reason": f"RAG 命中“{verified_name}”，但该名称在禁用列表中，已拒绝。",
+                    })
+                    _audit(
+                        request_id,
+                        "verify_rejected_by_denylist",
+                        raw_building_name=building_name,
+                        verified_name=verified_name,
+                    )
                     return (
                         "未能识别",
                         _UNRECOGNIZED_RESULT["description"],
                         False,
+                        debug_info,
                     )
                 verified_desc = search_results[0].get("answer", description)
-                return verified_name, verified_desc, True
+                if str(verified_name).startswith(normalized_name):
+                    verified_name = normalized_name
+                debug_info.update({
+                    "status": "accepted",
+                    "verified_name": verified_name,
+                    "score": search_results[0].get("score"),
+                    "reason": f"Qwen-VL 判断为“{building_name}”，RAG 命中“{verified_name}”，结果已采用知识库描述。",
+                })
+                _audit(
+                    request_id,
+                    "verify_accepted",
+                    raw_building_name=building_name,
+                    verified_name=verified_name,
+                )
+                return verified_name, verified_desc, True, debug_info
         except Exception as e:
             logger.warning("检索视觉 RAG 验证失败: %s", e)
+            debug_info.update({
+                "status": "error",
+                "error": str(e),
+                "reason": f"RAG 校验异常：{e}",
+            })
+            _audit(request_id, "verify_error", error=str(e))
+            return (
+                "未能识别",
+                _UNRECOGNIZED_RESULT["description"],
+                False,
+                debug_info,
+            )
+        debug_info.update({
+            "status": "rejected_no_rag_match",
+            "reason": f"Qwen-VL 判断为“{building_name}”，但 RAG 知识库没有达到阈值的权威命中，已拒绝。",
+        })
+        _audit(
+            request_id,
+            "verify_rejected_no_rag_match",
+            raw_building_name=building_name,
+            normalized_name=normalized_name,
+        )
         return (
             "未能识别",
             _UNRECOGNIZED_RESULT["description"],
             False,
+            debug_info,
         )
 
     def _mock_recognize(self) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -17,7 +17,8 @@ class AiVisionPage extends StatefulWidget {
   State<AiVisionPage> createState() => _AiVisionPageState();
 }
 
-class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver {
+class _AiVisionPageState extends State<AiVisionPage>
+    with WidgetsBindingObserver {
   CameraController? _cameraCtrl;
   List<CameraDescription>? _cameras;
   bool _cameraReady = false;
@@ -64,7 +65,7 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
         (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => _cameras!.first,
       );
-      _cameraCtrl = CameraController(cam, ResolutionPreset.medium, enableAudio: false);
+      _cameraCtrl = _createCameraController(cam);
       await _cameraCtrl!.initialize();
       if (!mounted) return;
       setState(() {
@@ -77,26 +78,42 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
     }
   }
 
+  CameraController _createCameraController(CameraDescription camera) {
+    return CameraController(
+      camera,
+      ResolutionPreset.max,
+      enableAudio: false,
+      imageFormatGroup: ImageFormatGroup.jpeg,
+    );
+  }
+
+  Future<void> _prepareStillCapture(CameraController ctrl) async {
+    try {
+      await ctrl.setFocusMode(FocusMode.auto);
+    } on CameraException {
+      // Some cameras do not support changing focus mode.
+    }
+    try {
+      await ctrl.setExposureMode(ExposureMode.auto);
+    } on CameraException {
+      // Some cameras do not support changing exposure mode.
+    }
+    try {
+      const center = Offset(0.5, 0.5);
+      await ctrl.setFocusPoint(center);
+      await ctrl.setExposurePoint(center);
+    } on CameraException {
+      // Point focus/exposure is optional across devices.
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 450));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. 底层背景：与主页保持一致的校园壁纸
-          Positioned.fill(
-            child: Image.asset(
-              'assets/images/bg.jpg',
-              fit: BoxFit.cover,
-            ),
-          ),
-          // 2. 磨砂遮罩
-          Positioned.fill(
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12.0, sigmaY: 12.0),
-              child: Container(color: Colors.black.withValues(alpha: 0.3)),
-            ),
-          ),
           // 相机预览
           _buildPreview(),
           // 扫描框
@@ -119,11 +136,8 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
   /// 摄像头或图片预览
   Widget _buildPreview() {
     if (_selectedImage != null) {
-      return Center(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.file(_selectedImage!, fit: BoxFit.contain),
-        ),
+      return SizedBox.expand(
+        child: Image.file(_selectedImage!, fit: BoxFit.cover),
       );
     }
 
@@ -157,15 +171,7 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
         ),
       );
     }
-    return Center(
-      child: AspectRatio(
-        aspectRatio: 1 / _cameraCtrl!.value.aspectRatio,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: CameraPreview(_cameraCtrl!),
-        ),
-      ),
-    );
+    return CameraPreview(_cameraCtrl!);
   }
 
   /// 扫描框
@@ -517,6 +523,8 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
             style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
           ),
         ],
+        _buildDebugLine(result),
+        _buildDebugDetails(result),
         const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
@@ -588,11 +596,15 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
-          '当前图片未能匹配到校园建筑，请尝试对准建筑主体重新拍摄，或选择更清晰的建筑照片。',
+        Text(
+          _result?.reason.isNotEmpty == true
+              ? _result!.reason
+              : '当前图片未能匹配到校园建筑，请尝试对准建筑主体重新拍摄，或选择更清晰的建筑照片。',
           style: TextStyle(fontSize: 14, color: AppTheme.textSub, height: 1.5),
           textAlign: TextAlign.center,
         ),
+        if (_result != null) _buildDebugLine(_result!),
+        if (_result != null) _buildDebugDetails(_result!),
         const SizedBox(height: 14),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -626,6 +638,166 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
         ),
       ],
     );
+  }
+
+  Widget _buildDebugLine(AiVisionResult result) {
+    final parts = <String>[
+      if (result.requestId.isNotEmpty) 'ID: ${result.requestId}',
+      if (result.matchSource.isNotEmpty) '来源: ${result.matchSource}',
+      if (result.clipTop1Distance != null)
+        'CLIP: ${result.clipTop1Distance!.toStringAsFixed(4)}',
+    ];
+    if (parts.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SelectableText(
+        parts.join(' · '),
+        style: const TextStyle(
+          fontSize: 11,
+          color: AppTheme.textSub,
+          height: 1.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDebugDetails(AiVisionResult result) {
+    final text = _formatDebugDetails(result);
+    if (text.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 132),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: SingleChildScrollView(
+        child: SelectableText(
+          text,
+          style: const TextStyle(
+            fontSize: 11,
+            color: Color(0xFF334155),
+            height: 1.4,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDebugDetails(AiVisionResult result) {
+    final debug = result.debug;
+    if (debug.isEmpty) return '';
+
+    final lines = <String>[];
+    final image = debug['image'];
+    if (image is Map) {
+      final width = image['width'];
+      final height = image['height'];
+      final byteLength = image['byte_length'];
+      final sha256 = image['sha256'];
+      final size = width != null && height != null
+          ? '${width}x$height'
+          : '未知尺寸';
+      lines.add(
+        '图片: $size · ${_formatBytes(byteLength)} · hash ${sha256 ?? '未知'}',
+      );
+    }
+
+    final decision = debug['decision']?.toString();
+    if (decision != null && decision.isNotEmpty) {
+      lines.add('决策: $decision');
+    }
+
+    final clip = debug['clip'];
+    if (clip is Map) {
+      final available = clip['available'] == true ? '可用' : '不可用';
+      final autoAcceptThreshold = clip['auto_accept_threshold'];
+      final autoAcceptMargin = clip['auto_accept_margin'];
+      final reviewThreshold = clip['review_threshold'];
+      lines.add(
+        'CLIP: $available'
+        '${autoAcceptThreshold == null ? '' : ' · 自动阈值 $autoAcceptThreshold'}'
+        '${autoAcceptMargin == null ? '' : ' · 间距 $autoAcceptMargin'}'
+        '${reviewThreshold == null ? '' : ' · 复核阈值 $reviewThreshold'}',
+      );
+      final candidates = clip['top_candidates'];
+      if (candidates is List && candidates.isNotEmpty) {
+        lines.add('CLIP Top${candidates.length}:');
+        for (var i = 0; i < candidates.length; i++) {
+          lines.add(_formatCandidate(candidates[i], i + 1));
+        }
+      }
+      final error = clip['error']?.toString();
+      if (error != null && error.isNotEmpty) {
+        lines.add('CLIP 错误: $error');
+      }
+    }
+
+    final qwen = debug['qwen'];
+    if (qwen is Map) {
+      final called = qwen['called'] == true ? '已调用' : '未调用';
+      final status = qwen['status_code'];
+      final building = qwen['building_name']?.toString();
+      lines.add(
+        'Qwen: $called${status == null ? '' : ' · HTTP $status'}${building == null ? '' : ' · 判断 $building'}',
+      );
+      final visibleText = qwen['visible_text']?.toString();
+      if (visibleText != null && visibleText.isNotEmpty) {
+        lines.add('可见文字: $visibleText');
+      }
+      final evidence = qwen['evidence']?.toString();
+      if (evidence != null && evidence.isNotEmpty) {
+        lines.add('依据: $evidence');
+      }
+      final raw = qwen['raw_output']?.toString();
+      if (raw != null && raw.isNotEmpty) {
+        lines.add('Qwen 原文: $raw');
+      }
+      final error = qwen['error']?.toString();
+      if (error != null && error.isNotEmpty) {
+        lines.add('Qwen 错误: $error');
+      }
+    }
+
+    final verification = debug['verification'];
+    if (verification is Map) {
+      final status = verification['status']?.toString();
+      final verifiedName = verification['verified_name']?.toString();
+      final score = verification['score'];
+      lines.add(
+        'RAG 校验: ${status ?? '未知'}${verifiedName == null ? '' : ' · 命中 $verifiedName'}${score == null ? '' : ' · 分数 $score'}',
+      );
+      final reason = verification['reason']?.toString();
+      if (reason != null && reason.isNotEmpty) {
+        lines.add('原因: $reason');
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  String _formatCandidate(Object? candidate, int index) {
+    if (candidate is! Map) return '$index. $candidate';
+    final title = candidate['title']?.toString() ?? '未知';
+    final distance = candidate['distance']?.toString() ?? '?';
+    final category = candidate['category']?.toString() ?? '';
+    final suffix = category.isEmpty ? '' : ' · $category';
+    return '$index. $title · 距离 $distance$suffix';
+  }
+
+  String _formatBytes(Object? value) {
+    final bytes = int.tryParse(value?.toString() ?? '');
+    if (bytes == null) return '未知大小';
+    if (bytes >= 1024 * 1024) {
+      return '${(bytes / 1024 / 1024).toStringAsFixed(2)} MB';
+    }
+    if (bytes >= 1024) {
+      return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    }
+    return '$bytes B';
   }
 
   /// 从相册选择照片 + 识别（自动压缩到 1024px 以内）
@@ -680,17 +852,14 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
     });
 
     try {
+      await _prepareStillCapture(ctrl);
+
       // 拍照
       final xFile = await ctrl.takePicture();
       if (!mounted) return;
 
-      // 画面静止：将拍到的照片设为预览
-      setState(() {
-        _selectedImage = File(xFile.path);
-      });
-
       // 读取图片字节并转 base64
-      final bytes = await _selectedImage!.readAsBytes();
+      final bytes = await File(xFile.path).readAsBytes();
       final base64Image = base64.encode(bytes);
 
       // 调用视觉识别 API
@@ -728,7 +897,7 @@ class _AiVisionPageState extends State<AiVisionPage> with WidgetsBindingObserver
     );
 
     await _cameraCtrl?.dispose();
-    _cameraCtrl = CameraController(newCam, ResolutionPreset.medium);
+    _cameraCtrl = _createCameraController(newCam);
     await _cameraCtrl!.initialize();
     if (!mounted) return;
     setState(() {});

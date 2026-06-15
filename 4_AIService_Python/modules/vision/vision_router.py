@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from core_utils.response import ApiResponse
@@ -17,12 +19,17 @@ class SceneQARequest(BaseModel):
 
 @router.post("/recognize")
 async def recognize(req: RecognizeRequest):
+    request_id = f"vision_{uuid4().hex[:10]}"
     try:
-        result = await vision_service.recognize_building(req.image_base64)
+        result = await vision_service.recognize_building(
+            req.image_base64,
+            request_id=request_id,
+        )
         return ApiResponse.ok(result)
     except Exception as e:
         # 异常时回退到本地模拟识别，保证接口不崩
         result = vision_service._mock_recognize()
+        result["request_id"] = request_id
         result["reason"] = f"识别异常（{e}），已回退本地模拟结果"
         return ApiResponse.ok(result)
 

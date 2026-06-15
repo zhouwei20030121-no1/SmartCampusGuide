@@ -154,7 +154,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           subtitle: '常用路线会在这里汇总',
                           icon: Icons.history_rounded,
                           color: const Color(0xFF7C8DA6),
-                          onTap: () {},
+                          onTap: () => Navigator.pushNamed(context, AppRouter.routePlan),
                         ),
                         if (_isAdmin)
                           _ProfileActionTile(

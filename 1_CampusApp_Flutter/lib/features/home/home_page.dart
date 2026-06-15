@@ -664,7 +664,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   @override
   void dispose() {
     _loc.removeListener(_handleLocationChanged);
-    _loc.dispose();
     super.dispose();
   }
 
