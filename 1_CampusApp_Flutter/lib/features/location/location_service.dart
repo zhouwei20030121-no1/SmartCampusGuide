@@ -164,5 +164,14 @@ class LocationService extends ChangeNotifier {
     _isManualMode = false;
     notifyListeners();
   }
+  // 新增：同时更新经纬度，确保只触发一次 notifyListeners
+  void updateLocation(double lat, double lng) {
+    if (lat == 0.0 || lng == 0.0) return;
+    _latitude = lat;
+    _longitude = lng;
+    _isManualMode = true;
+    _simulateProximity();
+    notifyListeners();
+  }
 
 }
