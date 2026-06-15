@@ -19,15 +19,20 @@ public class MyMetaObjectHandler implements MetaObjectHandler {
         this.strictInsertFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());
 
         // 如果deleted字段为空，设置默认值
-        Object deleted = this.getFieldValByName("deleted", metaObject);
-        if (deleted == null) {
-            this.setFieldValByName("deleted", 0, metaObject);
+        if (metaObject.hasSetter("deleted")) {
+            Object deleted = this.getFieldValByName("deleted", metaObject);
+            if (deleted == null) {
+                Class<?> deletedType = metaObject.getSetterType("deleted");
+                this.setFieldValByName("deleted", Boolean.class.equals(deletedType) ? Boolean.FALSE : 0, metaObject);
+            }
         }
 
         // 如果status字段为空，设置默认值
-        Object status = this.getFieldValByName("status", metaObject);
-        if (status == null) {
-            this.setFieldValByName("status", 1, metaObject);
+        if (metaObject.hasSetter("status")) {
+            Object status = this.getFieldValByName("status", metaObject);
+            if (status == null) {
+                this.setFieldValByName("status", 1, metaObject);
+            }
         }
     }
 

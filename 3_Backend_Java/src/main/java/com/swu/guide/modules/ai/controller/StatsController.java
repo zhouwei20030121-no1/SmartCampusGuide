@@ -3,6 +3,8 @@ package com.swu.guide.modules.ai.controller;
 import com.swu.guide.common.Result;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -50,5 +52,27 @@ public class StatsController {
         result.put("counts", counts);
 
         return Result.ok(result);
+    }
+
+    @PostMapping("/app-visit")
+    public Result<Void> recordAppVisit(@RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> payload = body == null ? Map.of() : body;
+        Object userIdValue = payload.get("userId");
+        Long userId = null;
+        if (userIdValue != null && !userIdValue.toString().isBlank()) {
+            try {
+                userId = Long.valueOf(userIdValue.toString());
+            } catch (NumberFormatException ignored) {
+                userId = null;
+            }
+        }
+        String deviceInfo = String.valueOf(payload.getOrDefault("deviceInfo", "mobile_app"));
+        jdbcTemplate.update(
+                "INSERT INTO user_behavior_log (user_id, action_type, device_info, created_at) VALUES (?, ?, ?, NOW())",
+                userId,
+                "APP_VISIT",
+                deviceInfo
+        );
+        return Result.ok();
     }
 }

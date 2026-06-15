@@ -717,7 +717,13 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   void initState() {
     super.initState();
     _userMarker = _buildUserMarker(_userPos);
-    _loc.addListener(() => setState(() {}));
+    _loc.addListener(_handleLocationChanged);
+  }
+
+  void _handleLocationChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   /// 点击高德 POI → 将模拟位置移动到该地名，并触发讲解。
@@ -990,7 +996,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   void dispose() {
     _stopGuideSpeech();
     _commentController.dispose();
-    _loc.dispose();
+    _loc.removeListener(_handleLocationChanged);
     super.dispose();
   }
 

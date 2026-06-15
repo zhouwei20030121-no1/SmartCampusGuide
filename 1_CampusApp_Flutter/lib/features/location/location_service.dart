@@ -16,6 +16,7 @@ class LocationService extends ChangeNotifier {
   double _latitude = 29.820;
   double _longitude = 106.421;
   bool _isTracking = false;
+  bool _visitReported = false;
   String? _triggeredSpot;
   String _geoStatus = '未启动';
   String _nearbySpot = '';
@@ -62,6 +63,10 @@ class LocationService extends ChangeNotifier {
     notifyListeners();
 
     // 模拟GPS轨迹（实际应接入高德定位SDK）
+    if (!_visitReported) {
+      _visitReported = true;
+      unawaited(_recordAppVisit());
+    }
     _simulationTimer = Timer.periodic(const Duration(seconds: 8), _simulateMove);
 
     // 心跳上报
@@ -119,6 +124,17 @@ class LocationService extends ChangeNotifier {
   }
 
   /// 离线模拟：静态坐标距离判断
+  Future<void> _recordAppVisit() async {
+    try {
+      await NetworkClient.dio.post('/stats/app-visit', data: {
+        'userId': NetworkClient.currentUserId,
+        'deviceInfo': 'flutter_app',
+      });
+    } catch (_) {
+      _visitReported = false;
+    }
+  }
+
   void _simulateProximity() {
     const spots = {
       '25教': [106.421, 29.820],
@@ -149,9 +165,4 @@ class LocationService extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    stopTracking();
-    super.dispose();
-  }
 }

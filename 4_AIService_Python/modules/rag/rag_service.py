@@ -177,6 +177,15 @@ class RAGService:
                 "fallback": True,
                 "model": "local-knowledge",
             }
+
+        if self._is_route_query(clean_query):
+            sources = self.search(clean_query, top_k)
+            return {
+                "reply": self._build_route_reply(clean_query, sources),
+                "sources": sources,
+                "fallback": True,
+                "model": "route-intent",
+            }
             
         # 简单指代消解：如果问题包含代词且有历史记录，将上一轮回答的**第一句话**拼接作为搜索词
         search_query = clean_query
@@ -337,6 +346,40 @@ class RAGService:
         return (
             f"我暂时没有在本地知识库中检索到“{query}”的准确资料。"
             "你可以换一个更具体的关键词，例如“图书馆”“含弘门”“第25教学楼”或“校车路线”。"
+        )
+
+    def _is_route_query(self, query: str) -> bool:
+        route_words = ("怎么去", "怎么走", "到哪里走", "去哪里走", "路线", "导航", "带我去", "如何到", "如何去")
+        return any(word in query for word in route_words)
+
+    def _extract_destination(self, query: str) -> str:
+        destination = query.strip()
+        for word in ("怎么去", "怎么走", "如何到", "如何去", "带我去", "导航到"):
+            if word in destination:
+                left, right = destination.split(word, 1)
+                destination = right or left
+        for word in ("怎么去", "怎么走", "如何到", "如何去", "带我去", "导航到", "去", "路线", "导航"):
+            destination = destination.replace(word, "")
+        destination = re.sub(r"[？?。！!，,；;\s]+$", "", destination).strip()
+        return destination or query.strip()
+
+    def _build_route_reply(self, query: str, sources: list[dict[str, Any]]) -> str:
+        destination = self._extract_destination(query)
+        place_hint = ""
+        if sources:
+            best = sources[0]
+            title = str(best.get("title") or best.get("question") or destination)
+            answer = re.sub(r"\s+", " ", str(best.get("answer", ""))).strip()
+            if answer:
+                place_hint = f"我先确认到你要去的地点可能是“{title}”。{answer[:180]}"
+            else:
+                place_hint = f"我先确认到你要去的地点可能是“{title}”。"
+
+        return (
+            f"你这个问题是路线规划，不是单纯地点介绍。目的地我理解为“{destination}”。"
+            f"{place_hint}"
+            "如果你已经在 App 里开启定位，请进入“路线规划”，把终点选为这个地点，系统会按当前位置生成可行走路线。"
+            "如果你希望我直接描述路线，请再补一句你的出发点，例如“我在含弘门，怎么去第八教学楼”。"
         )
 
     def _format_context(self, sources: list[dict[str, Any]]) -> str:

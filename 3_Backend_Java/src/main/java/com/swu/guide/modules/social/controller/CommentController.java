@@ -1,6 +1,7 @@
 package com.swu.guide.modules.social.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.swu.guide.common.Result;
 import com.swu.guide.modules.social.entity.Comment;
 import com.swu.guide.modules.social.service.CommentService;
@@ -40,10 +41,18 @@ public class CommentController {
         if (spotName.isBlank()) {
             return Result.fail("spotName 不能为空");
         }
-        Spot spot = spotService.lambdaQuery()
-                .like(Spot::getName, spotName)
-                .last("limit 1")
-                .one();
+        Spot spot = spotService.getOne(
+                new QueryWrapper<Spot>()
+                        .like("name", spotName)
+                        .last("limit 1")
+        );
+        if (spot == null) {
+            spot = spotService.list().stream()
+                    .filter(item -> item.getName() != null
+                            && (item.getName().contains(spotName) || spotName.contains(item.getName())))
+                    .findFirst()
+                    .orElse(null);
+        }
         if (spot == null) {
             return Result.fail("景点不存在，无法评论");
         }
@@ -92,10 +101,18 @@ public class CommentController {
 
     @GetMapping("/spot-name")
     public Result<List<Comment>> getBySpotName(@RequestParam String spotName) {
-        Spot spot = spotService.lambdaQuery()
-                .like(Spot::getName, spotName)
-                .last("limit 1")
-                .one();
+        Spot spot = spotService.getOne(
+                new QueryWrapper<Spot>()
+                        .like("name", spotName)
+                        .last("limit 1")
+        );
+        if (spot == null) {
+            spot = spotService.list().stream()
+                    .filter(item -> item.getName() != null
+                            && (item.getName().contains(spotName) || spotName.contains(item.getName())))
+                    .findFirst()
+                    .orElse(null);
+        }
         if (spot == null) {
             return Result.ok(List.of());
         }

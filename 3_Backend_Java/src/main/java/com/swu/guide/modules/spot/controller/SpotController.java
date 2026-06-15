@@ -39,7 +39,11 @@ public class SpotController {
         if (spot == null) {
             return Result.fail("景点不存在");
         }
-        return Result.ok(spot);
+        spotService.lambdaUpdate()
+                .eq(Spot::getId, id)
+                .setSql("visit_count = COALESCE(visit_count, 0) + 1")
+                .update();
+        return Result.ok(spotService.getById(id));
     }
 
     /**
