@@ -312,21 +312,26 @@ class _TabHomeState extends State<_TabHome> {
     double currentLat = _loc.latitude != 0.0 ? _loc.latitude : 29.820;
     double currentLng = _loc.longitude != 0.0 ? _loc.longitude : 106.425;
 
-    // 遍历数据库真实数据，利用经纬度估算距离
-    List<Map<String, dynamic>> spotsWithDistance = _allSpots.map((spot) {
+    // 1. 过滤掉坐标为 0 的脏数据
+    final validSpots = _allSpots.where((spot) {
+      return spot.longitude != 0.0 && spot.latitude != 0.0;
+    }).toList();
+
+    // 2. 计算距离并映射
+    List<Map<String, dynamic>> spotsWithDistance = validSpots.map((spot) {
       double dx = (currentLng - spot.longitude) * 111320 * 0.866;
       double dy = (currentLat - spot.latitude) * 111320;
       double distance = math.sqrt(dx * dx + dy * dy);
       return {
-        'spot': spot, // 存放真实的 SpotModel 对象
+        'spot': spot,
         'distance': distance,
       };
     }).toList();
 
-    // 升序排序
+    // 3. 升序排序
     spotsWithDistance.sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
 
-    // 截取距离最近的 3 个
+    // 4. 截取距离最近的 3 个并刷新 UI
     if (mounted) {
       setState(() {
         _closestSpots = spotsWithDistance.take(3).toList();
@@ -759,8 +764,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   void _moveUserTo(LatLng pos) {
-    _loc.latitude = pos.latitude;
-    _loc.longitude = pos.longitude;
+    _loc.updateLocation(pos.latitude, pos.longitude);
     _stopGuideSpeech();
 
     setState(() {

@@ -165,4 +165,14 @@ class LocationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 同步更新经纬度，避免一次手动定位触发两轮附近景点计算。
+  void updateLocation(double lat, double lng) {
+    if (lat == 0.0 || lng == 0.0) return;
+    _latitude = lat;
+    _longitude = lng;
+    _isManualMode = true;
+    _simulateProximity();
+    notifyListeners();
+  }
+
 }
