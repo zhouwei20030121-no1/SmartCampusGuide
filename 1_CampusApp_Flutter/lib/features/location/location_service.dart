@@ -1,9 +1,13 @@
 // lib/features/location/location_service.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../../core/network/network_client.dart';
 
 class LocationService extends ChangeNotifier {
+  static const MethodChannel _locationChannel =
+      MethodChannel('smart_campus_guide/location');
+
   // 1. 私有化构造函数，切断外部通过 () 创建独立新实例的途径
   LocationService._internal();
 
@@ -21,6 +25,11 @@ class LocationService extends ChangeNotifier {
   String _geoStatus = '未启动';
   String _nearbySpot = '';
   double _distance = 999;
+  bool _realLocationAvailable = false;
+  String _locationMode = 'simulation';
+  double _speedMps = 0;
+  double _accuracyMeters = -1;
+  DateTime? _lastRealFixAt;
 
   // 4. 引入手动操作标记位，防止定时器与地图手动点击发生冲突
   bool _isManualMode = false;
@@ -50,6 +59,11 @@ class LocationService extends ChangeNotifier {
   String get geoStatus => _geoStatus;
   String get nearbySpot => _nearbySpot;
   double get distance => _distance;
+  bool get realLocationAvailable => _realLocationAvailable;
+  bool get isManualMode => _isManualMode;
+  String get locationMode => _locationMode;
+  double get speedMps => _speedMps;
+  double get accuracyMeters => _accuracyMeters;
 
   Timer? _heartbeatTimer;
   Timer? _simulationTimer;
@@ -62,15 +76,27 @@ class LocationService extends ChangeNotifier {
     _isManualMode = false; // 10. 启动时默认恢复为队友写的自动模拟行走模式
     notifyListeners();
 
-    // 模拟GPS轨迹（实际应接入高德定位SDK）
     if (!_visitReported) {
       _visitReported = true;
       unawaited(_recordAppVisit());
     }
-    _simulationTimer = Timer.periodic(const Duration(seconds: 8), _simulateMove);
+
+    await _refreshRealLocation();
+    _simulationTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
+      if (!_realLocationAvailable) {
+        _simulateMove(timer);
+      } else {
+        unawaited(_refreshRealLocation());
+      }
+    });
 
     // 心跳上报
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) => _sendHeartbeat());
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (_realLocationAvailable && !_isManualMode) {
+        await _refreshRealLocation();
+      }
+      await _sendHeartbeat();
+    });
   }
 
   Future<void> stopTracking() async {
@@ -81,9 +107,50 @@ class LocationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _refreshRealLocation() async {
+    if (_isManualMode) return;
+    try {
+      final result = await _locationChannel.invokeMapMethod<String, dynamic>(
+        'getCurrentLocation',
+      );
+      if (result == null || result['ok'] != true) {
+        _realLocationAvailable = false;
+        _locationMode = 'simulation';
+        _geoStatus = '真实定位不可用，使用演示模式';
+        _simulateProximity();
+        notifyListeners();
+        return;
+      }
+
+      final lat = double.tryParse(result['latitude'].toString());
+      final lng = double.tryParse(result['longitude'].toString());
+      if (lat == null || lng == null || lat == 0.0 || lng == 0.0) return;
+
+      _latitude = lat;
+      _longitude = lng;
+      _speedMps = double.tryParse(result['speed']?.toString() ?? '0') ?? 0;
+      _accuracyMeters =
+          double.tryParse(result['accuracy']?.toString() ?? '-1') ?? -1;
+      _lastRealFixAt = DateTime.now();
+      _realLocationAvailable = true;
+      _locationMode = 'real';
+      _simulateProximity();
+      notifyListeners();
+    } catch (_) {
+      _realLocationAvailable = false;
+      _locationMode = 'simulation';
+      _geoStatus = '真实定位不可用，使用演示模式';
+      _simulateProximity();
+      notifyListeners();
+    }
+  }
+
   void _simulateMove(Timer t) {
     // 11. 如果用户在智能讲解页手动点击了地图或者高德POI，就跳过定时器的自动位移，避免位置被扯回原点
     if (_isManualMode) return;
+    _locationMode = 'simulation';
+    _realLocationAvailable = false;
+    _speedMps = 0.9;
 
     // 在25教和樟树林之间缓慢移动（模拟用户行走）
     _latitude += (29.820 - _latitude) * 0.3 + (DateTime.now().second % 2 == 0 ? 0.0003 : -0.0002);
@@ -99,6 +166,9 @@ class LocationService extends ChangeNotifier {
         'userId': NetworkClient.currentUserId, // 13. 规范化使用统一的登录用户ID
         'lng': _longitude,
         'lat': _latitude,
+        'speedMps': _speedMps,
+        'accuracyMeters': _accuracyMeters,
+        'locationMode': _locationMode,
       });
       if (res.data['code'] == 200) {
         final data = res.data['data'];
@@ -171,6 +241,9 @@ class LocationService extends ChangeNotifier {
     _latitude = lat;
     _longitude = lng;
     _isManualMode = true;
+    _locationMode = 'manual_demo';
+    _speedMps = 0;
+    _accuracyMeters = 0;
     _simulateProximity();
     notifyListeners();
   }

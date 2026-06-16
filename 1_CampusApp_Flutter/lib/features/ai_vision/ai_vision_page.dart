@@ -540,6 +540,33 @@ class _AiVisionPageState extends State<AiVisionPage>
                 onPressed: _recognizing ? null : _pickFromGallery,
               ),
               TextButton.icon(
+                icon: const Icon(Icons.volume_up_rounded, size: 16),
+                label: const Text('播放讲解'),
+                style: TextButton.styleFrom(foregroundColor: _schoolBlue),
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/guide',
+                    arguments: {
+                      'spotName': result.buildingName,
+                      'description': '你现在看到的这栋楼是${result.buildingName}。${result.description}',
+                    },
+                  );
+                },
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.route_rounded, size: 16),
+                label: const Text('导航到这里'),
+                style: TextButton.styleFrom(foregroundColor: _schoolBlue),
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/route',
+                    arguments: {'endName': result.buildingName},
+                  );
+                },
+              ),
+              TextButton.icon(
                 icon: const Icon(Icons.auto_stories_outlined, size: 16),
                 label: const Text('讲讲它的历史'),
                 style: TextButton.styleFrom(foregroundColor: _schoolBlue),

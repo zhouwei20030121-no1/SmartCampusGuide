@@ -1,74 +1,204 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../core/network/network_client.dart';
 import '../../core/theme/app_theme.dart';
 
 class GuidePage extends StatefulWidget {
-  const GuidePage({super.key});
+  final String? spotName;
+  final String? initialDescription;
+
+  const GuidePage({super.key, this.spotName, this.initialDescription});
 
   @override
   State<GuidePage> createState() => _GuidePageState();
 }
 
 class _GuidePageState extends State<GuidePage> {
-  bool _isPlaying = false;
-  String _currentLang = 'zh';
+  static const MethodChannel _ttsChannel = MethodChannel('smart_campus_guide/tts');
 
-  void _togglePlay() {
-    setState(() => _isPlaying = !_isPlaying);
-    // TODO: 触发语音播放/暂停（周玮）
+  String _spotName = '';
+  String _guideText = '';
+  String _persona = '新生';
+  String _language = 'zh';
+  String _guideMode = 'standard';
+  double _rate = 1.0;
+  bool _loading = false;
+  bool _isPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _spotName = widget.spotName ?? '';
+    _guideText = widget.initialDescription ?? '';
+    if (_spotName.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fetchGuide());
+    }
   }
 
-  void _switchLanguage(String lang) {
-    setState(() => _currentLang = lang);
-    // TODO: 切换语种，重新请求 TTS（周玮）
+  @override
+  void dispose() {
+    _stop(updateState: false);
+    super.dispose();
+  }
+
+  Future<void> _fetchGuide() async {
+    if (_spotName.trim().isEmpty) return;
+    setState(() => _loading = true);
+    try {
+      final res = await NetworkClient.dio.post('/ai/guide/dynamic', data: {
+        'spotName': _spotName,
+        'persona': _persona,
+        'language': _language,
+        'voice': 'gentle_guide',
+        'style': _guideMode,
+        'guideMode': _guideMode,
+        'environment': {
+          'scene': 'vision_linked_guide',
+          'visualContext': widget.initialDescription ?? '',
+        },
+      });
+      final text = res.data['code'] == 200
+          ? (res.data['data']?['text'] ?? '').toString().trim()
+          : '';
+      if (!mounted) return;
+      setState(() {
+        _guideText = text.isNotEmpty ? text : (_guideText.isNotEmpty ? _guideText : '暂未获取到讲解词。');
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _guideText = _guideText.isNotEmpty ? _guideText : '讲解服务暂不可用，请稍后重试。';
+      });
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _togglePlay() async {
+    if (_isPlaying) {
+      await _stop();
+      return;
+    }
+    if (_guideText.trim().isEmpty) {
+      await _fetchGuide();
+    }
+    final text = _guideText.trim();
+    if (text.isEmpty) return;
+    setState(() => _isPlaying = true);
+    try {
+      final result = await _ttsChannel.invokeMapMethod<String, dynamic>('speak', {
+        'text': text,
+        'voice': 'gentle_guide',
+        'language': _language,
+        'rate': _rate,
+      });
+      if (result?['ok'] != true && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result?['reason']?.toString() ?? 'TTS 播放失败')),
+        );
+        setState(() => _isPlaying = false);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('TTS 通道不可用')));
+      setState(() => _isPlaying = false);
+    }
+  }
+
+  Future<void> _stop({bool updateState = true}) async {
+    if (updateState && mounted) {
+      setState(() => _isPlaying = false);
+    } else {
+      _isPlaying = false;
+    }
+    try {
+      await _ttsChannel.invokeMethod('stop');
+    } catch (_) {}
+  }
+
+  void _reloadWith({String? persona, String? language, String? mode, double? rate}) {
+    setState(() {
+      if (persona != null) _persona = persona;
+      if (language != null) _language = language;
+      if (mode != null) _guideMode = mode;
+      if (rate != null) _rate = rate;
+    });
+    _stop();
+    _fetchGuide();
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = _spotName.isEmpty ? '智能讲解' : _spotName;
     return Scaffold(
-      appBar: AppBar(title: const Text('智能讲解')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.headphones, size: 64, color: AppTheme.primary),
-            const SizedBox(height: 16),
-            const Text('智能讲解播放中...', style: TextStyle(color: AppTheme.textSub)),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _togglePlay,
-              icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-              label: Text(_isPlaying ? '暂停' : '播放'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: Colors.white,
+      appBar: AppBar(title: Text(title)),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                _chip('新生', _persona == '新生', () => _reloadWith(persona: '新生', mode: 'practical')),
+                _chip('游客', _persona == '游客', () => _reloadWith(persona: '游客', mode: 'deep')),
+                _chip('校友', _persona == '校友', () => _reloadWith(persona: '校友', mode: 'deep')),
+                _chip('标准', _guideMode == 'standard', () => _reloadWith(mode: 'standard')),
+                _chip('深度', _guideMode == 'deep', () => _reloadWith(mode: 'deep')),
+                _chip('故事', _guideMode == 'story', () => _reloadWith(mode: 'story')),
+                _chip('实用', _guideMode == 'practical', () => _reloadWith(mode: 'practical')),
+              ]),
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, children: [
+                _chip('中文', _language == 'zh', () => _reloadWith(language: 'zh')),
+                _chip('EN', _language == 'en', () => _reloadWith(language: 'en')),
+                _chip('0.8x', _rate == 0.8, () => _reloadWith(rate: 0.8)),
+                _chip('1.0x', _rate == 1.0, () => _reloadWith(rate: 1.0)),
+                _chip('1.25x', _rate == 1.25, () => _reloadWith(rate: 1.25)),
+              ]),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : SingleChildScrollView(
+                          child: Text(
+                            _guideText.isNotEmpty ? _guideText : '请选择一个景点或从 AI 探校识别结果进入讲解。',
+                            style: const TextStyle(fontSize: 15, height: 1.75, color: AppTheme.textMain),
+                          ),
+                        ),
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _langButton('zh', '中文'),
-                _langButton('en', 'English'),
-                _langButton('ja', '日本語'),
-              ],
-            ),
-          ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: _loading ? null : _togglePlay,
+                  icon: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                  label: Text(_isPlaying ? '停止播放' : '播放讲解'),
+                  style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _langButton(String lang, String label) {
-    final isActive = _currentLang == lang;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: ChoiceChip(
-        label: Text(label, style: TextStyle(fontSize: 12)),
-        selected: isActive,
-        onSelected: (_) => _switchLanguage(lang),
-        selectedColor: AppTheme.primary.withValues(alpha: 0.2),
-      ),
+  Widget _chip(String label, bool selected, VoidCallback onTap) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      selectedColor: AppTheme.primary.withValues(alpha: 0.18),
     );
   }
 }

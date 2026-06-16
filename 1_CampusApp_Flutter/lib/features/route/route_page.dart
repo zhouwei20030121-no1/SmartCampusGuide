@@ -6,11 +6,14 @@ import 'package:amap_flutter_base/amap_flutter_base.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/network/network_client.dart';
 import '../cache/cache_service.dart';
+import '../guide/guide_coordination_service.dart';
 import '../spot/spot_model.dart';
 import 'amap_route_api.dart';
 
 class RoutePage extends StatefulWidget {
-  const RoutePage({super.key});
+  final String? initialEndName;
+
+  const RoutePage({super.key, this.initialEndName});
 
   @override
   State<RoutePage> createState() => _RoutePageState();
@@ -63,7 +66,37 @@ class _RoutePageState extends State<RoutePage> {
         _allSpots = spots;
       });
       _generateMarkers(spots);
+      _applyInitialEnd(spots);
     }
+  }
+
+  void _applyInitialEnd(List<SpotModel> spots) {
+    final keyword = widget.initialEndName?.trim();
+    if (keyword == null || keyword.isEmpty || _endSpot != null) return;
+    final normalizedKeyword = _normalizePlaceName(keyword);
+    SpotModel? matched;
+    for (final spot in spots) {
+      final name = _normalizePlaceName(spot.name);
+      if (name.contains(normalizedKeyword) || normalizedKeyword.contains(name)) {
+        matched = spot;
+        break;
+      }
+    }
+    final selected = matched;
+    if (selected == null) return;
+    setState(() {
+      _endSpot = selected;
+      _endController.text = selected.name;
+    });
+  }
+
+  String _normalizePlaceName(String value) {
+    return value
+        .replaceAll('西南大学', '')
+        .replaceAll('北碚校区', '')
+        .replaceAll(RegExp(r'[()\uFF08\uFF09]'), '')
+        .replaceAll(RegExp(r'\s+'), '')
+        .toLowerCase();
   }
 
   void _generateMarkers(List<SpotModel> spots) {
@@ -302,6 +335,11 @@ class _RoutePageState extends State<RoutePage> {
       );
       _polylines['calculated_route'] = polyline;
     });
+    GuideCoordinationService.instance.setActiveRoute(
+      points: fullRealRoute,
+      routeLabel: isShortest ? '最短路线' : '体验最佳路线',
+      destination: _endSpot?.name ?? '',
+    );
 
     if (autoZoom && fullRealRoute.isNotEmpty) {
       Future.delayed(const Duration(milliseconds: 300), () {
@@ -355,6 +393,7 @@ class _RoutePageState extends State<RoutePage> {
       _cachedShortPath = null;
       _cachedPopularPath = null;
       _polylines.clear();
+      GuideCoordinationService.instance.clearRoute();
       _mapController?.moveCamera(CameraUpdate.newCameraPosition(const CameraPosition(target: _swuCenter, zoom: 15.0)), animated: true);
     });
   }
