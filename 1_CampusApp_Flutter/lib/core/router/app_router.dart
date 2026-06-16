@@ -72,9 +72,19 @@ class AppRouter {
       case aiVision:
         return MaterialPageRoute(builder: (_) => const AiVisionPage());
       case routePlan:
-        final routeArgs = settings.arguments as Map<String, dynamic>?;
+        final args = settings.arguments as Map<String, dynamic>?;
         return MaterialPageRoute(
-          builder: (_) => RoutePage(initialEndName: routeArgs?['endName']?.toString()),
+          builder: (_) => RoutePage(
+            initialStartName: args?['startName']?.toString(),
+            initialStartAliases: (args?['startAliases'] as List<dynamic>?)
+                ?.map((item) => item.toString())
+                .toList(),
+            initialDestinationName: args?['destinationName']?.toString() ?? args?['endName']?.toString(),
+            initialDestinationAliases:
+                (args?['destinationAliases'] as List<dynamic>?)
+                    ?.map((item) => item.toString())
+                    .toList(),
+          ),
         );
       case checkin:
         return MaterialPageRoute(builder: (_) => const CheckinPage());
@@ -84,7 +94,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const BusSchedulePage());
       case search:
         return PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => const SearchPage(),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const SearchPage(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -93,7 +104,7 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const SpotListPage());
       case offlineDownload:
         return MaterialPageRoute(builder: (_) => const OfflineDownloadPage());
-    // 🌟 3. 在这里添加 case
+      // 🌟 3. 在这里添加 case
       case announcement:
         return MaterialPageRoute(builder: (_) => const AnnouncementListPage());
       default:

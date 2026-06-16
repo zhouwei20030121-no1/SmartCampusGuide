@@ -75,6 +75,12 @@ const routes = [
         meta: { title: '语料库管理' },
       },
       {
+        path: 'knowledge-base',
+        name: 'KnowledgeBaseManage',
+        component: () => import('@/views/ai/KnowledgeBaseManage.vue'),
+        meta: { title: '知识库管理' },
+      },
+      {
         path: 'announcement-manage',
         name: 'AnnouncementManage',
         component: () => import('@/views/announcement/AnnouncementManage.vue'),

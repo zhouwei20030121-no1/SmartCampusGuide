@@ -167,6 +167,7 @@ class RAGService:
         history: list[dict] | None = None,
         top_k: int = 5,
         persona: str = "新生",
+        context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Answer a user question with local retrieval and optional LLM generation."""
         clean_query = query.strip()
@@ -220,7 +221,7 @@ class RAGService:
             enhanced_query = clean_query
             if web_results_text:
                 enhanced_query = f"{clean_query}{web_results_text}"
-            reply = await self._chat_with_llm(enhanced_query, sources, history or [], persona)
+            reply = await self._chat_with_llm(enhanced_query, sources, history or [], persona, context or {})
             return {
                 "reply": reply or fallback_reply,
                 "sources": sources,
@@ -242,19 +243,24 @@ class RAGService:
         sources: list[dict[str, Any]],
         history: list[dict],
         persona: str = "新生",
+        context: dict[str, Any] | None = None,
     ) -> str:
         context_text = self._format_context(sources)
         persona_hint = _PERSONA_HINTS.get(persona, _PERSONA_HINTS["新生"])
+        environment_text = self._format_environment_context(context or {})
         messages = [
             {
                 "role": "system",
                 "content": (
                     f"你是西南大学智能校园导览系统中的 AI 虚拟导游“西小导”。当前系统时间是：{_current_date()}。\n"
                     f"当前角色设定：{persona_hint}\n\n"
+                    f"当前现场上下文：\n{environment_text}\n\n"
                     "处理问题时，请遵循以下原则：\n"
                     "1. 优先结合当前的【聊天历史上下文】来理解用户的意图，尤其是当用户使用“他/她/这/那”等代词时。\n"
-                    "2. 参考下方提供的【知识库内容】和【网络来源】。但是，如果检索到的这些资料与用户的【最新问题】和【聊天历史】毫无关系（即可能是垃圾检索结果），请**果断完全忽略它们**。\n"
-                    "3. 如果提供的资料都无法回答问题，请直接利用你自身的丰富知识库（常识、公众人物信息等）进行解答。\n"
+                    "2. 回答路线、食堂、附近景点、参观建议时，优先使用现场上下文中的当前位置、附近景点、时间、网络和离线缓存状态。\n"
+                    "3. 如果起点不明确且现场上下文没有可靠定位，请先追问用户当前位置；如果终点有歧义，请列出候选地点让用户选择。\n"
+                    "4. 参考下方提供的【知识库内容】和【网络来源】。但是，如果检索到的这些资料与用户的【最新问题】和【聊天历史】毫无关系（即可能是垃圾检索结果），请**果断完全忽略它们**。\n"
+                    "5. 如果提供的资料都无法回答问题，请直接利用你自身的丰富知识库（常识、公众人物信息等）进行解答。\n"
                     "请注意：千万不要在回答中说“根据知识库内容，我没有找到...”这类死板的话。直接自然地给出你的答案即可。\n"
                     "【严格格式要求】：请直接使用普通文本回答，绝对不要输出任何 Markdown 加粗（**）、斜体（*）或列表等格式符号。"
                 ),
@@ -289,6 +295,30 @@ class RAGService:
             reply_text = re.sub(r'\*(.*?)\*', r'\1', reply_text)
             
             return reply_text
+
+    def _format_environment_context(self, context: dict[str, Any]) -> str:
+        if not context:
+            return "暂无 App 现场上下文。"
+        labels = {
+            "latitude": "当前纬度",
+            "longitude": "当前经度",
+            "nearby_spot": "当前附近景点",
+            "current_time": "当前时间",
+            "weather": "天气",
+            "is_night": "是否夜间",
+            "user_speed": "用户速度",
+            "route_status": "当前路线状态",
+            "battery": "电量状态",
+            "network": "网络状态",
+            "offline_cached": "是否已离线缓存",
+        }
+        lines = []
+        for key, label in labels.items():
+            value = context.get(key)
+            if value is None or value == "":
+                continue
+            lines.append(f"- {label}：{value}")
+        return "\n".join(lines) if lines else "暂无 App 现场上下文。"
 
     def _load_default_corpus(self) -> None:
         data_dir = Path(__file__).resolve().parents[2] / "data"
@@ -357,10 +387,14 @@ class RAGService:
         for word in ("怎么去", "怎么走", "如何到", "如何去", "带我去", "导航到"):
             if word in destination:
                 left, right = destination.split(word, 1)
-                destination = right or left
+                # If right is just punctuation, the actual destination is on the left
+                clean_right = re.sub(r"[？?。！!，,；;\s]+$", "", right).strip()
+                destination = clean_right if clean_right else left
         for word in ("怎么去", "怎么走", "如何到", "如何去", "带我去", "导航到", "去", "路线", "导航"):
             destination = destination.replace(word, "")
         destination = re.sub(r"[？?。！!，,；;\s]+$", "", destination).strip()
+        # Also remove leading "去" or "到"
+        destination = re.sub(r"^[去到]", "", destination).strip()
         return destination or query.strip()
 
     def _build_route_reply(self, query: str, sources: list[dict[str, Any]]) -> str:

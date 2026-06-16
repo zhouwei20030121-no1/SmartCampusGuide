@@ -1,8 +1,13 @@
 import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../cache/cache_service.dart';
+import '../location/location_service.dart';
+import '../spot/spot_model.dart';
 import 'chat_api.dart';
 
 const Color _schoolBlue = Color(0xFF023D83);
@@ -19,6 +24,9 @@ class ChatPage extends StatefulWidget {
 class _ChatPageState extends State<ChatPage> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  final LocationService _locationService = LocationService();
+  List<SpotModel> _spots = [];
+  String _routeStatus = '暂无路线';
   String _persona = '新生';
   final _messages = <_ChatMsg>[
     const _ChatMsg(
@@ -31,10 +39,23 @@ class _ChatPageState extends State<ChatPage> {
   @override
   void initState() {
     super.initState();
+    _loadContextData();
     final prompt = widget.initialPrompt;
     if (prompt != null && prompt.trim().isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _sendText(prompt));
     }
+  }
+
+  Future<void> _loadContextData() async {
+    var records = await CacheService.getCachedSpots();
+    if (records.isEmpty) {
+      await CacheService.preloadSpots();
+      records = await CacheService.getCachedSpots();
+    }
+    if (!mounted) return;
+    setState(() {
+      _spots = records.map((item) => SpotModel.fromJson(item)).toList();
+    });
   }
 
   @override
@@ -51,6 +72,27 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _sendText(String text) async {
     if (text.isEmpty || _sending) return;
+
+    final routeResponse = _buildRouteAgentResponse(text);
+    if (routeResponse != null) {
+      setState(() {
+        _messages.add(_ChatMsg(text: text, isMe: true));
+        _messages.add(
+          _ChatMsg(
+            text: routeResponse.message,
+            isMe: false,
+            routePlan: routeResponse.plan,
+          ),
+        );
+        if (routeResponse.plan != null) {
+          _routeStatus =
+              '${routeResponse.plan!.startLabel} -> ${routeResponse.plan!.destination.destination}';
+        }
+      });
+      _msgCtrl.clear();
+      _scrollToBottom();
+      return;
+    }
 
     final history = _messages
         .where((msg) => !msg.isLoading)
@@ -77,6 +119,7 @@ class _ChatPageState extends State<ChatPage> {
         query: text,
         history: history,
         persona: _persona,
+        context: _buildEnvironmentContext(),
       );
       if (!mounted) return;
       setState(() {
@@ -125,6 +168,458 @@ class _ChatPageState extends State<ChatPage> {
       });
     }
     _scrollToBottom();
+  }
+
+  Map<String, dynamic> _buildEnvironmentContext() {
+    final now = DateTime.now();
+    final hasLocation =
+        _locationService.isTracking &&
+        _locationService.latitude != 0.0 &&
+        _locationService.longitude != 0.0;
+    return {
+      'latitude': hasLocation
+          ? _locationService.latitude.toStringAsFixed(6)
+          : '未获取',
+      'longitude': hasLocation
+          ? _locationService.longitude.toStringAsFixed(6)
+          : '未获取',
+      'nearby_spot': _locationService.nearbySpot.isNotEmpty
+          ? '${_locationService.nearbySpot}，约${_locationService.distance.toStringAsFixed(0)}米'
+          : '暂无触发景点',
+      'current_time': now.toIso8601String(),
+      'weather': '未接入天气接口',
+      'is_night': now.hour >= 19 || now.hour < 6,
+      'user_speed': _locationService.isTracking ? '步行/模拟定位中' : '未知',
+      'route_status': _routeStatus,
+      'battery': '未接入电量接口',
+      'network': '在线优先，失败时尝试内网穿透地址',
+      'offline_cached': _spots.isNotEmpty,
+    };
+  }
+
+  _RouteAgentResponse? _buildRouteAgentResponse(String text) {
+    final cleaned = text.trim();
+    if (cleaned.isEmpty) return null;
+
+    final isNearestDining =
+        cleaned.contains('最近') &&
+        (cleaned.contains('食堂') ||
+            cleaned.contains('吃饭') ||
+            cleaned.contains('餐厅'));
+    final hasRouteIntent = isNearestDining || _hasRouteIntent(cleaned);
+    if (!hasRouteIntent) return null;
+
+    final startInfo = _extractStart(cleaned);
+    final destinationText = isNearestDining
+        ? '最近的食堂'
+        : _extractDestinationText(cleaned);
+
+    if (destinationText == null || destinationText.isEmpty) {
+      return const _RouteAgentResponse(
+        message: '你想去哪里？请告诉我目的地，例如“去中心图书馆”或“从二号门到第八教学楼”。',
+      );
+    }
+
+    final hasReliableLocation =
+        _locationService.isTracking &&
+        _locationService.latitude != 0.0 &&
+        _locationService.longitude != 0.0;
+    if (startInfo == null && !hasReliableLocation) {
+      return _RouteAgentResponse(
+        message: '你现在在哪？告诉我起点后我可以直接生成路线。也可以先开启定位，我会默认用当前位置作为起点。',
+        plan: null,
+      );
+    }
+
+    final destinationCandidates = isNearestDining
+        ? _nearestDiningCandidates()
+        : _findCandidateSpots(destinationText);
+    if (destinationCandidates.length > 1 &&
+        !_canAutoResolveDestination(destinationText, destinationCandidates)) {
+      final names = destinationCandidates
+          .take(4)
+          .map((spot) => spot.name)
+          .join('、');
+      return _RouteAgentResponse(
+        message: '“$destinationText”可能对应多个地点：$names。你想去哪个？',
+      );
+    }
+
+    final destinationSpot = destinationCandidates.isNotEmpty
+        ? _resolveDestination(destinationText, destinationCandidates)
+        : null;
+    final routeTarget = destinationSpot == null
+        ? _normalizeRouteTarget(destinationText)
+        : _RouteTarget(
+            destination: destinationSpot.name,
+            aliases: [destinationSpot.name, destinationText],
+          );
+
+    if (routeTarget == null) {
+      return _RouteAgentResponse(
+        message: '我还没识别出目的地。可以换成具体名称，例如“中心图书馆”“第25教学楼”。',
+      );
+    }
+
+    final waypoints = _recommendWaypoints(cleaned, routeTarget.destination);
+    final routeType = _routeTypeFor(cleaned, waypoints);
+    var intro = _buildRouteIntro(destinationSpot, waypoints);
+    if (destinationCandidates.length > 1) {
+      final names = destinationCandidates
+          .take(4)
+          .map((spot) => spot.name)
+          .join('、');
+      intro = '$intro\n候选地点：$names；已先按最常用目的地生成路线，可继续追问切换。';
+    }
+    intro = '$intro\n如果地图步行路径暂不可达，路线规划会给出校内直连替代方案。';
+    final startLabel = startInfo?.name ?? '当前位置';
+    final startAliases = startInfo?.aliases ?? const [];
+
+    return _RouteAgentResponse(
+      message: '已生成 AI Agent 导航助手方案，可进入路线规划查看地图路径。',
+      plan: _RoutePlan(
+        startLabel: startLabel,
+        startAliases: startAliases,
+        destination: routeTarget,
+        waypoints: waypoints,
+        routeType: routeType,
+        intro: intro,
+      ),
+    );
+  }
+
+  _RouteTarget? _extractRouteTarget(String text) {
+    final cleaned = text.trim();
+    if (cleaned.isEmpty) return null;
+    final lower = cleaned.toLowerCase();
+    const routeWords = [
+      '导航到',
+      '带我去',
+      '怎么去',
+      '怎么走',
+      '如何去',
+      '如何到',
+      '路线',
+      '去',
+      'how to go',
+      'how do i get to',
+      'how can i get to',
+      'go to',
+      'navigate to',
+      'directions to',
+      'route to',
+      'take me to',
+    ];
+    if (!routeWords.any((word) => lower.contains(word))) return null;
+
+    var destination = '';
+    final fromToMatch = RegExp(
+      r'从.+?到(.+?)(怎么走|怎么去|如何去|如何到|路线|导航)?[？?。！!，,、\s]*$',
+    ).firstMatch(cleaned);
+    if (fromToMatch != null) {
+      destination = fromToMatch.group(1) ?? '';
+    }
+    if (destination.isEmpty) {
+      for (final word in ['导航到', '带我去', '怎么去', '怎么走', '如何去', '如何到', '去', '想去']) {
+        final index = cleaned.indexOf(word);
+        if (index >= 0) {
+          destination = index == 0
+              ? cleaned.substring(index + word.length)
+              : cleaned.substring(0, index);
+          break;
+        }
+      }
+    }
+    if (destination.isEmpty) {
+      final englishMatch = RegExp(
+        r'^(?:how\s+to\s+go(?:\s+to)?|how\s+(?:do|can)\s+i\s+get\s+to|go\s+to|navigate\s+to|directions\s+to|route\s+to|take\s+me\s+to)\s+(.+?)[?.!，,、\s]*$',
+        caseSensitive: false,
+      ).firstMatch(cleaned);
+      destination = englishMatch?.group(1) ?? '';
+    }
+    if (destination.isEmpty) return null;
+
+    destination = destination
+        .replaceAll(RegExp(r'(怎么走|怎么去|如何去|如何到|路线|导航)$'), '')
+        .replaceAll(RegExp(r'^[去到]'), '')
+        .replaceAll(RegExp(r'[？?。！!，,、\s]'), '')
+        .trim();
+    return _normalizeRouteTarget(destination);
+  }
+
+  bool _hasRouteIntent(String text) {
+    final lower = text.toLowerCase();
+    const routeWords = [
+      '导航到',
+      '带我去',
+      '怎么去',
+      '怎么走',
+      '如何去',
+      '如何到',
+      '路线',
+      '想去',
+      '去',
+      'how to go',
+      'how do i get to',
+      'how can i get to',
+      'go to',
+      'navigate to',
+      'directions to',
+      'route to',
+      'take me to',
+    ];
+    return routeWords.any((word) => lower.contains(word));
+  }
+
+  _RouteStart? _extractStart(String text) {
+    final patterns = [
+      RegExp(r'我在(.+?)(，|,|。|想去|去|到|$)'),
+      RegExp(r'从(.+?)到'),
+      RegExp(r'from\s+(.+?)\s+to\s+', caseSensitive: false),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(text);
+      final value = match?.group(1)?.trim();
+      if (value != null && value.isNotEmpty) {
+        final target = _normalizeRouteTarget(value);
+        return _RouteStart(
+          name: target?.destination ?? value,
+          aliases: target?.aliases ?? [value],
+        );
+      }
+    }
+    return null;
+  }
+
+  String? _extractDestinationText(String text) {
+    final fromTo = RegExp(r'从.+?到(.+?)(，|,|。|顺便|$)').firstMatch(text);
+    if (fromTo != null) return _cleanDestination(fromTo.group(1) ?? '');
+
+    final wantTo = RegExp(r'想去(.+?)(，|,|。|顺便|$)').firstMatch(text);
+    if (wantTo != null) return _cleanDestination(wantTo.group(1) ?? '');
+
+    final routeTarget = _extractRouteTarget(text);
+    return routeTarget?.destination;
+  }
+
+  String _cleanDestination(String value) {
+    return value
+        .replaceAll(RegExp(r'(怎么走|怎么去|如何去|如何到|路线|导航|看看.*)$'), '')
+        .replaceAll(RegExp(r'^[去到]'), '')
+        .replaceAll(RegExp(r'[？?。！!，,、\s]+$'), '')
+        .trim();
+  }
+
+  List<SpotModel> _findCandidateSpots(String keyword) {
+    final normalizedKeyword = _normalizeName(keyword);
+    if (normalizedKeyword.isEmpty) return const [];
+    final candidates = _spots.where((spot) {
+      final normalizedName = _normalizeName(spot.name);
+      return normalizedName.contains(normalizedKeyword) ||
+          normalizedKeyword.contains(normalizedName);
+    }).toList();
+    candidates.sort((a, b) => a.name.length.compareTo(b.name.length));
+    return candidates;
+  }
+
+  bool _canAutoResolveDestination(String keyword, List<SpotModel> candidates) {
+    final normalized = _normalizeName(keyword);
+    return normalized == '图书馆' &&
+        candidates.any((spot) => spot.name.contains('中心图书馆'));
+  }
+
+  SpotModel? _resolveDestination(String keyword, List<SpotModel> candidates) {
+    if (candidates.isEmpty) return null;
+    final normalized = _normalizeName(keyword);
+    if (normalized == '图书馆') {
+      return candidates.firstWhere(
+        (spot) => spot.name.contains('中心图书馆'),
+        orElse: () => candidates.first,
+      );
+    }
+    return candidates.first;
+  }
+
+  List<SpotModel> _nearestDiningCandidates() {
+    final diningSpots = _spots.where((spot) {
+      return spot.name.contains('食堂') ||
+          spot.name.contains('餐厅') ||
+          spot.description.contains('食堂') ||
+          spot.description.contains('餐饮');
+    }).toList();
+    if (diningSpots.isEmpty) return const [];
+    diningSpots.sort(
+      (a, b) => _distanceToCurrent(a).compareTo(_distanceToCurrent(b)),
+    );
+    return diningSpots.take(3).toList();
+  }
+
+  List<_RouteWaypoint> _recommendWaypoints(String query, String destination) {
+    final wantsHistory =
+        query.contains('历史') ||
+        query.contains('历史感') ||
+        query.contains('校史') ||
+        query.contains('文化');
+    if (!wantsHistory) return const [];
+
+    final candidates = _spots
+        .where((spot) {
+          if (spot.name == destination) return false;
+          return spot.category.contains('历史') ||
+              spot.name.contains('雨僧') ||
+              spot.name.contains('行署') ||
+              spot.name.contains('博物馆') ||
+              spot.description.contains('历史');
+        })
+        .take(2);
+    return candidates
+        .map(
+          (spot) => _RouteWaypoint(
+            name: spot.name,
+            description: _shortDescription(spot),
+          ),
+        )
+        .toList();
+  }
+
+  String _routeTypeFor(String query, List<_RouteWaypoint> waypoints) {
+    if (waypoints.isNotEmpty) return '历史文化顺路游览';
+    if (query.contains('最近')) return '就近推荐路线';
+    return '步行导航路线';
+  }
+
+  String _buildRouteIntro(
+    SpotModel? destination,
+    List<_RouteWaypoint> waypoints,
+  ) {
+    final pieces = <String>[];
+    if (destination != null) {
+      pieces.add('${destination.name}：${_shortDescription(destination)}');
+    }
+    for (final waypoint in waypoints) {
+      pieces.add('${waypoint.name}：${waypoint.description}');
+    }
+    return pieces.isEmpty ? '进入路线规划后会展示地图路径和步行路线。' : pieces.join('\n');
+  }
+
+  String _shortDescription(SpotModel spot) {
+    final text = spot.description.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (text.length <= 80) return text;
+    return '${text.substring(0, 80)}...';
+  }
+
+  double _distanceToCurrent(SpotModel spot) {
+    final lat = _locationService.latitude;
+    final lng = _locationService.longitude;
+    if (lat == 0.0 || lng == 0.0) return double.infinity;
+    const r = 6371000;
+    final lat1 = lat * math.pi / 180;
+    final lat2 = spot.latitude * math.pi / 180;
+    final deltaLat = (spot.latitude - lat) * math.pi / 180;
+    final deltaLng = (spot.longitude - lng) * math.pi / 180;
+    final a =
+        math.sin(deltaLat / 2) * math.sin(deltaLat / 2) +
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(deltaLng / 2) *
+            math.sin(deltaLng / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  String _normalizeName(String value) {
+    return value
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll('西南大学', '')
+        .replaceAll('北碚校区', '')
+        .replaceAll('（', '')
+        .replaceAll('）', '')
+        .replaceAll('(', '')
+        .replaceAll(')', '')
+        .replaceAll('中心', '')
+        .toLowerCase();
+  }
+
+  _RouteTarget? _normalizeRouteTarget(String destination) {
+    if (destination.isEmpty) return null;
+    final lower = destination.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), ' ');
+    final compactLower = lower.replaceAll(' ', '');
+    if (compactLower.contains('computercollege') ||
+        compactLower.contains('computerscience') ||
+        compactLower.contains('softwarecollege') ||
+        compactLower.contains('cis') ||
+        destination.contains('计算机学院') ||
+        destination.contains('软件学院')) {
+      return const _RouteTarget(
+        destination: '计算机与信息科学学院 软件学院',
+        aliases: [
+          '计算机与信息科学学院 软件学院',
+          '计算机学院',
+          '软件学院',
+          '明德楼',
+          '第25教学楼',
+          '25教',
+          'computer college',
+          'computer science college',
+          'software college',
+        ],
+      );
+    }
+    if (destination.contains('二号门') ||
+        destination.contains('2号门') ||
+        destination.contains('学行门')) {
+      return const _RouteTarget(
+        destination: '学行门（2号门）',
+        aliases: ['学行门（2号门）', '学行门', '二号门', '2号门'],
+      );
+    }
+
+    final arabicTeaching = RegExp(r'^第?(\d+)教(?:学楼)?$').firstMatch(destination);
+    if (arabicTeaching != null) {
+      return _teachingBuildingTarget(arabicTeaching.group(1)!);
+    }
+
+    final chineseTeaching = RegExp(
+      r'^第?([一二两三四五六七八九十]+)教(?:学楼)?$',
+    ).firstMatch(destination);
+    if (chineseTeaching != null) {
+      final number = chineseTeaching.group(1) ?? '';
+      return _teachingBuildingTarget(number.replaceAll('两', '二'));
+    }
+
+    return _RouteTarget(destination: destination, aliases: [destination]);
+  }
+
+  _RouteTarget _teachingBuildingTarget(String number) {
+    final normalizedNumber = number.replaceAll('两', '二');
+    if (normalizedNumber == '2' || normalizedNumber == '二') {
+      return const _RouteTarget(
+        destination: '兰华楼（第2教学楼）',
+        aliases: ['兰华楼（第2教学楼）', '兰华楼', '第2教学楼', '第二教学楼', '2教', '西塔学院'],
+      );
+    }
+    if (normalizedNumber == '25' || normalizedNumber == '二十五') {
+      return const _RouteTarget(
+        destination: '计算机与信息科学学院 软件学院',
+        aliases: ['计算机与信息科学学院 软件学院', '明德楼', '第25教学楼', '25教'],
+      );
+    }
+    return _RouteTarget(
+      destination: '第$normalizedNumber教学楼',
+      aliases: ['第$normalizedNumber教学楼', '$normalizedNumber教'],
+    );
+  }
+
+  void _openRoutePlan(_RoutePlan plan) {
+    Navigator.pushNamed(
+      context,
+      AppRouter.routePlan,
+      arguments: {
+        'startName': plan.startLabel == '当前位置' ? null : plan.startLabel,
+        'startAliases': plan.startAliases,
+        'destinationName': plan.destination.destination,
+        'destinationAliases': plan.destination.aliases,
+      },
+    );
   }
 
   void _showVoiceInputSheet() {
@@ -212,7 +707,10 @@ class _ChatPageState extends State<ChatPage> {
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.all(16),
                     itemCount: _messages.length,
-                    itemBuilder: (ctx, i) => _ChatBubble(msg: _messages[i]),
+                    itemBuilder: (ctx, i) => _ChatBubble(
+                      msg: _messages[i],
+                      onRouteTap: _openRoutePlan,
+                    ),
                   ),
                 ),
                 SafeArea(
@@ -458,6 +956,7 @@ class _ChatMsg {
   final bool fallback;
   final String model;
   final List<String> sources;
+  final _RoutePlan? routePlan;
 
   const _ChatMsg({
     required this.text,
@@ -467,13 +966,15 @@ class _ChatMsg {
     this.fallback = false,
     this.model = '',
     this.sources = const [],
+    this.routePlan,
   });
 }
 
 class _ChatBubble extends StatelessWidget {
   final _ChatMsg msg;
+  final ValueChanged<_RoutePlan>? onRouteTap;
 
-  const _ChatBubble({required this.msg});
+  const _ChatBubble({required this.msg, this.onRouteTap});
 
   @override
   Widget build(BuildContext context) {
@@ -523,6 +1024,13 @@ class _ChatBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(msg.text, style: TextStyle(color: textColor)),
+            if (!msg.isMe && msg.routePlan != null) ...[
+              const SizedBox(height: 12),
+              _RouteActionCard(
+                plan: msg.routePlan!,
+                onTap: () => onRouteTap?.call(msg.routePlan!),
+              ),
+            ],
             if (msg.isLoading) ...[
               const SizedBox(height: 8),
               const SizedBox(
@@ -563,6 +1071,149 @@ class _ChatBubble extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RouteTarget {
+  final String destination;
+  final List<String> aliases;
+
+  const _RouteTarget({required this.destination, required this.aliases});
+}
+
+class _RouteStart {
+  final String name;
+  final List<String> aliases;
+
+  const _RouteStart({required this.name, required this.aliases});
+}
+
+class _RouteWaypoint {
+  final String name;
+  final String description;
+
+  const _RouteWaypoint({required this.name, required this.description});
+}
+
+class _RoutePlan {
+  final String startLabel;
+  final List<String> startAliases;
+  final _RouteTarget destination;
+  final List<_RouteWaypoint> waypoints;
+  final String routeType;
+  final String intro;
+
+  const _RoutePlan({
+    required this.startLabel,
+    required this.startAliases,
+    required this.destination,
+    required this.waypoints,
+    required this.routeType,
+    required this.intro,
+  });
+}
+
+class _RouteAgentResponse {
+  final String message;
+  final _RoutePlan? plan;
+
+  const _RouteAgentResponse({required this.message, this.plan});
+}
+
+class _RouteActionCard extends StatelessWidget {
+  final _RoutePlan plan;
+  final VoidCallback onTap;
+
+  const _RouteActionCard({required this.plan, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _schoolBlue.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _schoolBlue.withValues(alpha: 0.24)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: const BoxDecoration(
+                color: _schoolBlue,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.route_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${plan.startLabel} → ${plan.destination.destination}',
+                    style: const TextStyle(
+                      color: _schoolBlue,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _RouteInfoLine(label: '路线类型', value: plan.routeType),
+                  if (plan.waypoints.isNotEmpty)
+                    _RouteInfoLine(
+                      label: '中途推荐',
+                      value: plan.waypoints.map((item) => item.name).join('、'),
+                    ),
+                  _RouteInfoLine(label: '地图路径', value: '点击进入路线规划查看'),
+                  if (plan.intro.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      plan.intro,
+                      maxLines: 5,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppTheme.textSub,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: _schoolBlue),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RouteInfoLine extends StatelessWidget {
+  final String label;
+  final String value;
+
+  const _RouteInfoLine({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Text(
+        '$label：$value',
+        style: const TextStyle(color: AppTheme.textSub, fontSize: 12),
       ),
     );
   }

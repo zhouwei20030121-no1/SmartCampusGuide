@@ -12,6 +12,7 @@ class ChatRequest(BaseModel):
     history: list[dict] = Field(default_factory=list)
     top_k: int = 5
     persona: str = "新生"
+    context: dict = Field(default_factory=dict)
 
 
 class CorpusLoadRequest(BaseModel):
@@ -21,7 +22,13 @@ class CorpusLoadRequest(BaseModel):
 @router.post("/chat")
 async def chat(req: ChatRequest):
     try:
-        result = await rag_service.chat(req.query, req.history, req.top_k, persona=req.persona)
+        result = await rag_service.chat(
+            req.query,
+            req.history,
+            req.top_k,
+            persona=req.persona,
+            context=req.context,
+        )
         return ApiResponse.ok(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
