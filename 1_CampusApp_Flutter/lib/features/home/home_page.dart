@@ -81,7 +81,7 @@ class _HomePageState extends State<HomePage> {
                     setState(() => _currentIndex = index);
                   },
                 ),
-                const MapPage(),
+                MapPage(isTabVisible: _currentIndex == 1),
                 const _TabSmartAudio(),
                 const ProfilePage(),
               ],
