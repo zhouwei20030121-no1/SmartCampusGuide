@@ -44,6 +44,28 @@ public class BusController {
         return Result.ok(busService.listStations());
     }
 
+    @GetMapping("/nearest")
+    public Result<Map<String, Object>> nearestStation(
+            @RequestParam double lat,
+            @RequestParam double lng) {
+        return Result.ok(busService.nearestRecommendation(lat, lng));
+    }
+
+    @PostMapping("/plan")
+    public Result<Map<String, Object>> planCommute(@RequestBody Map<String, Object> body) {
+        return Result.ok(busService.planCommute(body));
+    }
+
+    @PostMapping("/assistant")
+    public Result<Map<String, Object>> assistant(@RequestBody Map<String, Object> body) {
+        return Result.ok(busService.assistant(body));
+    }
+
+    @PostMapping("/guide/prefetch")
+    public Result<Map<String, Object>> prefetchGuide(@RequestBody Map<String, Object> body) {
+        return Result.ok(busService.prefetchGuide(body));
+    }
+
     @PostMapping("/line")
     public Result<Void> saveLine(@RequestBody Map<String, Object> body) {
         System.out.println("收到保存请求: " + body);

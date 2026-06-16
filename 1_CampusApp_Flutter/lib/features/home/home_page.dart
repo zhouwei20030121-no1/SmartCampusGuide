@@ -470,7 +470,7 @@ class _TabHomeState extends State<_TabHome> {
           errorBuilder: (_, _, _) => Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF73B4E9), Color(0xFF3A86C5)],
+                colors: [Color(0xFF2A5794), Color(0xFF01306B)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -515,7 +515,7 @@ class _TabHomeState extends State<_TabHome> {
           _GridButton(
             icon: Icons.workspace_premium_outlined,
             label: '景点打卡',
-            onTap: () => widget.onTabSelected(3),
+            onTap: () => Navigator.pushNamed(context, '/checkin'),
           ),
           _GridButton(
             icon: Icons.auto_stories_outlined,
@@ -2017,7 +2017,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 width: 46, height: 46,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                      colors: hasContent ? [AppTheme.primary, const Color(0xFF3A86C5)] : [const Color(0xFFC2DEF5), const Color(0xFF73B4E9)]),
+                      colors: hasContent ? [AppTheme.primary, const Color(0xFF01306B)] : [const Color(0xFFB8C9E0), const Color(0xFF2A5794)]),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(hasContent ? Icons.volume_up : Icons.headphones, color: Colors.white, size: 22),

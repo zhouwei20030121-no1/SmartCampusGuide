@@ -60,18 +60,30 @@ public class GeofenceService {
     }
 
     public String checkProximity(String userId, double lng, double lat, double speedMps, double accuracyMeters) {
+        Map<String, Object> result = checkProximityDetail(userId, lng, lat, speedMps, accuracyMeters);
+        return "TRIGGER_GUIDE".equals(result.get("action")) ? String.valueOf(result.get("spotName")) : null;
+    }
+
+    public Map<String, Object> checkProximityDetail(String userId, double lng, double lat, double speedMps, double accuracyMeters) {
         String safeUserId = normalizeUserId(userId);
         long now = System.currentTimeMillis();
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
 
         if (speedMps >= FAST_PASSING_SPEED_MPS) {
             clearDwellForUser(safeUserId);
-            return null;
+            result.put("action", "KEEP_WALKING");
+            result.put("confidence", 0.25);
+            result.put("reason", "移动速度较快，暂不触发讲解");
+            return result;
         }
 
         LocalSpot nearest = findNearest(lng, lat, triggerRadius(accuracyMeters));
         if (nearest == null) {
             clearDwellForUser(safeUserId);
-            return null;
+            result.put("action", "KEEP_WALKING");
+            result.put("confidence", 0.0);
+            result.put("reason", "尚未进入景点地理围栏");
+            return result;
         }
 
         clearOtherDwellKeys(safeUserId, nearest.name);
@@ -79,24 +91,47 @@ public class GeofenceService {
         Long cooldownEnd = cooldownUntil.get(userSpotKey);
         if (cooldownEnd != null) {
             if (cooldownEnd > now) {
-                return null;
+                result.put("action", "KEEP_WALKING");
+                result.put("spotName", nearest.name);
+                result.put("distanceMeters", Math.round(nearest.distanceMeters));
+                result.put("confidence", 0.38);
+                result.put("reason", "该景点刚刚讲解过，仍在冷却时间内");
+                return result;
             }
             cooldownUntil.remove(userSpotKey);
         }
 
         Long firstSeen = dwellStartedAt.putIfAbsent(userSpotKey, now);
         if (firstSeen == null) {
-            return null;
+            result.put("action", "KEEP_WALKING");
+            result.put("spotName", nearest.name);
+            result.put("distanceMeters", Math.round(nearest.distanceMeters));
+            result.put("confidence", confidence(nearest.distanceMeters, 0, speedMps, accuracyMeters, false));
+            result.put("reason", "已进入围栏，开始累计停留时间");
+            return result;
         }
 
         long elapsedSeconds = TimeUnit.MILLISECONDS.toSeconds(now - firstSeen);
+        double confidence = confidence(nearest.distanceMeters, elapsedSeconds, speedMps, accuracyMeters, true);
         if (elapsedSeconds < DWELL_SECONDS) {
-            return null;
+            result.put("action", "KEEP_WALKING");
+            result.put("spotName", nearest.name);
+            result.put("distanceMeters", Math.round(nearest.distanceMeters));
+            result.put("dwellSeconds", elapsedSeconds);
+            result.put("confidence", confidence);
+            result.put("reason", "低速靠近景点，继续停留 " + Math.max(0, DWELL_SECONDS - elapsedSeconds) + " 秒后触发");
+            return result;
         }
 
         dwellStartedAt.remove(userSpotKey);
         cooldownUntil.put(userSpotKey, now + TimeUnit.MINUTES.toMillis(COOLDOWN_MINUTES));
-        return nearest.name;
+        result.put("action", "TRIGGER_GUIDE");
+        result.put("spotName", nearest.name);
+        result.put("distanceMeters", Math.round(nearest.distanceMeters));
+        result.put("dwellSeconds", elapsedSeconds);
+        result.put("confidence", confidence);
+        result.put("reason", "低速停留" + elapsedSeconds + "秒，距离" + Math.round(nearest.distanceMeters) + "米，定位精度良好");
+        return result;
     }
 
     private List<LocalSpot> loadDbSpots() {
@@ -151,6 +186,16 @@ public class GeofenceService {
             return BASE_TRIGGER_RADIUS;
         }
         return Math.max(BASE_TRIGGER_RADIUS, Math.min(90.0, accuracyMeters * 1.6));
+    }
+
+    private double confidence(double distanceMeters, long dwellSeconds, double speedMps, double accuracyMeters, boolean sameSpot) {
+        double distanceScore = Math.max(0.0, 1.0 - distanceMeters / 90.0) * 0.35;
+        double dwellScore = Math.min(1.0, dwellSeconds / (double) DWELL_SECONDS) * 0.25;
+        double speedScore = Math.max(0.0, 1.0 - speedMps / FAST_PASSING_SPEED_MPS) * 0.18;
+        double accuracyScore = accuracyMeters <= 0 ? 0.12 : Math.max(0.0, 1.0 - accuracyMeters / 80.0) * 0.12;
+        double stabilityScore = sameSpot ? 0.10 : 0.0;
+        double total = distanceScore + dwellScore + speedScore + accuracyScore + stabilityScore;
+        return Math.round(Math.min(0.99, total) * 100.0) / 100.0;
     }
 
     private double distanceMeters(double lat1, double lng1, double lat2, double lng2) {

@@ -679,6 +679,7 @@ class RAGService:
         normalized_persona = self._normalize_persona(persona)
         docs = self.search(spot_name, top_k=5)
         safe_comments = [c.strip()[:300] for c in (comments or []) if c and c.strip()][:8]
+        comment_summary = self._analyze_comments(safe_comments)
         comments_text = "\n".join(f"- {item}" for item in safe_comments) or "暂无用户评论。"
         context = self._format_context(docs)
         time_text = time_context or _current_date()
@@ -711,7 +712,36 @@ class RAGService:
             "persona": normalized_persona,
             "language": language,
             "comments_used": len(safe_comments),
+            "comment_summary": comment_summary,
             "sources": docs,
+        }
+
+    def _analyze_comments(self, comments: list[str]) -> dict[str, Any]:
+        """Cluster comments into story themes and sentiments without an extra model call."""
+        buckets = {
+            "photo_checkin": ["拍照", "照片", "打卡", "好看", "风景", "晚霞"],
+            "class_study": ["上课", "自习", "考试", "课堂", "老师", "学习"],
+            "friendship": ["约会", "朋友", "一起", "等人", "散步"],
+            "alumni_memory": ["毕业", "校友", "回来", "怀念", "青春"],
+        }
+        emotions = {
+            "nostalgic": ["怀念", "毕业", "回来", "青春", "以前"],
+            "healing": ["安静", "舒服", "治愈", "放松", "美"],
+            "energetic": ["热闹", "青春", "开心", "喜欢", "活力"],
+            "complaint": ["远", "累", "挤", "难找", "排队"],
+        }
+        text = " ".join(comments)
+        keywords = [name for name, words in buckets.items() if any(word in text for word in words)]
+        sentiments = [name for name, words in emotions.items() if any(word in text for word in words)]
+        if not keywords:
+            keywords = ["campus_memory"] if comments else ["waiting_first_comment"]
+        if not sentiments:
+            sentiments = ["warm"] if comments else ["neutral"]
+        return {
+            "keywords": keywords[:5],
+            "sentiments": sentiments[:3],
+            "cluster_count": len(keywords),
+            "story_versions": ["today", "weekly", "alumni_memory"],
         }
 
     async def _complete_text(

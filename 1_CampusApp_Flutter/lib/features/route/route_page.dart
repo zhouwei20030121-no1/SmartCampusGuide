@@ -590,6 +590,7 @@ class _RoutePageState extends State<RoutePage> {
       routeLabel: isShortest ? '最短路线' : '体验最佳路线',
       destination: _endSpot?.name ?? '',
     );
+    _prefetchRouteGuides(fullRealRoute);
 
     if (autoZoom && fullRealRoute.isNotEmpty) {
       Future.delayed(const Duration(milliseconds: 300), () {
@@ -599,6 +600,45 @@ class _RoutePageState extends State<RoutePage> {
           animated: true,
         );
       });
+    }
+  }
+
+  Future<void> _prefetchRouteGuides(List<LatLng> route) async {
+    if (route.isEmpty || _allSpots.isEmpty) return;
+    final candidates = _allSpots
+        .where((spot) => _isValidCoordinate(spot.latitude, spot.longitude))
+        .map((spot) => MapEntry(
+              spot,
+              route
+                  .map((point) => _distanceBetween(
+                        point,
+                        LatLng(spot.latitude, spot.longitude),
+                      ))
+                  .reduce(math.min),
+            ))
+        .where((entry) => entry.value <= 90)
+        .toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+
+    final names = <String>{};
+    for (final entry in candidates) {
+      names.add(entry.key.name);
+      if (names.length >= 3) break;
+    }
+    for (final name in names) {
+      try {
+        await NetworkClient.dio.post('/ai/guide/dynamic', data: {
+          'spotName': name,
+          'persona': '新生',
+          'language': 'zh',
+          'voice': 'gentle_guide',
+          'style': 'standard',
+          'environment': {
+            'scene': 'route_prefetch',
+            'routeDestination': _endSpot?.name ?? '',
+          },
+        });
+      } catch (_) {}
     }
   }
 
