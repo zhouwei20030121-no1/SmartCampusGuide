@@ -80,6 +80,12 @@ public class AiGuideService {
         String language = String.valueOf(params.getOrDefault("language", "zh"));
         String voice = String.valueOf(params.getOrDefault("voice", "gentle_guide"));
         String style = String.valueOf(params.getOrDefault("style", "auto"));
+        boolean forceRefresh = Boolean.parseBoolean(String.valueOf(params.getOrDefault("forceRefresh", "false")));
+
+        if (!forceRefresh) {
+            Map<String, Object> cached = findCachedGuide(spotName, persona, language, voice, style);
+            if (!cached.isEmpty()) return cached;
+        }
 
         Map<String, Object> req = new LinkedHashMap<>();
         req.put("spot_name", spotName);
@@ -98,7 +104,7 @@ public class AiGuideService {
                 Map<String, Object> result = normalizeMap(data);
                 String text = stripStageDirections(String.valueOf(result.getOrDefault("text", "")));
                 result.put("text", translateIfNeeded(spotName, text, language));
-                persistGuideResource(spotName, persona, language, voice, String.valueOf(result.getOrDefault("text", "")));
+                persistGuideResource(spotName, style, language, voice, String.valueOf(result.getOrDefault("text", "")));
                 return result;
             }
         } catch (Exception ignored) {}
@@ -114,8 +120,43 @@ public class AiGuideService {
         fallback.put("voice", voice);
         fallback.put("style", style);
         fallback.put("fallback", true);
-        persistGuideResource(spotName, persona, language, voice, stripStageDirections(text));
+        persistGuideResource(spotName, style, language, voice, stripStageDirections(text));
         return fallback;
+    }
+
+    private Map<String, Object> findCachedGuide(String spotName, String persona, String language, String voice, String style) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Long spotId = resolveSpotId(spotName);
+        if (spotId == null) return result;
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                    "select content, style_type, language, voice_type from ai_explanation "
+                            + "where spot_id = ? and style_type = ? and language = ? and voice_type = ? "
+                            + "order by id desc limit 1",
+                    spotId, style, language, voice
+            );
+            if (rows.isEmpty()) {
+                rows = jdbcTemplate.queryForList(
+                        "select content, style_type, language, voice_type from ai_explanation "
+                                + "where spot_id = ? and style_type = ? and language = ? and voice_type = ? "
+                                + "order by id desc limit 1",
+                        spotId, persona, language, voice
+                );
+            }
+            if (!rows.isEmpty()) {
+                Map<String, Object> row = rows.get(0);
+                result.put("spotName", spotName);
+                result.put("spot_name", spotName);
+                result.put("text", stripStageDirections(String.valueOf(row.getOrDefault("content", ""))));
+                result.put("persona", persona);
+                result.put("language", language);
+                result.put("voice", voice);
+                result.put("style", style);
+                result.put("cached", true);
+                result.put("grounding", Map.of("reuse", "ai_explanation"));
+            }
+        } catch (Exception ignored) {}
+        return result;
     }
 
     public Map<String, Object> translateGuide(Map<String, Object> params) {

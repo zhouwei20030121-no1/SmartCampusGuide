@@ -26,8 +26,10 @@ public class LocationHeartbeatController {
         String userId = body.get("userId") != null ? body.get("userId").toString() : "anonymous";
         double lng = Double.parseDouble(body.get("lng").toString());
         double lat = Double.parseDouble(body.get("lat").toString());
+        double speedMps = parseDouble(body.get("speedMps"), 0.0);
+        double accuracyMeters = parseDouble(body.get("accuracyMeters"), -1.0);
 
-        String triggered = geofenceService.checkProximity(userId, lng, lat);
+        String triggered = geofenceService.checkProximity(userId, lng, lat, speedMps, accuracyMeters);
 
         Map<String, Object> result = new LinkedHashMap<>();
         if (triggered != null) {
@@ -37,5 +39,14 @@ public class LocationHeartbeatController {
             result.put("action", "KEEP_WALKING");
         }
         return Result.ok(result);
+    }
+
+    private double parseDouble(Object value, double fallback) {
+        if (value == null) return fallback;
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
     }
 }

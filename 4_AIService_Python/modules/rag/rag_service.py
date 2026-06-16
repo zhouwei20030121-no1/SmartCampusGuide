@@ -583,6 +583,7 @@ class RAGService:
                 "retrieval": "hybrid-vector-keyword",
                 "top_k": top_k,
                 "source_count": len(docs),
+                "trust_policy": "use retrieved facts first; disclose limited evidence; do not invent campus history",
             },
             "tts": {
                 "mode": "client-native-streaming",
@@ -713,7 +714,13 @@ class RAGService:
 
     def _resolve_style(self, persona: str, style: str) -> str:
         if style and style != "auto":
-            return style
+            guide_modes = {
+                "standard": "standard 1-minute campus audio guide; balanced facts, daily use, location context; about 300-450 Chinese characters",
+                "deep": "deep 3-minute guide for visitors or alumni; include more history, spatial details, campus memories and visiting suggestions; about 750-1100 Chinese characters",
+                "story": "fun story guide for check-in; combine retrieved facts with approved user comments; warm, narrative, but do not invent unsupported history; about 500-800 Chinese characters",
+                "practical": "practical guide for freshmen; focus on functions, nearby canteens, dorms, teaching buildings, hospital, express pickup and how to use this place; about 350-600 Chinese characters",
+            }
+            return guide_modes.get(style, style)
         return {
             "新生": "热情引导风格，像学长学姐带路，兼顾实用提示",
             "校友": "怀旧叙事风格，突出校园记忆和时间感",

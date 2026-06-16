@@ -57,7 +57,13 @@ class AppRouter {
           builder: (_) => SpotDetailPage(spotId: args?['spotId'] ?? 0),
         );
       case guide:
-        return MaterialPageRoute(builder: (_) => const GuidePage());
+        final guideArgs = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => GuidePage(
+            spotName: guideArgs?['spotName']?.toString(),
+            initialDescription: guideArgs?['description']?.toString(),
+          ),
+        );
       case chat:
         final args = settings.arguments as Map<String, dynamic>?;
         return MaterialPageRoute(
@@ -66,7 +72,10 @@ class AppRouter {
       case aiVision:
         return MaterialPageRoute(builder: (_) => const AiVisionPage());
       case routePlan:
-        return MaterialPageRoute(builder: (_) => const RoutePage());
+        final routeArgs = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => RoutePage(initialEndName: routeArgs?['endName']?.toString()),
+        );
       case checkin:
         return MaterialPageRoute(builder: (_) => const CheckinPage());
       case campusStory:
