@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/network/network_client.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../route/route_plan_args.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -151,10 +152,13 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                         _ProfileActionTile(
                           title: '路线规划历史',
-                          subtitle: '常用路线会在这里汇总',
+                          subtitle: '查看并复用你规划过的校园路线',
                           icon: Icons.history_rounded,
                           color: const Color(0xFF7C8DA6),
-                          onTap: () => Navigator.pushNamed(context, AppRouter.routePlan),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const UserRouteHistoryPage()),
+                          ),
                         ),
                         if (_isAdmin)
                           _ProfileActionTile(
@@ -254,6 +258,186 @@ class _UserCommentHistoryPageState extends State<UserCommentHistoryPage> {
                     separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) => _CommentCard(comment: _comments[index]),
                   ),
+      ),
+    );
+  }
+}
+
+class UserRouteHistoryPage extends StatefulWidget {
+  const UserRouteHistoryPage({super.key});
+
+  @override
+  State<UserRouteHistoryPage> createState() => _UserRouteHistoryPageState();
+}
+
+class _UserRouteHistoryPageState extends State<UserRouteHistoryPage> {
+  final List<Map<String, dynamic>> _histories = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHistories();
+  }
+
+  Future<void> _fetchHistories() async {
+    setState(() => _loading = true);
+    try {
+      final res = await NetworkClient.dio.get('/route/history/user/${NetworkClient.currentUserId}');
+      final data = res.data['data'];
+      if (data is List) {
+        _histories
+          ..clear()
+          ..addAll(data.whereType<Map>().map((item) => Map<String, dynamic>.from(item)));
+      }
+    } catch (e) {
+      debugPrint('路线历史加载失败: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<int> _parseWaypointIds(dynamic raw) {
+    if (raw == null) return const [];
+    final text = raw.toString().trim();
+    if (text.isEmpty) return const [];
+    return text.split(',').map((part) => int.tryParse(part.trim())).whereType<int>().toList();
+  }
+
+  String _strategyLabel(String? strategy) {
+    switch (strategy) {
+      case 'TIME':
+        return '最短时间';
+      case 'PERSONALIZED':
+        return '个性化推荐';
+      default:
+        return '最短路程';
+    }
+  }
+
+  String _formatDistance(dynamic meters) {
+    final value = int.tryParse((meters ?? 0).toString()) ?? 0;
+    if (value < 1000) return '$value米';
+    return '${(value / 1000).toStringAsFixed(1)}公里';
+  }
+
+  void _openHistoryRoute(Map<String, dynamic> history) {
+    Navigator.pushNamed(
+      context,
+      AppRouter.routePlan,
+      arguments: RoutePlanArgs(
+        startId: int.tryParse((history['startSpotId'] ?? '').toString()),
+        endId: int.tryParse((history['endSpotId'] ?? '').toString()),
+        waypointIds: _parseWaypointIds(history['waypointIds']),
+        autoPlan: true,
+      ).toMap(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SimpleGlassPage(
+      title: '路线规划历史',
+      child: RefreshIndicator(
+        onRefresh: _fetchHistories,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _histories.isEmpty
+                ? ListView(
+                    padding: const EdgeInsets.all(22),
+                    children: const [
+                      _GlassPanel(
+                        child: Column(children: [
+                          Icon(Icons.route_outlined, size: 52, color: AppTheme.primary),
+                          SizedBox(height: 12),
+                          Text(
+                            '还没有路线规划记录。去路线规划页选起终点后，成功规划会自动保存到这里。',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppTheme.textSub, height: 1.6),
+                          ),
+                        ]),
+                      ),
+                    ],
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 34),
+                    itemCount: _histories.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) => _RouteHistoryCard(
+                      history: _histories[index],
+                      strategyLabel: _strategyLabel(_histories[index]['strategy']?.toString()),
+                      distanceText: _formatDistance(_histories[index]['distanceMeters']),
+                      onTap: () => _openHistoryRoute(_histories[index]),
+                    ),
+                  ),
+      ),
+    );
+  }
+}
+
+class _RouteHistoryCard extends StatelessWidget {
+  final Map<String, dynamic> history;
+  final String strategyLabel;
+  final String distanceText;
+  final VoidCallback onTap;
+
+  const _RouteHistoryCard({
+    required this.history,
+    required this.strategyLabel,
+    required this.distanceText,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = (history['routeSummary'] ??
+            '${history['startSpotName'] ?? ''} → ${history['endSpotName'] ?? ''}')
+        .toString();
+    final duration = int.tryParse((history['durationMinutes'] ?? 0).toString()) ?? 0;
+    final createTime = (history['createTime'] ?? '').toString().replaceFirst('T', ' ');
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: _GlassPanel(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const Icon(Icons.directions_walk_rounded, size: 20, color: AppTheme.primary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                summary,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textMain),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(strategyLabel, style: const TextStyle(fontSize: 11, color: AppTheme.primary, fontWeight: FontWeight.w800)),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Text(
+            '约$duration分钟 · $distanceText',
+            style: const TextStyle(fontSize: 13, color: AppTheme.textSub),
+          ),
+          if ((history['waypointNames'] ?? '').toString().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              '途经：${history['waypointNames']}',
+              style: const TextStyle(fontSize: 12, color: AppTheme.textSub, height: 1.4),
+            ),
+          ],
+          if (createTime.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(createTime, style: const TextStyle(fontSize: 11, color: AppTheme.textSub)),
+          ],
+          const SizedBox(height: 8),
+          const Text('点击再次规划此路线', style: TextStyle(fontSize: 12, color: AppTheme.primary, fontWeight: FontWeight.w700)),
+        ]),
       ),
     );
   }

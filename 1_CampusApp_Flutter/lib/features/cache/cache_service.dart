@@ -23,6 +23,8 @@ class CacheService {
               'name': json['name'] ?? '',
               'category': json['category'],
               'description': json['description'],
+              'coverImage': json['coverImage'] ?? '',
+              'images': json['images'],
               // 安全解析可能传过来的 BigDecimal 数字或字符串
               'longitude': double.tryParse(json['longitude']?.toString() ?? '0') ?? 0.0,
               'latitude': double.tryParse(json['latitude']?.toString() ?? '0') ?? 0.0,

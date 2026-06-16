@@ -9,6 +9,7 @@ import '../../features/guide/guide_page.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/ai_vision/ai_vision_page.dart';
 import '../../features/route/route_page.dart';
+import '../../features/route/route_plan_args.dart';
 import '../../features/social/checkin_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/home/search_page.dart';
@@ -72,9 +73,17 @@ class AppRouter {
       case aiVision:
         return MaterialPageRoute(builder: (_) => const AiVisionPage());
       case routePlan:
-        final routeArgs = settings.arguments as Map<String, dynamic>?;
+        final routeArgs = RoutePlanArgs.fromMap(
+          settings.arguments as Map<String, dynamic>?,
+        );
         return MaterialPageRoute(
-          builder: (_) => RoutePage(initialEndName: routeArgs?['endName']?.toString()),
+          builder: (_) => RoutePage(
+            initialEndName: routeArgs?.endName,
+            initialStartId: routeArgs?.startId,
+            initialEndId: routeArgs?.endId,
+            initialWaypointIds: routeArgs?.waypointIds,
+            autoPlanOnOpen: routeArgs?.autoPlan ?? false,
+          ),
         );
       case checkin:
         return MaterialPageRoute(builder: (_) => const CheckinPage());

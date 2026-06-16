@@ -3,7 +3,7 @@ import 'package:amap_flutter_base/amap_flutter_base.dart';
 
 class AMapRouteApi {
   // ⚠️ 记得去高德开放平台申请一个【Web服务】类型的 Key，填在下面
-  static const String webApiKey = '1720e1cdbd1e2bd1b01798d222cf6434';
+  static const String webApiKey = '4bfbb1b19546bb49a3286ec7f45839b8';
 
   static Future<List<LatLng>> getRealWalkingRoute(LatLng origin, LatLng destination) async {
     const String url = 'https://restapi.amap.com/v3/direction/walking';
