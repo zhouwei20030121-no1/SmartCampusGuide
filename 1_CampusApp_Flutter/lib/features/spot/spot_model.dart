@@ -7,6 +7,7 @@ class SpotModel {
   final double latitude;
   final double longitude;
   final String category;
+  final int visitCount;
 
   // 多媒体相关字段
   final String coverImage;
@@ -21,6 +22,9 @@ class SpotModel {
     required this.latitude,
     required this.longitude,
     required this.category,
+
+    this.visitCount = 0,
+
     this.coverImage = '',
     this.images = const [],
     this.videoUrl,
@@ -43,10 +47,12 @@ class SpotModel {
       longitude: double.tryParse(json['longitude']?.toString() ?? '0') ?? 0.0,
       category: json['category'] ?? 'default',
 
+      visitCount: json['visitCount'] ?? 0,
+
       coverImage: json['coverImage'] ?? '',
       images: parsedImages,
-      videoUrl: json['videoUrl'], // 当前接口暂不返回该字段
-      rating: double.tryParse(json['rating']?.toString() ?? '0') ?? 5.0, // 默认给5.0分
+      videoUrl: json['videoUrl'],
+      rating: double.tryParse(json['rating']?.toString() ?? '0') ?? 5.0,
     );
   }
 }
