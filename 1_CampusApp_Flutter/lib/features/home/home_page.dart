@@ -18,7 +18,7 @@ import '../guide/guide_coordination_service.dart';
 import '../route/amap_route_api.dart';
 import '../spot/spot_model.dart';
 import '../story/campus_story_page.dart';
-import '../../features/cache/offline_download_page.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 // 🌟 1. 导入公告列表页
 import '../../features/announcement/announcement_list_page.dart';
 
@@ -275,20 +275,87 @@ class _TabHomeState extends State<_TabHome> {
 
   List<SpotModel> _allSpots = [];
   List<Map<String, dynamic>> _closestSpots = [];
+  Set<int> _checkedSpotIds = {};
   bool _isLoading = true;
+  // 新增天气状态：'晴天' 或 '雨天'
+  String _currentWeather = '晴天';
+  String _getSpotImageUrl(SpotModel spot) {
+    String imageUrl = '';
+
+    if (spot.coverImage.isNotEmpty) {
+      imageUrl = spot.coverImage;
+    } else if (spot.images.isNotEmpty) {
+      imageUrl = spot.images.first;
+    }
+
+    if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
+      imageUrl = '${NetworkClient.baseUrl}$imageUrl';
+    }
+
+    return imageUrl;
+  }
+
+  Timer? _weatherTimer; // 类成员
 
   @override
   void initState() {
     super.initState();
+
     _loc.addListener(_updateClosestSpots);
-    _loc.startTracking(); // 启动队友写的心跳和位置模拟
-    _fetchAllSpotsFromDB();
+    _loc.startTracking();
+
+    _initRecommendData();
+
+    // 页面启动立即获取一次天气
+    _fetchRealWeather();
+
+    // 每30分钟刷新一次天气
+    _weatherTimer = Timer.periodic(
+      const Duration(minutes: 30),
+          (_) => _fetchRealWeather(),
+    );
   }
 
   @override
   void dispose() {
     _loc.removeListener(_updateClosestSpots);
     super.dispose();
+  }
+
+  // 真实天气获取逻辑
+  Future<void> _fetchRealWeather() async {
+    try {
+      // 调用高德 Web 服务天气查询接口
+      final res = await Dio().get(
+        'https://restapi.amap.com/v3/weather/weatherInfo',
+        queryParameters: {
+          'key': AMapRouteApi.webApiKey, // 复用你现有的高德 Web API Key
+          'city': '500109',              // 重庆市北碚区的 adcode
+          'extensions': 'base',          // base 表示获取实时天气
+        },
+      );
+
+      if (res.data['status'] == '1' && res.data['lives'] != null && res.data['lives'].isNotEmpty) {
+        // 提取实况天气字符串，如 "晴", "多云", "小雨"
+        final String weatherStr = res.data['lives'][0]['weather'].toString();
+        debugPrint('当前北碚区天气: $weatherStr');
+
+        if (mounted) {
+          setState(() {
+            // 粗略映射逻辑：只要包含“雨”或“雪”，就走雨天室内推荐；其他（晴、阴、多云）走自然景观推荐
+            if (weatherStr.contains('雨') || weatherStr.contains('雪')) {
+              _currentWeather = '雨天';
+            } else {
+              _currentWeather = '晴天';
+            }
+          });
+          _updateClosestSpots();
+        }
+      }
+    } catch (e) {
+      debugPrint('获取天气信息失败: $e');
+      // 失败时保留我们在顶部的默认值（通常是 '晴天'），不影响整个页面的渲染
+    }
   }
 
   // 从后端获取所有景点的真实数据，确保 ID 绝对正确
@@ -307,38 +374,179 @@ class _TabHomeState extends State<_TabHome> {
     }
   }
 
-  // 核心：实时距离计算与排序算法
+  // 加载用户打卡历史
+  Future<void> _loadCheckinHistory() async {
+    try {
+      final res = await NetworkClient.dio.get(
+        '/checkin/history/${NetworkClient.currentUserId}',
+      );
+
+      if (res.data['code'] == 200) {
+        final List records = res.data['data'] ?? [];
+
+        _checkedSpotIds = records
+            .map<int>((e) => (e['spotId'] ?? 0) as int)
+            .toSet();
+      }
+    } catch (e) {
+      debugPrint('获取打卡历史失败: $e');
+    }
+  }
+
+  // 初始化推荐数据
+  Future<void> _initRecommendData() async {
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
+
+    // 并发拉取基础数据和用户行为数据
+    await Future.wait([
+      _fetchAllSpotsFromDB(),
+      _loadCheckinHistory(),
+      _fetchRealWeather(),
+    ]);
+
+    // 此时 _allSpots 和 _checkedSpotIds 均已就绪，再执行综合计算
+    if (mounted) {
+      _updateClosestSpots();
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // 核心：多因子个性化推荐算法（距离+热度+打卡+时间+景点属性）
   void _updateClosestSpots() {
     if (_allSpots.isEmpty) return;
+    debugPrint('当前天气状态=$_currentWeather');
 
     double currentLat = _loc.latitude != 0.0 ? _loc.latitude : 29.820;
     double currentLng = _loc.longitude != 0.0 ? _loc.longitude : 106.425;
 
-    // 1. 过滤掉坐标为 0 的脏数据
     final validSpots = _allSpots.where((spot) {
       return spot.longitude != 0.0 && spot.latitude != 0.0;
     }).toList();
 
-    // 2. 计算距离并映射
-    List<Map<String, dynamic>> spotsWithDistance = validSpots.map((spot) {
+    final maxVisitCount = validSpots.isEmpty
+        ? 1
+        : validSpots
+        .map((e) => e.visitCount)
+        .reduce((a, b) => a > b ? a : b);
+
+    final hour = DateTime.now().hour;
+
+    final scoredSpots = validSpots.map((spot) {
       double dx = (currentLng - spot.longitude) * 111320 * 0.866;
       double dy = (currentLat - spot.latitude) * 111320;
       double distance = math.sqrt(dx * dx + dy * dy);
+
+      // ===================
+      // 1 距离因子
+      // ===================
+      double distanceScore =
+      distance > 1000
+          ? 0
+          : (1000 - distance) / 1000;
+
+      // ===================
+      // 2 热度因子
+      // ===================
+      double popularityScore = spot.visitCount / maxVisitCount;
+
+      // ===================
+      // 3 打卡因子
+      // ===================
+      double checkinScore = _checkedSpotIds.contains(spot.id) ? 0.2 : 1.0;
+
+      // ===================
+      // 4 时间因子
+      // ===================
+      double timeScore = 0;
+
+      bool mealTime = (hour >= 11 && hour <= 13) || (hour >= 17 && hour <= 19);
+
+      if (mealTime && spot.name.contains("食堂")) {
+        timeScore = 1;
+      }
+
+      // ===================
+      // 5 天气因子(先默认晴天)
+      // ===================
+      double weatherScore = 0;
+
+      if (_currentWeather == '晴天' && spot.category.contains("自然景观")) {
+        // 晴天偏好室外风景
+        weatherScore = 1.0;
+      } else if (_currentWeather == '雨天' &&
+          (spot.category.contains("生活服务") || spot.category.contains("教学设施"))) {
+        // 雨天偏好室内建筑
+        weatherScore = 1.0;
+      }
+
+      // ===================
+      // 综合评分
+      // ===================
+      double score = distanceScore * 0.35 +
+          popularityScore * 0.25 +
+          checkinScore * 0.20 +
+          timeScore * 0.10 +
+          weatherScore * 0.10;
+
       return {
-        'spot': spot,
-        'distance': distance,
+        "spot": spot,
+        "distance": distance,
+        "score": score,
       };
     }).toList();
 
-    // 3. 升序排序
-    spotsWithDistance.sort((a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
+    scoredSpots.sort(
+          (a, b) => (b["score"] as double).compareTo(a["score"] as double),
+    );
 
-    // 4. 截取距离最近的 3 个并刷新 UI
     if (mounted) {
       setState(() {
-        _closestSpots = spotsWithDistance.take(3).toList();
+        _closestSpots = scoredSpots.take(3).toList();
       });
     }
+  }
+
+  // 传入 distance 参数，让推荐理由更加动态多元
+  String _recommendReason(SpotModel spot, double distance) {
+    final hour = DateTime.now().hour;
+    bool mealTime = (hour >= 11 && hour <= 13) || (hour >= 17 && hour <= 19);
+
+    // 优先级 1：餐饮时间最高
+    if (mealTime && spot.name.contains("食堂")) {
+      return "🍜 用餐时间推荐";
+    }
+
+    // 优先级 2：极近距离
+    if (distance < 200) {
+      return "📍 就在您附近不到200米";
+    }
+
+    // 优先级 3：天气场景推荐
+    if (_currentWeather == '雨天' && (spot.category.contains("生活服务") || spot.category.contains("教学设施"))) {
+      return "☔ 雨天室内好去处";
+    }
+    if (_currentWeather == '晴天' && spot.category.contains("自然景观")) {
+      return "☀️ 天气晴朗，去感受自然";
+    }
+
+    // 优先级 4：热度与打卡结合
+    if (!_checkedSpotIds.contains(spot.id) && spot.visitCount >= 300) {
+      return "🎯 热门未打卡地";
+    }
+
+    // 优先级 5：基础未打卡提醒
+    if (!_checkedSpotIds.contains(spot.id)) {
+      return "✨ 探索校园新角落";
+    }
+
+    // 优先级 6：兜底热度
+    if (spot.visitCount >= 50) {
+      return "🔥 校园高频访问";
+    }
+
+    return "💡 智能精选推荐";
   }
 
   @override
@@ -543,7 +751,7 @@ class _TabHomeState extends State<_TabHome> {
     );
   }
 
-  // 动态渲染推荐卡片 + “全部景点”选项
+  // 动态渲染推荐卡片 + "全部景点"选项
   Widget _buildDynamicRecommendCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -562,9 +770,9 @@ class _TabHomeState extends State<_TabHome> {
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('📍 附近景点推荐', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
+                  Text('✨ 智能景点推荐', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
                   SizedBox(height: 2),
-                  Text('基于当前实时定位', style: TextStyle(fontSize: 11, color: AppTheme.textSub)),
+                  Text('综合距离、热度、打卡与场景推荐', style: TextStyle(fontSize: 11, color: AppTheme.textSub)),
                 ],
               ),
               // 全部景点跳转按钮
@@ -585,14 +793,20 @@ class _TabHomeState extends State<_TabHome> {
           // 动态渲染 3 个真实景点
           ..._closestSpots.map((item) {
             final SpotModel spot = item['spot'];
-            String distStr = (item['distance'] as double).toStringAsFixed(0);
+            final double dist = item['distance'] as double; // 取出计算好的距离
+            String distStr = dist.toStringAsFixed(0);
+
             return _spotTile(
-                '${spot.name} (距您约${distStr}米)',
-                spot.description.isNotEmpty ? spot.description : '暂无简介',
-                    () {
-                  // 此时传入的绝对是后端的真实 ID
-                  Navigator.pushNamed(context, '/spot/detail', arguments: {'spotId': spot.id});
-                }
+              spot,
+              '${spot.name} (距您约${distStr}米)',
+              '${_recommendReason(spot, dist)} · ${spot.description}',
+                  () {
+                Navigator.pushNamed(
+                  context,
+                  '/spot/detail',
+                  arguments: {'spotId': spot.id},
+                );
+              },
             );
           }),
         ],
@@ -600,7 +814,12 @@ class _TabHomeState extends State<_TabHome> {
     );
   }
 
-  Widget _spotTile(String title, String subtitle, VoidCallback onTap) {
+  Widget _spotTile(
+      SpotModel spot,
+      String title,
+      String subtitle,
+      VoidCallback onTap,
+      ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -608,14 +827,45 @@ class _TabHomeState extends State<_TabHome> {
         borderRadius: BorderRadius.circular(14),
         child: Row(
           children: [
-            Container(
-              width: 54, height: 54,
-              decoration: BoxDecoration(
-                color: const Color(0xCCFAFADB),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white),
-              ),
-              child: const Icon(Icons.pin_drop_rounded, color: AppTheme.primary, size: 22),
+            Builder(
+              builder: (_) {
+                String imageUrl = spot.coverImage.isNotEmpty
+                    ? spot.coverImage
+                    : (spot.images.isNotEmpty ? spot.images.first : '');
+
+                if (imageUrl.isNotEmpty && !imageUrl.startsWith('http')) {
+                  imageUrl = '${NetworkClient.baseUrl}$imageUrl';
+                }
+
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(14),
+                  child: imageUrl.isNotEmpty
+                      ? CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    width: 54,
+                    height: 54,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, __, ___) => Container(
+                      width: 54,
+                      height: 54,
+                      color: const Color(0xCCFAFADB),
+                      child: const Icon(
+                        Icons.image_not_supported,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                  )
+                      : Container(
+                    width: 54,
+                    height: 54,
+                    color: const Color(0xCCFAFADB),
+                    child: const Icon(
+                      Icons.image,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -782,7 +1032,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     _handleNearbyCandidate(name, pos, distance: 0, fromDemo: true);
   }
 
-  /// 点击普通地图区域 → 移动“我的位置”，并用高德周边搜索识别最近地名。
+  /// 点击普通地图区域 → 移动"我的位置"，并用高德周边搜索识别最近地名。
   void _onMapTapped(LatLng pos) {
     if (!_campusBounds.contains(pos)) {
       _showPoiNotice('请在西南大学北碚校区范围内选择位置');
@@ -840,11 +1090,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   void _handleNearbyCandidate(
-    String spot,
-    LatLng pos, {
-    required double distance,
-    required bool fromDemo,
-  }) {
+      String spot,
+      LatLng pos, {
+        required double distance,
+        required bool fromDemo,
+      }) {
     _evaluateRoutePriority(pos);
 
     final cooldownUntil = _spotCooldownUntil[spot];
@@ -863,7 +1113,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         _nearbySpot = spot;
         _nearbyDist = distance;
         _poiLookupNotice =
-            '已靠近「$spot」，但你移动较快，先不自动触发讲解';
+        '已靠近「$spot」，但你移动较快，先不自动触发讲解';
       });
       return;
     }
@@ -948,7 +1198,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final routeDistance = guideState.distanceToActiveRoute(pos);
     if (routeDistance > _routeDeviationMeters) {
       _routePriorityNotice =
-          '你已偏离${guideState.routeLabel}约${routeDistance.toStringAsFixed(0)}米，可继续播放附近景点讲解';
+      '你已偏离${guideState.routeLabel}约${routeDistance.toStringAsFixed(0)}米，可继续播放附近景点讲解';
     } else {
       _routePriorityNotice = '';
     }
@@ -990,10 +1240,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   Future<void> _triggerNearestPoi(
-    LatLng pos, {
-    required bool fromDemo,
-    bool autoCenter = true,
-  }) async {
+      LatLng pos, {
+        required bool fromDemo,
+        bool autoCenter = true,
+      }) async {
     final seq = ++_poiLookupSeq;
     setState(() {
       _lookingUpPoi = true;
@@ -1244,7 +1494,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             const SizedBox(height: 6),
             _zoomBtn(
               Icons.center_focus_strong,
-              () => _mapCtrl?.moveCamera(CameraUpdate.newCameraPosition(CameraPosition(target: _userPos, zoom: 17, tilt: 0, bearing: 0))),
+                  () => _mapCtrl?.moveCamera(CameraUpdate.newCameraPosition(CameraPosition(target: _userPos, zoom: 17, tilt: 0, bearing: 0))),
               tooltip: '回到当前位置',
             ),
           ]),
@@ -1408,7 +1658,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                   Icon(Icons.auto_stories_outlined, size: 48, color: AppTheme.primary),
                   SizedBox(height: 12),
                   Text(
-                    '这个地点暂时还没有校园故事。你可以在“我的-写校园故事”里补充一段，其他人讲解时也会看到。',
+                    '这个地点暂时还没有校园故事。你可以在"我的-写校园故事"里补充一段，其他人讲解时也会看到。',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14, height: 1.6, color: AppTheme.textSub),
                   ),
@@ -1577,19 +1827,19 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final modeLabel = _loc.locationMode == 'real'
         ? 'GPS ${_loc.accuracyMeters > 0 ? '±${_loc.accuracyMeters.toStringAsFixed(0)}m' : ''}'
         : _loc.locationMode == 'manual_demo'
-            ? '手动演示'
-            : '演示模式';
+        ? '手动演示'
+        : '演示模式';
     final statusText = _triggeredSpot != null
         ? '已进入「$_triggeredSpot」范围'
         : _pendingSpot != null
-            ? _triggerNotice
-            : _lookingUpPoi
-                ? '正在识别附近高德地名...'
-                : _poiLookupNotice.isNotEmpty
-                    ? _poiLookupNotice
-                    : _nearbySpot.isNotEmpty
-                        ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · $modeLabel'
-                        : '拖动我的位置或点击地图模拟，也可点 GPS 使用真实定位';
+        ? _triggerNotice
+        : _lookingUpPoi
+        ? '正在识别附近高德地名...'
+        : _poiLookupNotice.isNotEmpty
+        ? _poiLookupNotice
+        : _nearbySpot.isNotEmpty
+        ? '距$_nearbySpot约${_nearbyDist.toStringAsFixed(0)}米 · $modeLabel'
+        : '拖动我的位置或点击地图模拟，也可点 GPS 使用真实定位';
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
@@ -1666,8 +1916,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final subtitle = _routePriorityNotice.isNotEmpty
         ? '$_routePriorityNotice，是否播放「$spot」？'
         : ready
-            ? '是否播放「$spot」的智能讲解？'
-            : '请在附近停留 $_pendingRemainingSeconds 秒，避免路过误触发';
+        ? '是否播放「$spot」的智能讲解？'
+        : '请在附近停留 $_pendingRemainingSeconds 秒，避免路过误触发';
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: BackdropFilter(
@@ -1935,7 +2185,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         else
           ...recent.map((item) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Text('“${item['content'] ?? ''}”', style: const TextStyle(fontSize: 12, color: AppTheme.textMain, height: 1.45)),
+            child: Text('"${item['content'] ?? ''}"', style: const TextStyle(fontSize: 12, color: AppTheme.textMain, height: 1.45)),
           )),
         Row(children: [
           Expanded(

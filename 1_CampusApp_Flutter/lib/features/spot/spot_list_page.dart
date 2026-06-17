@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/network/network_client.dart';
 import 'spot_model.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class SpotListPage extends StatefulWidget {
   const SpotListPage({super.key});
