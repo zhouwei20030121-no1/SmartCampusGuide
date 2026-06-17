@@ -68,6 +68,7 @@ class _RoutePageState extends State<RoutePage> {
   bool _isLoadingRoute = false;
 
   bool _showLabels = true;
+  bool _autoPlanTriggered = false;
 
   // 途经点与策略参数
   final List<SpotModel> _waypoints = [];
@@ -222,19 +223,32 @@ class _RoutePageState extends State<RoutePage> {
         ..addAll(initialWaypoints);
     });
 
+    _triggerInitialAutoPlan();
     await _loadMarkersInBatches(spots);
     await _tryInitialFit();
 
-    if (widget.autoPlanOnOpen &&
-        mounted &&
-        _startSpot != null &&
-        _endSpot != null &&
-        _startSpot!.id != _endSpot!.id) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _triggerRouteWithDelay();
-      });
+    _triggerInitialAutoPlan();
+  }
+
+  void _triggerInitialAutoPlan() {
+    final hasInitialRouteTarget =
+        widget.autoPlanOnOpen ||
+        widget.initialEndId != null ||
+        widget.initialEndName?.trim().isNotEmpty == true ||
+        widget.initialDestinationName?.trim().isNotEmpty == true;
+    if (_autoPlanTriggered ||
+        !hasInitialRouteTarget ||
+        !mounted ||
+        _startSpot == null ||
+        _endSpot == null ||
+        _startSpot!.id == _endSpot!.id) {
+      return;
     }
+    _autoPlanTriggered = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _fetchAllRoutesAndDraw();
+    });
   }
 
   LatLngBounds _spotMarkerBounds(List<SpotModel> spots) {
@@ -341,6 +355,7 @@ class _RoutePageState extends State<RoutePage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _tryInitialFit();
+      _triggerInitialAutoPlan();
     });
   }
 
@@ -428,6 +443,14 @@ class _RoutePageState extends State<RoutePage> {
         normalized.contains('software')) {
       return const ['计算机与信息科学学院 软件学院', '计算机学院', '软件学院', '明德楼', '第25教学楼', '25教'];
     }
+    if (normalized.contains('物理') ||
+        normalized.contains('立惠楼') ||
+        normalized.contains('十三教') ||
+        normalized.contains('13教') ||
+        normalized.contains('physical') ||
+        normalized.contains('physics')) {
+      return const ['物理科学与技术学院', '物理学院', '立惠楼', '第13教学楼', '第十三教学楼', '13教'];
+    }
     return const [];
   }
 
@@ -443,6 +466,21 @@ class _RoutePageState extends State<RoutePage> {
         description: '兰华楼现为西塔学院使用。',
         latitude: 29.824500,
         longitude: 106.424316,
+        category: '教学设施',
+      );
+    }
+    if (normalizedText.contains('物理') ||
+        normalizedText.contains('立惠楼') ||
+        normalizedText.contains('十三教') ||
+        normalizedText.contains('13教') ||
+        normalizedText.contains('physical') ||
+        normalizedText.contains('physics')) {
+      return SpotModel(
+        id: -2013,
+        name: '立惠楼（第13教学楼）',
+        description: '立惠楼现为物理科学与技术学院使用。',
+        latitude: 29.823900,
+        longitude: 106.424900,
         category: '教学设施',
       );
     }
@@ -942,7 +980,7 @@ class _RoutePageState extends State<RoutePage> {
       final response = await NetworkClient.get(
         '/route/plan/advanced',
         queryParameters: params,
-      );
+      ).timeout(const Duration(seconds: 4));
 
       if (response.data['code'] == 200) {
         List<dynamic>? spotsData = response.data['data'];
@@ -983,7 +1021,13 @@ class _RoutePageState extends State<RoutePage> {
           List<LatLng> segment = await AMapRouteApi.getRealWalkingRoute(
             start,
             end,
+          ).timeout(
+            const Duration(seconds: 2),
+            onTimeout: () => [start, end],
           );
+          if (segment.length < 2) {
+            segment = [start, end];
+          }
           _amapSegmentCache[cacheKey] = segment;
           fullRealRoute.addAll(segment);
         }
@@ -991,7 +1035,7 @@ class _RoutePageState extends State<RoutePage> {
     } catch (e) {
       fullRealRoute = nodesToConnect;
     }
-    return fullRealRoute;
+    return fullRealRoute.isEmpty ? nodesToConnect : fullRealRoute;
   }
 
   double _calculateTotalDistance(List<LatLng> points) {
@@ -1424,6 +1468,43 @@ class _RoutePageState extends State<RoutePage> {
           ),
           const SizedBox(height: 10),
           _buildIdentitySelector(),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 40,
+            child: ElevatedButton.icon(
+              onPressed:
+                  _startSpot != null &&
+                      _endSpot != null &&
+                      _startSpot!.id != _endSpot!.id &&
+                      !_isLoadingRoute
+                  ? () => _fetchAllRoutesAndDraw()
+                  : null,
+              icon: Icon(
+                _isLoadingRoute
+                    ? Icons.hourglass_top_rounded
+                    : Icons.route_rounded,
+                size: 18,
+              ),
+              label: Text(
+                _isLoadingRoute
+                    ? '规划中...'
+                    : (hasRoute ? '重新规划路线' : '开始规划路线'),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppTheme.primary.withValues(
+                  alpha: 0.22,
+                ),
+                disabledForegroundColor: Colors.white.withValues(alpha: 0.75),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
           if (hasRoute) ...[
             const SizedBox(height: 10),
             Row(

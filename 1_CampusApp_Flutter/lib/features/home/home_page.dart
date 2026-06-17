@@ -12,6 +12,7 @@ import 'package:dio/dio.dart';
 import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart';
 import '../map/map_page.dart';
+import '../map/map_user_location_controller.dart';
 import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
 import '../guide/guide_coordination_service.dart';
@@ -417,8 +418,17 @@ class _TabHomeState extends State<_TabHome> {
     if (_allSpots.isEmpty) return;
     debugPrint('当前天气状态=$_currentWeather');
 
-    double currentLat = _loc.latitude != 0.0 ? _loc.latitude : 29.820;
-    double currentLng = _loc.longitude != 0.0 ? _loc.longitude : 106.425;
+    final rawLat = _loc.latitude != 0.0
+        ? _loc.latitude
+        : CampusBounds.defaultCenter.latitude;
+    final rawLng = _loc.longitude != 0.0
+        ? _loc.longitude
+        : CampusBounds.defaultCenter.longitude;
+    final recommendationCenter = CampusBounds.clampToCampus(
+      LatLng(rawLat, rawLng),
+    );
+    final currentLat = recommendationCenter.latitude;
+    final currentLng = recommendationCenter.longitude;
 
     final validSpots = _allSpots.where((spot) {
       return spot.longitude != 0.0 && spot.latitude != 0.0;
@@ -559,7 +569,7 @@ class _TabHomeState extends State<_TabHome> {
               left: 16,
               right: 16,
               top: 10,
-              bottom: 120,
+              bottom: 220,
             ),
             children: [
               // Banner

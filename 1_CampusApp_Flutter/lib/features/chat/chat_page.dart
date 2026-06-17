@@ -564,6 +564,26 @@ class _ChatPageState extends State<ChatPage> {
         ],
       );
     }
+    if (compactLower.contains('physicalcollege') ||
+        compactLower.contains('physicscollege') ||
+        compactLower.contains('physics') ||
+        destination.contains('物理学院') ||
+        destination.contains('物理科学与技术学院')) {
+      return const _RouteTarget(
+        destination: '物理科学与技术学院',
+        aliases: [
+          '物理科学与技术学院',
+          '物理学院',
+          '立惠楼',
+          '第13教学楼',
+          '第十三教学楼',
+          '13教',
+          'physical college',
+          'physics college',
+          'physics',
+        ],
+      );
+    }
     if (destination.contains('二号门') ||
         destination.contains('2号门') ||
         destination.contains('学行门')) {
@@ -618,6 +638,7 @@ class _ChatPageState extends State<ChatPage> {
         'startAliases': plan.startAliases,
         'destinationName': plan.destination.destination,
         'destinationAliases': plan.destination.aliases,
+        'autoPlan': true,
       },
     );
   }
