@@ -864,7 +864,7 @@ class _ChatStatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final prompts = [
       '介绍一下计信院',
-      '第八教学楼怎么走？',
+      '怎么去物理学院',
       '学校有什么特色美食？',
       '推荐一条校园参观路线',
       '校史馆什么时候开放？',
