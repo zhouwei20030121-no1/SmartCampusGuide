@@ -94,4 +94,22 @@ public class RoutePlanController {
 
         return Result.ok(optimalPath);
     }
+
+    // 新增：对接前端的高级多目标规划接口
+    @GetMapping("/plan/advanced")
+    public Result<List<Spot>> getAdvancedRoute(
+            @RequestParam("startId") Long startId,
+            @RequestParam("endId") Long endId,
+            @RequestParam(value = "waypoints", required = false) List<Long> waypoints,
+            @RequestParam(value = "strategy", defaultValue = "DISTANCE") String strategy,
+            @RequestParam(value = "userIdentity", defaultValue = "TOURIST") String userIdentity) {
+
+        List<Spot> advancedPath = routePlanService.calculateAdvancedRoute(startId, endId, waypoints, strategy, userIdentity);
+
+        if (advancedPath == null || advancedPath.isEmpty()) {
+            return Result.fail("Unable to plan an advanced route");
+        }
+
+        return Result.ok(advancedPath);
+    }
 }

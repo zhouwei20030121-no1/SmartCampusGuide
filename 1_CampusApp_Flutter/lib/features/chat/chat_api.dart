@@ -25,17 +25,26 @@ class ChatApi {
     required String query,
     required List<Map<String, String>> history,
     String persona = '新生',
+    Map<String, dynamic> context = const {},
   }) async {
     Object? lastError;
     for (final baseUrl in _baseUrls) {
       try {
-        return await _sendTo(baseUrl: baseUrl, query: query, history: history, persona: persona);
+        return await _sendTo(
+          baseUrl: baseUrl,
+          query: query,
+          history: history,
+          persona: persona,
+          context: context,
+        );
       } catch (e) {
         lastError = e;
       }
     }
 
-    throw ChatApiException('无法连接西小导服务，请确认 Python AI 服务已在 5000 端口启动。最后错误：$lastError');
+    throw ChatApiException(
+      '无法连接西小导服务，请确认 Python AI 服务已在 5000 端口启动。最后错误：$lastError',
+    );
   }
 
   static Future<ChatReply> _sendTo({
@@ -43,6 +52,7 @@ class ChatApi {
     required String query,
     required List<Map<String, String>> history,
     required String persona,
+    required Map<String, dynamic> context,
   }) async {
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 5);
@@ -50,11 +60,16 @@ class ChatApi {
       final req = await client.postUrl(Uri.parse('$baseUrl/api/rag/chat'));
       req.headers.set('Content-Type', 'application/json');
       req.headers.set('ngrok-skip-browser-warning', 'true');
-      req.add(utf8.encode(json.encode({
-        'query': query,
-        'history': history,
-        'persona': persona,
-      })));
+      req.add(
+        utf8.encode(
+          json.encode({
+            'query': query,
+            'history': history,
+            'persona': persona,
+            'context': context,
+          }),
+        ),
+      );
 
       final res = await req.close();
       final body = await res.transform(utf8.decoder).join();

@@ -32,4 +32,6 @@ public interface RoutePlanService extends IService<RoutePlan> {
      * A* 算法：计算两点之间的最优路线（支持热度优先）
      */
     List<Spot> calculateOptimalRoute(Long startId, Long endId, boolean isPopularityFirst);
+// 新增暴露核心多目标高级寻路算法
+    List<Spot> calculateAdvancedRoute(Long startId, Long endId, List<Long> waypoints, String strategy, String userIdentity);
 }

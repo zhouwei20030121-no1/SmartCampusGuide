@@ -8,6 +8,7 @@ import '../../features/spot/spot_detail_page.dart';
 import '../../features/guide/guide_page.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/ai_vision/ai_vision_page.dart';
+import '../../features/route/route_plan_args.dart';
 import '../../features/route/route_page.dart';
 import '../../features/social/checkin_page.dart';
 import '../../features/home/home_page.dart';
@@ -57,7 +58,13 @@ class AppRouter {
           builder: (_) => SpotDetailPage(spotId: args?['spotId'] ?? 0),
         );
       case guide:
-        return MaterialPageRoute(builder: (_) => const GuidePage());
+        final guideArgs = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => GuidePage(
+            spotName: guideArgs?['spotName']?.toString(),
+            initialDescription: guideArgs?['description']?.toString(),
+          ),
+        );
       case chat:
         final args = settings.arguments as Map<String, dynamic>?;
         return MaterialPageRoute(
@@ -66,7 +73,19 @@ class AppRouter {
       case aiVision:
         return MaterialPageRoute(builder: (_) => const AiVisionPage());
       case routePlan:
-        return MaterialPageRoute(builder: (_) => const RoutePage());
+        final args = RoutePlanArgs.fromMap(
+          settings.arguments as Map<String, dynamic>?,
+        );
+        return MaterialPageRoute(
+          builder: (_) => RoutePage(
+            initialStartId: args?.startId,
+            initialEndId: args?.endId,
+            initialStartName: args?.startName,
+            initialStartAliases: args?.startAliases,
+            initialDestinationName: args?.destinationName,
+            initialDestinationAliases: args?.destinationAliases,
+          ),
+        );
       case checkin:
         return MaterialPageRoute(builder: (_) => const CheckinPage());
       case campusStory:
@@ -75,7 +94,8 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const BusSchedulePage());
       case search:
         return PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => const SearchPage(),
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const SearchPage(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
@@ -84,7 +104,7 @@ class AppRouter {
         return MaterialPageRoute(builder: (_) => const SpotListPage());
       case offlineDownload:
         return MaterialPageRoute(builder: (_) => const OfflineDownloadPage());
-    // 🌟 3. 在这里添加 case
+      // 🌟 3. 在这里添加 case
       case announcement:
         return MaterialPageRoute(builder: (_) => const AnnouncementListPage());
       default:

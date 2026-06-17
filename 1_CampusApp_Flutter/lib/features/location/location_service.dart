@@ -1,9 +1,14 @@
 // lib/features/location/location_service.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../../core/network/network_client.dart';
 
 class LocationService extends ChangeNotifier {
+  static const MethodChannel _locationChannel = MethodChannel(
+    'smart_campus_guide/location',
+  );
+
   // 1. 私有化构造函数，切断外部通过 () 创建独立新实例的途径
   LocationService._internal();
 
@@ -21,6 +26,10 @@ class LocationService extends ChangeNotifier {
   String _geoStatus = '未启动';
   String _nearbySpot = '';
   double _distance = 999;
+  bool _realLocationAvailable = false;
+  String _locationMode = 'simulation';
+  double _accuracyMeters = -1;
+  DateTime? _lastRealFixAt;
 
   // 4. 引入手动操作标记位，防止定时器与地图手动点击发生冲突
   bool _isManualMode = false;
@@ -50,6 +59,9 @@ class LocationService extends ChangeNotifier {
   String get geoStatus => _geoStatus;
   String get nearbySpot => _nearbySpot;
   double get distance => _distance;
+  bool get realLocationAvailable => _realLocationAvailable;
+  String get locationMode => _locationMode;
+  double get accuracyMeters => _accuracyMeters;
 
   Timer? _heartbeatTimer;
   Timer? _simulationTimer;
@@ -62,15 +74,26 @@ class LocationService extends ChangeNotifier {
     _isManualMode = false; // 10. 启动时默认恢复为队友写的自动模拟行走模式
     notifyListeners();
 
-    // 模拟GPS轨迹（实际应接入高德定位SDK）
     if (!_visitReported) {
       _visitReported = true;
       unawaited(_recordAppVisit());
     }
-    _simulationTimer = Timer.periodic(const Duration(seconds: 8), _simulateMove);
+    await _refreshRealLocation();
+    _simulationTimer = Timer.periodic(const Duration(seconds: 8), (timer) {
+      if (_realLocationAvailable && !_isManualMode) {
+        unawaited(_refreshRealLocation());
+      } else {
+        _simulateMove(timer);
+      }
+    });
 
     // 心跳上报
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) => _sendHeartbeat());
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      if (_realLocationAvailable && !_isManualMode) {
+        await _refreshRealLocation();
+      }
+      await _sendHeartbeat();
+    });
   }
 
   Future<void> stopTracking() async {
@@ -86,20 +109,79 @@ class LocationService extends ChangeNotifier {
     if (_isManualMode) return;
 
     // 在25教和樟树林之间缓慢移动（模拟用户行走）
-    _latitude += (29.820 - _latitude) * 0.3 + (DateTime.now().second % 2 == 0 ? 0.0003 : -0.0002);
-    _longitude += (106.421 - _longitude) * 0.3 + (DateTime.now().second % 3 == 0 ? 0.0002 : -0.0001);
+    _latitude +=
+        (29.820 - _latitude) * 0.3 +
+        (DateTime.now().second % 2 == 0 ? 0.0003 : -0.0002);
+    _longitude +=
+        (106.421 - _longitude) * 0.3 +
+        (DateTime.now().second % 3 == 0 ? 0.0002 : -0.0001);
     _simulateProximity(); // 12. 模拟移动时也同步进行本地账目计算
     notifyListeners();
+  }
+
+  Future<void> _refreshRealLocation() async {
+    if (_isManualMode) return;
+    try {
+      final result = await _locationChannel.invokeMapMethod<String, dynamic>(
+        'getCurrentLocation',
+      );
+      if (result == null || result['ok'] != true) {
+        _realLocationAvailable = false;
+        _locationMode = 'simulation';
+        _geoStatus = (result?['reason'] ?? '真实定位不可用，使用演示模式').toString();
+        _simulateProximity();
+        notifyListeners();
+        return;
+      }
+
+      final lat = (result['latitude'] as num?)?.toDouble();
+      final lng = (result['longitude'] as num?)?.toDouble();
+      if (lat == null || lng == null || lat == 0.0 || lng == 0.0) {
+        _realLocationAvailable = false;
+        _locationMode = 'simulation';
+        _geoStatus = '真实定位数据异常，使用演示模式';
+        _simulateProximity();
+        notifyListeners();
+        return;
+      }
+
+      _latitude = lat;
+      _longitude = lng;
+      _accuracyMeters = (result['accuracy'] as num?)?.toDouble() ?? -1;
+      _realLocationAvailable = true;
+      _locationMode = 'real';
+      _lastRealFixAt = DateTime.now();
+      _simulateProximity();
+      notifyListeners();
+    } on PlatformException catch (e) {
+      _realLocationAvailable = false;
+      _locationMode = 'simulation';
+      _geoStatus = e.message ?? '定位权限未开启，使用演示模式';
+      _simulateProximity();
+      notifyListeners();
+    } catch (_) {
+      _realLocationAvailable = false;
+      _locationMode = 'simulation';
+      _geoStatus = '真实定位不可用，使用演示模式';
+      _simulateProximity();
+      notifyListeners();
+    }
   }
 
   Future<void> _sendHeartbeat() async {
     if (!_isTracking) return;
     try {
-      final res = await NetworkClient.dio.post('/api/location/heartbeat', data: {
-        'userId': NetworkClient.currentUserId, // 13. 规范化使用统一的登录用户ID
-        'lng': _longitude,
-        'lat': _latitude,
-      });
+      final res = await NetworkClient.dio.post(
+        '/api/location/heartbeat',
+        data: {
+          'userId': NetworkClient.currentUserId, // 13. 规范化使用统一的登录用户ID
+          'lng': _longitude,
+          'lat': _latitude,
+          'locationMode': _locationMode,
+          'accuracy': _accuracyMeters,
+          'lastFixAt': _lastRealFixAt?.toIso8601String(),
+        },
+      );
       if (res.data['code'] == 200) {
         final data = res.data['data'];
         if (data['action'] == 'TRIGGER_GUIDE') {
@@ -126,10 +208,13 @@ class LocationService extends ChangeNotifier {
   /// 离线模拟：静态坐标距离判断
   Future<void> _recordAppVisit() async {
     try {
-      await NetworkClient.dio.post('/stats/app-visit', data: {
-        'userId': NetworkClient.currentUserId,
-        'deviceInfo': 'flutter_app',
-      });
+      await NetworkClient.dio.post(
+        '/stats/app-visit',
+        data: {
+          'userId': NetworkClient.currentUserId,
+          'deviceInfo': 'flutter_app',
+        },
+      );
     } catch (_) {
       _visitReported = false;
     }
@@ -143,8 +228,8 @@ class LocationService extends ChangeNotifier {
       '共青团花园': [106.427, 29.821],
     };
     for (var e in spots.entries) {
-      final dx = (_longitude - (e.value[0] as double)) * 111320 * 0.866; // cos(30°)
-      final dy = (_latitude - (e.value[1] as double)) * 111320;
+      final dx = (_longitude - e.value[0]) * 111320 * 0.866; // cos(30°)
+      final dy = (_latitude - e.value[1]) * 111320;
       final dist = (dx * dx + dy * dy).clamp(0, double.infinity).toDouble();
       final d = dist > 0 ? dist : 1.0;
       if (d < 50) {
@@ -164,5 +249,4 @@ class LocationService extends ChangeNotifier {
     _isManualMode = false;
     notifyListeners();
   }
-
 }

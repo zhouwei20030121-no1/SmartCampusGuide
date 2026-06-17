@@ -47,7 +47,11 @@ class _LoginPageState extends State<LoginPage> {
         Navigator.pushReplacementNamed(context, AppRouter.home);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.data['message'] ?? response.data['msg'] ?? '账号或密码错误')),
+          SnackBar(
+            content: Text(
+              response.data['message'] ?? response.data['msg'] ?? '账号或密码错误',
+            ),
+          ),
         );
       }
     } catch (e) {
@@ -105,7 +109,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             const SizedBox(height: 10),
                             const Text(
-                              '西大智慧校园导览',
+                              '西南大学智慧校园导览',
                               style: TextStyle(color: Colors.grey),
                             ),
                             const SizedBox(height: 30),

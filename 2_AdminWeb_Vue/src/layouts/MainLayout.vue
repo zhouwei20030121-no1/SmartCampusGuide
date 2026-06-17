@@ -53,6 +53,7 @@ const navItems = [
   { label: '校园故事', path: '/stories' },
   { label: '评论审核', path: '/comments' },
   { label: '语料库', path: '/corpus' },
+  { label: '知识库', path: '/knowledge-base' },
   { label: '校园公告', path: '/announcement-manage' }, // 🌟 新增
 ]
 
@@ -172,6 +173,9 @@ onMounted(async () => {
 .topbar-nav {
   display: flex;
   gap: 4px;
+  max-width: calc(100vw - 520px);
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .nav-item {
