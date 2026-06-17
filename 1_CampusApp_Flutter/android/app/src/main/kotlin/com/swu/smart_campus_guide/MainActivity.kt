@@ -6,9 +6,9 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
-import android.media.AudioManager
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.media.AudioManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -36,6 +36,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                                 call.argument<String>("text").orEmpty(),
                                 call.argument<String>("voice").orEmpty(),
                                 call.argument<String>("language").orEmpty(),
+                                call.argument<Double>("rate") ?: 1.0,
                             )
                         )
                     }
@@ -91,9 +92,9 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         return TextToSpeech.LANG_MISSING_DATA
     }
 
-    private fun speak(text: String, voice: String, language: String): Map<String, Any> {
+    private fun speak(text: String, voice: String, language: String, rate: Double): Map<String, Any> {
         if (text.isBlank()) {
-            return mapOf("ok" to false, "reason" to "讲解词为空")
+            return mapOf("ok" to false, "reason" to "\u8BB2\u89E3\u8BCD\u4E3A\u7A7A")
         }
         if (!ttsReady) {
             return mapOf("ok" to false, "reason" to ttsStatusMessage)
@@ -103,10 +104,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         if (languageStatus < TextToSpeech.LANG_AVAILABLE) {
             return mapOf("ok" to false, "reason" to "Current emulator has no TTS data for $language")
         }
-        applyVoiceProfile(voice)
+        applyVoiceProfile(voice, rate.toFloat())
         val chunks = splitForSpeech(normalizeForSpeech(text))
         if (chunks.isEmpty()) {
-            return mapOf("ok" to false, "reason" to "讲解词为空")
+            return mapOf("ok" to false, "reason" to "\u8BB2\u89E3\u8BCD\u4E3A\u7A7A")
         }
 
         val params = Bundle().apply {
@@ -127,8 +128,9 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
 
             if (index < chunks.lastIndex) {
+                val pauseMillis = pauseAfter(chunk)
                 tts?.playSilentUtterance(
-                    pauseAfter(chunk),
+                    pauseMillis,
                     TextToSpeech.QUEUE_ADD,
                     "guide_pause_${System.currentTimeMillis()}_$index",
                 )
@@ -161,18 +163,19 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         return TextToSpeech.LANG_MISSING_DATA
     }
 
-    private fun applyVoiceProfile(voice: String) {
+    private fun applyVoiceProfile(voice: String, rate: Float) {
+        val clampedRate = rate.coerceIn(0.75f, 1.35f)
         when (voice) {
             "young_male" -> {
-                tts?.setSpeechRate(0.88f)
+                tts?.setSpeechRate(0.88f * clampedRate)
                 tts?.setPitch(0.92f)
             }
             "young_female" -> {
-                tts?.setSpeechRate(0.86f)
+                tts?.setSpeechRate(0.86f * clampedRate)
                 tts?.setPitch(1.06f)
             }
             else -> {
-                tts?.setSpeechRate(0.82f)
+                tts?.setSpeechRate(0.82f * clampedRate)
                 tts?.setPitch(1.02f)
             }
         }
@@ -182,7 +185,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         return text
             .replace(Regex("[#*_`>\\-]+"), "")
             .replace("AI", "A I")
-            .replace("TTS", "语音")
+            .replace("TTS", "\u8BED\u97F3")
             .replace(Regex("\\s+"), " ")
             .trim()
     }
@@ -190,8 +193,8 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private fun splitForSpeech(text: String): List<String> {
         val chunks = mutableListOf<String>()
         val current = StringBuilder()
-        val softStops = setOf('，', ',', '、')
-        val hardStops = setOf('。', '！', '？', '；', '.', '!', '?', ';')
+        val softStops = setOf('\uFF0C', ',', '\u3001')
+        val hardStops = setOf('\u3002', '\uFF01', '\uFF1F', '\uFF1B', '.', '!', '?', ';')
 
         for (char in text) {
             current.append(char)
@@ -219,8 +222,8 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private fun pauseAfter(chunk: String): Long {
         val last = chunk.lastOrNull()
         return when (last) {
-            '。', '！', '？', '.', '!', '?' -> 360L
-            '；', ';' -> 300L
+            '\u3002', '\uFF01', '\uFF1F', '.', '!', '?' -> 360L
+            '\uFF1B', ';' -> 300L
             else -> 180L
         }
     }
@@ -265,50 +268,65 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        if (providers.isEmpty()) {
-            result.success(mapOf("ok" to false, "reason" to "系统定位服务未开启"))
-            return
-        }
-
-        val cached = providers.mapNotNull { provider ->
-            try {
-                manager.getLastKnownLocation(provider)
-            } catch (_: SecurityException) {
-                null
-            }
-        }.maxByOrNull { it.time }
-
-        if (cached != null && cached.latitude != 0.0 && cached.longitude != 0.0) {
-            result.success(locationPayload(cached))
-            return
-        }
-
-        val provider = providers.first()
-        try {
-            val listener = object : LocationListener {
-                override fun onLocationChanged(location: Location) {
-                    manager.removeUpdates(this)
-                    result.success(locationPayload(location))
+        val lastKnown = providers
+            .mapNotNull { provider ->
+                try {
+                    manager.getLastKnownLocation(provider)
+                } catch (_: SecurityException) {
+                    null
                 }
-
-                override fun onProviderDisabled(provider: String) {}
-                override fun onProviderEnabled(provider: String) {}
             }
+            .maxByOrNull { it.time }
+
+        if (lastKnown != null && System.currentTimeMillis() - lastKnown.time <= 120_000L) {
+            result.success(locationMap(lastKnown, "last_known"))
+            return
+        }
+
+        val provider = providers.firstOrNull()
+        if (provider == null) {
+            result.success(mapOf("ok" to false, "reason" to "系统未开启任何定位服务"))
+            return
+        }
+
+        var finished = false
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                if (finished) return
+                finished = true
+                manager.removeUpdates(this)
+                result.success(locationMap(location, "fresh"))
+            }
+
+            override fun onProviderDisabled(provider: String) {}
+            override fun onProviderEnabled(provider: String) {}
+        }
+
+        try {
             manager.requestSingleUpdate(provider, listener, mainLooper)
+            android.os.Handler(mainLooper).postDelayed({
+                if (finished) return@postDelayed
+                finished = true
+                manager.removeUpdates(listener)
+                result.success(mapOf("ok" to false, "reason" to "定位超时"))
+            }, 8_000L)
         } catch (e: SecurityException) {
-            result.success(mapOf("ok" to false, "reason" to "定位权限未开启"))
+            result.success(mapOf("ok" to false, "reason" to "定位权限未授予：${e.message}"))
         } catch (e: Exception) {
-            result.success(mapOf("ok" to false, "reason" to "定位失败：${e.message ?: "unknown"}"))
+            result.success(mapOf("ok" to false, "reason" to "定位失败：${e.message}"))
         }
     }
 
-    private fun locationPayload(location: Location): Map<String, Any> {
+    private fun locationMap(location: Location, source: String): Map<String, Any> {
         return mapOf(
             "ok" to true,
             "latitude" to location.latitude,
             "longitude" to location.longitude,
-            "accuracy" to location.accuracy,
-            "timestamp" to location.time / 1000.0,
+            "accuracy" to if (location.hasAccuracy()) location.accuracy.toDouble() else -1.0,
+            "speed" to if (location.hasSpeed()) location.speed.toDouble() else 0.0,
+            "provider" to (location.provider ?: source),
+            "source" to source,
+            "time" to location.time,
         )
     }
 
@@ -319,12 +337,13 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != locationPermissionRequest) return
+
         val result = pendingLocationResult ?: return
         pendingLocationResult = null
         if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) {
             readLocation(result)
         } else {
-            result.success(mapOf("ok" to false, "reason" to "定位权限未开启"))
+            result.success(mapOf("ok" to false, "reason" to "定位权限未授予"))
         }
     }
 }

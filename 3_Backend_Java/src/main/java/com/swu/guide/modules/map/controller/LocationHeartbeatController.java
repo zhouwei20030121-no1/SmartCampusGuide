@@ -29,15 +29,8 @@ public class LocationHeartbeatController {
         double speedMps = parseDouble(body.get("speedMps"), 0.0);
         double accuracyMeters = parseDouble(body.get("accuracyMeters"), -1.0);
 
-        String triggered = geofenceService.checkProximity(userId, lng, lat, speedMps, accuracyMeters);
-
-        Map<String, Object> result = new LinkedHashMap<>();
-        if (triggered != null) {
-            result.put("action", "TRIGGER_GUIDE");
-            result.put("spotName", triggered);
-        } else {
-            result.put("action", "KEEP_WALKING");
-        }
+        Map<String, Object> result = new LinkedHashMap<>(
+                geofenceService.checkProximityDetail(userId, lng, lat, speedMps, accuracyMeters));
         return Result.ok(result);
     }
 

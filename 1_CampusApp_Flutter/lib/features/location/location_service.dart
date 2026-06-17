@@ -1,7 +1,10 @@
 // lib/features/location/location_service.dart
 import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+
 import '../../core/network/network_client.dart';
 
 class LocationService extends ChangeNotifier {
@@ -9,13 +12,13 @@ class LocationService extends ChangeNotifier {
     'smart_campus_guide/location',
   );
 
-  // 1. 私有化构造函数，切断外部通过 () 创建独立新实例的途径
+  // 私有化构造函数，切断外部通过 () 创建独立新实例的途径
   LocationService._internal();
 
-  // 2. 保存全局唯一的单例实例
+  // 全局唯一单例
   static final LocationService _instance = LocationService._internal();
 
-  // 3. 工厂构造函数，让全局所有的 LocationService() 调用都指向同一个单例
+  // 工厂构造函数，让全局所有 LocationService() 调用都指向同一个单例
   factory LocationService() => _instance;
 
   double _latitude = 29.820;
@@ -23,55 +26,44 @@ class LocationService extends ChangeNotifier {
   bool _isTracking = false;
   bool _visitReported = false;
   String? _triggeredSpot;
-  String _geoStatus = '未启动';
+  String _geoStatus = 'not_started';
   String _nearbySpot = '';
   double _distance = 999;
   bool _realLocationAvailable = false;
   String _locationMode = 'simulation';
+  double _speedMps = 0;
   double _accuracyMeters = -1;
   DateTime? _lastRealFixAt;
 
-  // 4. 引入手动操作标记位，防止定时器与地图手动点击发生冲突
+  // 手动操作标记位，防止定时器与地图手动点击发生冲突
   bool _isManualMode = false;
 
-  // 公开属性
+  Timer? _heartbeatTimer;
+  Timer? _simulationTimer;
+  final List<_LocationSample> _recentSamples = [];
+
   double get latitude => _latitude;
-  set latitude(double v) {
-    // 5. 核心拦截：如果是模拟器返回的 0.0 错误脏数据，直接丢弃，不予更新
-    if (v == 0.0) return;
-    _latitude = v;
-    _isManualMode = true; // 6. 标记为用户手动控点模式，暂停自动乱跑模拟
-    _simulateProximity(); // 7. 立即在本地触发一次距离检测，让首页和讲解页秒级同步
-    notifyListeners();
-  }
-
   double get longitude => _longitude;
-  set longitude(double v) {
-    if (v == 0.0) return; // 8. 拦截 0.0 脏数据
-    _longitude = v;
-    _isManualMode = true;
-    _simulateProximity();
-    notifyListeners();
-  }
-
   bool get isTracking => _isTracking;
   String? get triggeredSpot => _triggeredSpot;
   String get geoStatus => _geoStatus;
   String get nearbySpot => _nearbySpot;
   double get distance => _distance;
   bool get realLocationAvailable => _realLocationAvailable;
+  bool get isManualMode => _isManualMode;
   String get locationMode => _locationMode;
+  double get speedMps => _speedMps;
   double get accuracyMeters => _accuracyMeters;
 
-  Timer? _heartbeatTimer;
-  Timer? _simulationTimer;
+  // setter 统一走 updateLocation（内含 0.0 脏数据拦截 + 手动模式标记 + 即时距离同步）
+  set latitude(double value) => updateLocation(value, _longitude);
+  set longitude(double value) => updateLocation(_latitude, value);
 
-  /// 启动定位与心跳（每5秒向Java后端发送坐标）
   Future<void> startTracking() async {
-    if (_isTracking) return; // 9. 防止重复启动创建多个 Timer 造成内存泄漏
+    if (_isTracking) return; // 防止重复启动创建多个 Timer 造成内存泄漏
     _isTracking = true;
     _geoStatus = '定位中...';
-    _isManualMode = false; // 10. 启动时默认恢复为队友写的自动模拟行走模式
+    _isManualMode = false; // 启动时默认恢复为自动模拟行走模式
     notifyListeners();
 
     if (!_visitReported) {
@@ -98,14 +90,14 @@ class LocationService extends ChangeNotifier {
 
   Future<void> stopTracking() async {
     _isTracking = false;
-    _geoStatus = '已停止';
+    _geoStatus = 'stopped';
     _simulationTimer?.cancel();
     _heartbeatTimer?.cancel();
     notifyListeners();
   }
 
   void _simulateMove(Timer t) {
-    // 11. 如果用户在智能讲解页手动点击了地图或者高德POI，就跳过定时器的自动位移，避免位置被扯回原点
+    // 如果用户在智能讲解页手动点击了地图，就跳过定时器的自动位移，避免位置被扯回原点
     if (_isManualMode) return;
 
     // 在25教和樟树林之间缓慢移动（模拟用户行走）
@@ -115,7 +107,7 @@ class LocationService extends ChangeNotifier {
     _longitude +=
         (106.421 - _longitude) * 0.3 +
         (DateTime.now().second % 3 == 0 ? 0.0002 : -0.0001);
-    _simulateProximity(); // 12. 模拟移动时也同步进行本地账目计算
+    _simulateProximity();
     notifyListeners();
   }
 
@@ -145,9 +137,12 @@ class LocationService extends ChangeNotifier {
         return;
       }
 
-      _latitude = lat;
-      _longitude = lng;
+      _speedMps = (result['speed'] as num?)?.toDouble() ?? 0;
       _accuracyMeters = (result['accuracy'] as num?)?.toDouble() ?? -1;
+      // 多采样加权平滑，抑制 GPS 抖动
+      final smoothed = _smoothLocation(lat, lng, _speedMps, _accuracyMeters);
+      _latitude = smoothed.latitude;
+      _longitude = smoothed.longitude;
       _realLocationAvailable = true;
       _locationMode = 'real';
       _lastRealFixAt = DateTime.now();
@@ -174,38 +169,41 @@ class LocationService extends ChangeNotifier {
       final res = await NetworkClient.dio.post(
         '/api/location/heartbeat',
         data: {
-          'userId': NetworkClient.currentUserId, // 13. 规范化使用统一的登录用户ID
+          'userId': NetworkClient.currentUserId, // 统一使用登录用户ID
           'lng': _longitude,
           'lat': _latitude,
+          'speedMps': _speedMps,
+          'accuracyMeters': _accuracyMeters,
           'locationMode': _locationMode,
-          'accuracy': _accuracyMeters,
           'lastFixAt': _lastRealFixAt?.toIso8601String(),
         },
       );
       if (res.data['code'] == 200) {
-        final data = res.data['data'];
+        final data = res.data['data'] ?? {};
         if (data['action'] == 'TRIGGER_GUIDE') {
-          _triggeredSpot = data['spotName'];
-          _geoStatus = '已触发讲解';
-          _nearbySpot = data['spotName'];
-          _distance = 0;
+          _triggeredSpot = data['spotName']?.toString();
+          _nearbySpot = _triggeredSpot ?? '';
+          _distance = (data['distanceMeters'] is num)
+              ? (data['distanceMeters'] as num).toDouble()
+              : 0;
+          _geoStatus = 'guide_triggered';
         } else {
           _triggeredSpot = null;
-          _geoStatus = '未进入景点范围';
-          _nearbySpot = '';
-          _distance = 999;
+          _nearbySpot = data['spotName']?.toString() ?? '';
+          _distance = (data['distanceMeters'] is num)
+              ? (data['distanceMeters'] as num).toDouble()
+              : 999;
+          _geoStatus = data['reason']?.toString() ?? 'outside_geofence';
         }
         notifyListeners();
       }
     } catch (_) {
-      _geoStatus = '后端离线，模拟中';
-      // 离线模式：根据静态坐标表模拟检测
+      _geoStatus = 'backend_offline_simulation';
       _simulateProximity();
       notifyListeners();
     }
   }
 
-  /// 离线模拟：静态坐标距离判断
   Future<void> _recordAppVisit() async {
     try {
       await NetworkClient.dio.post(
@@ -220,28 +218,28 @@ class LocationService extends ChangeNotifier {
     }
   }
 
+  /// 离线模拟：静态坐标距离判断
   void _simulateProximity() {
     const spots = {
-      '25教': [106.421, 29.820],
-      '樟树林': [106.428, 29.822],
-      '中心图书馆': [106.431, 29.824],
-      '共青团花园': [106.427, 29.821],
+      'Teaching Building 25': [106.421, 29.820],
+      'Camphor Woods': [106.428, 29.822],
+      'Central Library': [106.431, 29.824],
+      'Youth Garden': [106.427, 29.821],
     };
-    for (var e in spots.entries) {
-      final dx = (_longitude - e.value[0]) * 111320 * 0.866; // cos(30°)
-      final dy = (_latitude - e.value[1]) * 111320;
-      final dist = (dx * dx + dy * dy).clamp(0, double.infinity).toDouble();
-      final d = dist > 0 ? dist : 1.0;
+    for (final entry in spots.entries) {
+      final dx = (_longitude - entry.value[0]) * 111320 * 0.866; // cos(30°)
+      final dy = (_latitude - entry.value[1]) * 111320;
+      final d = math.sqrt(dx * dx + dy * dy);
       if (d < 50) {
-        _nearbySpot = e.key;
+        _nearbySpot = entry.key;
         _distance = d;
-        _geoStatus = '距离${e.key}约${d.toStringAsFixed(0)}米';
+        _geoStatus = 'near ${entry.key}, ${d.toStringAsFixed(0)}m';
         return;
       }
     }
     _nearbySpot = '';
     _distance = 999;
-    _geoStatus = '未进入景点范围';
+    _geoStatus = 'outside_geofence';
   }
 
   void clearTrigger() {
@@ -249,4 +247,86 @@ class LocationService extends ChangeNotifier {
     _isManualMode = false;
     notifyListeners();
   }
+
+  void updateLocation(double lat, double lng) {
+    if (lat == 0.0 || lng == 0.0) return; // 拦截模拟器 0.0 脏数据
+    _latitude = lat;
+    _longitude = lng;
+    _isManualMode = true; // 标记为用户手动控点模式，暂停自动模拟
+    _locationMode = 'manual_demo';
+    _speedMps = 0;
+    _accuracyMeters = 0;
+    _simulateProximity(); // 立即触发一次本地距离检测，让首页和讲解页秒级同步
+    notifyListeners();
+  }
+
+  _LocationSample _smoothLocation(
+    double lat,
+    double lng,
+    double speedMps,
+    double accuracyMeters,
+  ) {
+    final now = DateTime.now();
+    if (_recentSamples.isNotEmpty) {
+      final last = _recentSamples.last;
+      final seconds = math.max(1, now.difference(last.time).inSeconds);
+      final jumpMeters =
+          _distanceMeters(last.latitude, last.longitude, lat, lng);
+      final allowedJump =
+          math.max(45.0, (speedMps + 2.0) * seconds + math.max(accuracyMeters, 0));
+      if (jumpMeters > allowedJump) {
+        return last;
+      }
+    }
+
+    _recentSamples.add(_LocationSample(lat, lng, accuracyMeters, now));
+    if (_recentSamples.length > 5) {
+      _recentSamples.removeAt(0);
+    }
+
+    final valid = _recentSamples
+        .where((item) => item.accuracyMeters <= 0 || item.accuracyMeters <= 80)
+        .toList();
+    final samples = valid.isEmpty ? _recentSamples : valid;
+    var weightSum = 0.0;
+    var latSum = 0.0;
+    var lngSum = 0.0;
+    for (var i = 0; i < samples.length; i++) {
+      final sample = samples[i];
+      final accuracyWeight =
+          sample.accuracyMeters <= 0 ? 1.0 : 1 / math.max(8.0, sample.accuracyMeters);
+      final recencyWeight = 1.0 + i * 0.18;
+      final weight = accuracyWeight * recencyWeight;
+      weightSum += weight;
+      latSum += sample.latitude * weight;
+      lngSum += sample.longitude * weight;
+    }
+    return _LocationSample(latSum / weightSum, lngSum / weightSum, accuracyMeters, now);
+  }
+
+  double _distanceMeters(double lat1, double lng1, double lat2, double lng2) {
+    const r = 6371000.0;
+    final dLat = (lat2 - lat1) * math.pi / 180;
+    final dLng = (lng2 - lng1) * math.pi / 180;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180) *
+            math.cos(lat2 * math.pi / 180) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+}
+
+class _LocationSample {
+  final double latitude;
+  final double longitude;
+  final double accuracyMeters;
+  final DateTime time;
+
+  const _LocationSample(
+    this.latitude,
+    this.longitude,
+    this.accuracyMeters,
+    this.time,
+  );
 }

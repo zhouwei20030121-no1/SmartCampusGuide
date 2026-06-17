@@ -221,13 +221,7 @@ class RAGService:
             enhanced_query = clean_query
             if web_results_text:
                 enhanced_query = f"{clean_query}{web_results_text}"
-            reply = await self._chat_with_llm(
-                enhanced_query,
-                sources,
-                history or [],
-                persona,
-                context or {},
-            )
+            reply = await self._chat_with_llm(enhanced_query, sources, history or [], persona, context or {})
             return {
                 "reply": reply or fallback_reply,
                 "sources": sources,
@@ -393,10 +387,14 @@ class RAGService:
         for word in ("怎么去", "怎么走", "如何到", "如何去", "带我去", "导航到"):
             if word in destination:
                 left, right = destination.split(word, 1)
-                destination = right or left
+                # If right is just punctuation, the actual destination is on the left
+                clean_right = re.sub(r"[？?。！!，,；;\s]+$", "", right).strip()
+                destination = clean_right if clean_right else left
         for word in ("怎么去", "怎么走", "如何到", "如何去", "带我去", "导航到", "去", "路线", "导航"):
             destination = destination.replace(word, "")
         destination = re.sub(r"[？?。！!，,；;\s]+$", "", destination).strip()
+        # Also remove leading "去" or "到"
+        destination = re.sub(r"^[去到]", "", destination).strip()
         return destination or query.strip()
 
     def _build_route_reply(self, query: str, sources: list[dict[str, Any]]) -> str:
@@ -619,6 +617,7 @@ class RAGService:
                 "retrieval": "hybrid-vector-keyword",
                 "top_k": top_k,
                 "source_count": len(docs),
+                "trust_policy": "use retrieved facts first; disclose limited evidence; do not invent campus history",
             },
             "tts": {
                 "mode": "client-native-streaming",
@@ -680,6 +679,7 @@ class RAGService:
         normalized_persona = self._normalize_persona(persona)
         docs = self.search(spot_name, top_k=5)
         safe_comments = [c.strip()[:300] for c in (comments or []) if c and c.strip()][:8]
+        comment_summary = self._analyze_comments(safe_comments)
         comments_text = "\n".join(f"- {item}" for item in safe_comments) or "暂无用户评论。"
         context = self._format_context(docs)
         time_text = time_context or _current_date()
@@ -712,7 +712,36 @@ class RAGService:
             "persona": normalized_persona,
             "language": language,
             "comments_used": len(safe_comments),
+            "comment_summary": comment_summary,
             "sources": docs,
+        }
+
+    def _analyze_comments(self, comments: list[str]) -> dict[str, Any]:
+        """Cluster comments into story themes and sentiments without an extra model call."""
+        buckets = {
+            "photo_checkin": ["拍照", "照片", "打卡", "好看", "风景", "晚霞"],
+            "class_study": ["上课", "自习", "考试", "课堂", "老师", "学习"],
+            "friendship": ["约会", "朋友", "一起", "等人", "散步"],
+            "alumni_memory": ["毕业", "校友", "回来", "怀念", "青春"],
+        }
+        emotions = {
+            "nostalgic": ["怀念", "毕业", "回来", "青春", "以前"],
+            "healing": ["安静", "舒服", "治愈", "放松", "美"],
+            "energetic": ["热闹", "青春", "开心", "喜欢", "活力"],
+            "complaint": ["远", "累", "挤", "难找", "排队"],
+        }
+        text = " ".join(comments)
+        keywords = [name for name, words in buckets.items() if any(word in text for word in words)]
+        sentiments = [name for name, words in emotions.items() if any(word in text for word in words)]
+        if not keywords:
+            keywords = ["campus_memory"] if comments else ["waiting_first_comment"]
+        if not sentiments:
+            sentiments = ["warm"] if comments else ["neutral"]
+        return {
+            "keywords": keywords[:5],
+            "sentiments": sentiments[:3],
+            "cluster_count": len(keywords),
+            "story_versions": ["today", "weekly", "alumni_memory"],
         }
 
     async def _complete_text(
@@ -749,7 +778,13 @@ class RAGService:
 
     def _resolve_style(self, persona: str, style: str) -> str:
         if style and style != "auto":
-            return style
+            guide_modes = {
+                "standard": "standard 1-minute campus audio guide; balanced facts, daily use, location context; about 300-450 Chinese characters",
+                "deep": "deep 3-minute guide for visitors or alumni; include more history, spatial details, campus memories and visiting suggestions; about 750-1100 Chinese characters",
+                "story": "fun story guide for check-in; combine retrieved facts with approved user comments; warm, narrative, but do not invent unsupported history; about 500-800 Chinese characters",
+                "practical": "practical guide for freshmen; focus on functions, nearby canteens, dorms, teaching buildings, hospital, express pickup and how to use this place; about 350-600 Chinese characters",
+            }
+            return guide_modes.get(style, style)
         return {
             "新生": "热情引导风格，像学长学姐带路，兼顾实用提示",
             "校友": "怀旧叙事风格，突出校园记忆和时间感",

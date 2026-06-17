@@ -4,17 +4,6 @@ import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 
-void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ),
-  );
-  runApp(const SmartCampusApp());
-}
-
 class SmartCampusApp extends StatelessWidget {
   const SmartCampusApp({super.key});
 
@@ -28,4 +17,29 @@ class SmartCampusApp extends StatelessWidget {
       onGenerateRoute: AppRouter.generateRoute,
     );
   }
+}
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: Colors.white,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            '页面启动失败：${details.exceptionAsString()}',
+            style: const TextStyle(color: Colors.red, fontSize: 14),
+          ),
+        ),
+      ),
+    );
+  };
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+  runApp(const SmartCampusApp());
 }

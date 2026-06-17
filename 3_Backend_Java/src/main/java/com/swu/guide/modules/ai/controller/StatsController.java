@@ -75,4 +75,34 @@ public class StatsController {
         );
         return Result.ok();
     }
+
+    @PostMapping("/guide-feedback")
+    public Result<Void> recordGuideFeedback(@RequestBody(required = false) Map<String, Object> body) {
+        Map<String, Object> payload = body == null ? Map.of() : body;
+        Object userIdValue = payload.get("userId");
+        Long userId = null;
+        if (userIdValue != null && !userIdValue.toString().isBlank()) {
+            try {
+                userId = Long.valueOf(userIdValue.toString());
+            } catch (NumberFormatException ignored) {
+                userId = null;
+            }
+        }
+
+        String detail = String.format(
+                "spot=%s; feedback=%s; persona=%s; language=%s; guideMode=%s",
+                payload.getOrDefault("spotName", ""),
+                payload.getOrDefault("feedback", ""),
+                payload.getOrDefault("persona", ""),
+                payload.getOrDefault("language", ""),
+                payload.getOrDefault("guideMode", "")
+        );
+        jdbcTemplate.update(
+                "INSERT INTO user_behavior_log (user_id, action_type, device_info, created_at) VALUES (?, ?, ?, NOW())",
+                userId,
+                "GUIDE_FEEDBACK",
+                detail
+        );
+        return Result.ok();
+    }
 }

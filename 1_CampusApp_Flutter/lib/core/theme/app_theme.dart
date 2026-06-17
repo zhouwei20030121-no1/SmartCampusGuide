@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color primary = Color(0xFF4A90E2);
-  static const Color darkBlue = Color(0xFF1A5276);
-  static const Color lightBlue = Color(0xFF85C1E9);
+  // 与登录按钮统一色号 #023D83（深蓝）
+  static const Color primary = Color(0xFF023D83);
+  static const Color darkBlue = Color(0xFF011F44);
+  static const Color lightBlue = Color(0xFF5A7DA5);
   static const Color textMain = Color(0xFF2C3E50);
   static const Color textSub = Color(0xFF7F8C8D);
-  static const Color pageBg = Color(0xFFEBF5FB);
+  static const Color pageBg = Color(0xFFEEF2F7);
   static const Color success = Color(0xFF27AE60);
   static const Color warning = Color(0xFFF39C12);
   static const Color danger = Color(0xFFE74C3C);
@@ -28,6 +29,6 @@ class AppTheme {
             fontWeight: FontWeight.w600,
           ),
         ),
-        fontFamily: 'PingFang SC',
+        // fontFamily 移除，使用系统默认字体（Android: Roboto, iOS: SF Pro）
       );
 }
