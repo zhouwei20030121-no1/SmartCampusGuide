@@ -708,7 +708,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   String? _triggeredSpot;
 
-  static const _spots = [
+  // 智能讲解地图标点的后端景点（/spot/list 全量，含准确坐标与讲解词）
+  List<SpotModel> _backendSpots = [];
+
+  // 后端景点为空时的兜底点位（手工硬编码，仅离线/加载失败时使用）
+  static const _fallbackGuideSpots = [
     _GuideSpot('中心图书馆', LatLng(29.8240, 106.4310), Icons.local_library),
     _GuideSpot('第八教学楼', LatLng(29.8190, 106.4236), Icons.school),
     _GuideSpot('行署楼', LatLng(29.8197, 106.4244), Icons.account_balance),
@@ -723,14 +727,85 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     _GuideSpot('音乐学院', LatLng(29.8195, 106.4293), Icons.music_note),
   ];
 
+  // 智能讲解的地图标点：优先用后端 /spot/list 全量景点（准确坐标 + 讲解词），
+  // 后端为空时回退到兜底点位。按 _allSpots 长度缓存，避免每帧重建 74 个对象。
+  List<_GuideSpot>? _guideSpotsCache;
+  int _guideSpotsCacheKey = -1;
+  List<_GuideSpot> get _spots {
+    if (_backendSpots.isEmpty) return _fallbackGuideSpots;
+    if (_guideSpotsCache != null && _guideSpotsCacheKey == _backendSpots.length) {
+      return _guideSpotsCache!;
+    }
+    final list = <_GuideSpot>[];
+    for (final s in _backendSpots) {
+      if (s.latitude < 29.75 ||
+          s.latitude > 29.90 ||
+          s.longitude < 106.35 ||
+          s.longitude > 106.50) {
+        continue; // 过滤无效/越界坐标
+      }
+      list.add(_GuideSpot(
+        s.name,
+        LatLng(s.latitude, s.longitude),
+        _guideIconForCategory(s.category),
+      ));
+    }
+    _guideSpotsCache = list.isEmpty ? _fallbackGuideSpots : list;
+    _guideSpotsCacheKey = _backendSpots.length;
+    return _guideSpotsCache!;
+  }
+
+  IconData _guideIconForCategory(String category) {
+    switch (category) {
+      case '教学设施':
+        return Icons.school;
+      case '校园文化':
+        return Icons.museum;
+      case '生活服务':
+        return Icons.storefront;
+      case '历史建筑':
+        return Icons.account_balance;
+      case '自然景观':
+        return Icons.park;
+      default:
+        return Icons.location_on;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _loc.addListener(_handleLocationChanged);
+    _fetchGuideSpots();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _loc.startTracking();
     });
+  }
+
+  // 从后端 /spot/list 拉取全量景点作为智能讲解的地图标点（替代原 12 个硬编码点）
+  Future<void> _fetchGuideSpots() async {
+    try {
+      final res = await NetworkClient.dio.get(
+        '/spot/list',
+        queryParameters: {'page': 1, 'size': 200},
+      );
+      if (res.data['code'] == 200) {
+        final records = res.data['data']?['records'] as List? ?? [];
+        final spots = records
+            .map((e) => SpotModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        if (mounted) {
+          setState(() {
+            _backendSpots = spots;
+            _guideSpotsCache = null; // 失效缓存，让 getter 用新数据重建
+            _guideSpotsCacheKey = -1;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('智能讲解加载景点失败: $e');
+    }
   }
 
   void _handleLocationChanged() {
@@ -928,6 +1003,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               subdomains: const ['1', '2', '3', '4'],
               userAgentPackageName: 'com.swu.smartCampusGuide',
               maxZoom: 19,
+              // 高 DPI 屏请求高清瓦片，避免地图模糊
+              retinaMode: RetinaMode.isHighDensity(context),
             ),
             MarkerLayer(
               markers: [

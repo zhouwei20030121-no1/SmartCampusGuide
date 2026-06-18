@@ -139,8 +139,11 @@ class LocationService extends ChangeNotifier {
 
       _speedMps = (result['speed'] as num?)?.toDouble() ?? 0;
       _accuracyMeters = (result['accuracy'] as num?)?.toDouble() ?? -1;
+      // GPS 返回 WGS-84，而高德底图/后端景点坐标是 GCJ-02，
+      // 必须先转换，否则定位蓝点会与底图、景点偏移数百米。
+      final gcj = _wgs84ToGcj02(lat, lng);
       // 多采样加权平滑，抑制 GPS 抖动
-      final smoothed = _smoothLocation(lat, lng, _speedMps, _accuracyMeters);
+      final smoothed = _smoothLocation(gcj[0], gcj[1], _speedMps, _accuracyMeters);
       _latitude = smoothed.latitude;
       _longitude = smoothed.longitude;
       _realLocationAvailable = true;
@@ -314,6 +317,69 @@ class LocationService extends ChangeNotifier {
             math.sin(dLng / 2) *
             math.sin(dLng / 2);
     return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  // ===== WGS-84（GPS 原始坐标）→ GCJ-02（高德底图/后端景点坐标系）=====
+  // 不转换会导致定位蓝点与高德底图、景点标点偏移约 300-600 米。
+  static const double _gcjA = 6378245.0;
+  static const double _gcjEe = 0.00669342162296594323;
+
+  List<double> _wgs84ToGcj02(double lat, double lng) {
+    if (_outOfChina(lat, lng)) return [lat, lng];
+    var dLat = _transformLat(lng - 105.0, lat - 35.0);
+    var dLng = _transformLng(lng - 105.0, lat - 35.0);
+    final radLat = lat / 180.0 * math.pi;
+    var magic = math.sin(radLat);
+    magic = 1 - _gcjEe * magic * magic;
+    final sqrtMagic = math.sqrt(magic);
+    dLat =
+        (dLat * 180.0) / ((_gcjA * (1 - _gcjEe)) / (magic * sqrtMagic) * math.pi);
+    dLng = (dLng * 180.0) / (_gcjA / sqrtMagic * math.cos(radLat) * math.pi);
+    return [lat + dLat, lng + dLng];
+  }
+
+  bool _outOfChina(double lat, double lng) {
+    return !(lng > 73.66 && lng < 135.05 && lat > 3.86 && lat < 53.55);
+  }
+
+  double _transformLat(double x, double y) {
+    var ret = -100.0 +
+        2.0 * x +
+        3.0 * y +
+        0.2 * y * y +
+        0.1 * x * y +
+        0.2 * math.sqrt(x.abs());
+    ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) *
+        2.0 /
+        3.0;
+    ret += (20.0 * math.sin(y * math.pi) + 40.0 * math.sin(y / 3.0 * math.pi)) *
+        2.0 /
+        3.0;
+    ret += (160.0 * math.sin(y / 12.0 * math.pi) +
+            320 * math.sin(y * math.pi / 30.0)) *
+        2.0 /
+        3.0;
+    return ret;
+  }
+
+  double _transformLng(double x, double y) {
+    var ret = 300.0 +
+        x +
+        2.0 * y +
+        0.1 * x * x +
+        0.1 * x * y +
+        0.1 * math.sqrt(x.abs());
+    ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) *
+        2.0 /
+        3.0;
+    ret += (20.0 * math.sin(x * math.pi) + 40.0 * math.sin(x / 3.0 * math.pi)) *
+        2.0 /
+        3.0;
+    ret += (150.0 * math.sin(x / 12.0 * math.pi) +
+            300.0 * math.sin(x / 30.0 * math.pi)) *
+        2.0 /
+        3.0;
+    return ret;
   }
 }
 

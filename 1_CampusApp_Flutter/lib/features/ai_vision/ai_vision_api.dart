@@ -1,33 +1,16 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+
+import '../../core/network/network_client.dart';
 
 class AiVisionApi {
-  static const _publicAiUrl = 'https://genna-boldhearted-dewily.ngrok-free.dev';
-
-  static String get _baseUrl {
-    const envUrl = String.fromEnvironment('AI_SERVICE_BASE_URL');
-    if (envUrl.isNotEmpty) return envUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5000';
-    if (!kIsWeb && Platform.isIOS) return _publicAiUrl;
-    return 'http://127.0.0.1:5000';
-  }
-
+  // 统一走 NetworkClient.aiBaseUrl：真机/默认 → ngrok，模拟器可用 --dart-define 覆盖。
   static List<String> get _baseUrls {
-    final urls = <String>[];
-    urls.add(_baseUrl);
-    if (!kIsWeb && Platform.isIOS) {
-      urls.addAll([_publicAiUrl, 'http://127.0.0.1:5000']);
-    } else {
-      urls.addAll([
-        'http://127.0.0.1:5000',
-        'http://10.0.2.2:5000',
-        'http://localhost:5000',
-        _publicAiUrl,
-      ]);
-    }
-    return urls.toSet().toList();
+    return <String>{
+      NetworkClient.aiBaseUrl,
+      'http://127.0.0.1:5000',
+      'http://10.0.2.2:5000',
+    }.toList();
   }
 
   /// 调用视觉识别接口识别建筑

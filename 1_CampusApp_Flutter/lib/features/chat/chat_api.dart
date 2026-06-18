@@ -1,24 +1,17 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb;
+
+import '../../core/network/network_client.dart';
 
 class ChatApi {
-  static String get _baseUrl {
-    const envUrl = String.fromEnvironment('AI_SERVICE_BASE_URL');
-    if (envUrl.isNotEmpty) return envUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:5000';
-    return 'http://127.0.0.1:5000';
-  }
-
+  // 统一走 NetworkClient.aiBaseUrl：真机/默认 → ngrok，模拟器可用 --dart-define 覆盖。
+  // aiBaseUrl（真机为 ngrok）放最前，避免真机先在 3 个本地地址上各超时一遍才回退。
   static List<String> get _baseUrls {
-    final urls = <String>[
-      _baseUrl,
+    return <String>{
+      NetworkClient.aiBaseUrl,
       'http://127.0.0.1:5000',
       'http://10.0.2.2:5000',
-      'http://localhost:5000',
-      'https://genna-boldhearted-dewily.ngrok-free.dev',
-    ];
-    return urls.toSet().toList();
+    }.toList();
   }
 
   static Future<ChatReply> sendMessage({

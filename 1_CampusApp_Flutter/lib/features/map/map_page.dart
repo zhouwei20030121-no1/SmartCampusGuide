@@ -383,6 +383,8 @@ class _MapPageState extends State<MapPage> {
                 subdomains: const ['1', '2', '3', '4'],
                 userAgentPackageName: 'com.swu.smartCampusGuide',
                 maxZoom: 19,
+                // 高 DPI 屏请求高清瓦片，避免地图模糊
+                retinaMode: RetinaMode.isHighDensity(context),
               ),
               MarkerLayer(
                 markers: visibleSpots.map((spot) {

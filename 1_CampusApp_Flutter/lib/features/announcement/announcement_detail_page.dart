@@ -4,6 +4,8 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/network/network_client.dart';
+
 class AnnouncementDetailPage extends StatefulWidget {
   final String url;
   final String title;
@@ -25,8 +27,18 @@ class _AnnouncementDetailPageState extends State<AnnouncementDetailPage> {
   }
 
   Future<void> _downloadPdf() async {
-    // 关键修正：如果是模拟器，将 localhost 替换为 10.0.2.2
-    String targetUrl = widget.url.replaceAll("localhost", "10.0.2.2");
+    // 统一走 NetworkClient.baseUrl：相对路径补全；后端可能写死的本地 host
+    // 替换为当前地址，真机才能下载（走 ngrok），不再用 10.0.2.2 这种模拟器专用地址。
+    final base = NetworkClient.baseUrl;
+    String targetUrl = widget.url.trim();
+    if (targetUrl.startsWith('/')) {
+      targetUrl = '$base$targetUrl';
+    } else {
+      targetUrl = targetUrl
+          .replaceAll('http://localhost:8080', base)
+          .replaceAll('http://127.0.0.1:8080', base)
+          .replaceAll('http://10.0.2.2:8080', base);
+    }
 
     try {
       print("准备下载: $targetUrl");

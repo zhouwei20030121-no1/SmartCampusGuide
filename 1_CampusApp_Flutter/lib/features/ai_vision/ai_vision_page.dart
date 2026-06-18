@@ -171,7 +171,16 @@ class _AiVisionPageState extends State<AiVisionPage>
         ),
       );
     }
-    return CameraPreview(_cameraCtrl!);
+    // 用 AspectRatio 保持相机原生宽高比，避免预览被拉伸变形
+    return Center(
+      child: AspectRatio(
+        aspectRatio: 1 / _cameraCtrl!.value.aspectRatio,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: CameraPreview(_cameraCtrl!),
+        ),
+      ),
+    );
   }
 
   /// 扫描框
@@ -523,8 +532,8 @@ class _AiVisionPageState extends State<AiVisionPage>
             style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
           ),
         ],
-        _buildDebugLine(result),
-        _buildDebugDetails(result),
+        if (_showDebug) _buildDebugLine(result),
+        if (_showDebug) _buildDebugDetails(result),
         const SizedBox(height: 12),
         Align(
           alignment: Alignment.centerRight,
@@ -630,8 +639,8 @@ class _AiVisionPageState extends State<AiVisionPage>
           style: TextStyle(fontSize: 14, color: AppTheme.textSub, height: 1.5),
           textAlign: TextAlign.center,
         ),
-        if (_result != null) _buildDebugLine(_result!),
-        if (_result != null) _buildDebugDetails(_result!),
+        if (_showDebug && _result != null) _buildDebugLine(_result!),
+        if (_showDebug && _result != null) _buildDebugDetails(_result!),
         const SizedBox(height: 14),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -666,6 +675,10 @@ class _AiVisionPageState extends State<AiVisionPage>
       ],
     );
   }
+
+  // 调试信息开关：仅开发排查时置 true；演示/生产保持 false，
+  // 不向用户暴露 CLIP 距离/阈值、图片 hash、Qwen/RAG 诊断等后端技术细节。
+  static bool _showDebug = false;
 
   Widget _buildDebugLine(AiVisionResult result) {
     final parts = <String>[
