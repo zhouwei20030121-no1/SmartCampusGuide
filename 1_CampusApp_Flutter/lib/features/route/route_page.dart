@@ -996,7 +996,23 @@ class _RoutePageState extends State<RoutePage> {
         }
       }
     } catch (e) {
-      debugPrint("Java A*高级算法请求失败 ($strategy): $e");
+      debugPrint("Java A*高级算法请求失败 ($strategy): $e，尝试离线路径");
+      try {
+        final offlineSpots = await CacheService.planRouteOffline(
+          startId: _startSpot!.id,
+          endId: _endSpot!.id,
+          waypoints: _waypoints.map((e) => e.id).toList(),
+          strategy: strategy,
+          userIdentity: _userIdentity,
+        );
+        if (offlineSpots.length >= 2) {
+          for (final spot in offlineSpots) {
+            nodesToConnect.add(LatLng(spot.latitude, spot.longitude));
+          }
+        }
+      } catch (offlineErr) {
+        debugPrint('离线路径规划失败: $offlineErr');
+      }
     }
 
     if (nodesToConnect.length < 2) {

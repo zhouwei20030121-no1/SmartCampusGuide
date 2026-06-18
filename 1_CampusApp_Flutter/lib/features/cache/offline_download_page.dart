@@ -12,7 +12,16 @@ class OfflineDownloadPage extends StatefulWidget {
 
 class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
   bool _isLoading = false;
+  double _progress = 0;
+  String _progressLabel = '';
   List<Map<String, dynamic>> _cachedSpots = [];
+  Map<String, int> _stats = const {
+    'spots': 0,
+    'guides': 0,
+    'routes': 0,
+    'graphEdges': 0,
+  };
+  String? _lastSyncTime;
 
   @override
   void initState() {
@@ -22,19 +31,41 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
 
   Future<void> _loadCachedData() async {
     final spots = await CacheService.getCachedSpots();
+    final stats = await CacheService.getCacheStats();
+    final lastSync = await CacheService.getLastSyncTime();
     if (mounted) {
-      setState(() => _cachedSpots = spots);
+      setState(() {
+        _cachedSpots = spots;
+        _stats = stats;
+        _lastSyncTime = lastSync;
+      });
     }
   }
 
   Future<void> _handleDownload() async {
-    setState(() => _isLoading = true);
-    final success = await CacheService.preloadSpots();
+    setState(() {
+      _isLoading = true;
+      _progress = 0;
+      _progressLabel = '准备下载…';
+    });
+    final success = await CacheService.preloadAll(
+      onProgress: (stage, progress) {
+        if (!mounted) return;
+        setState(() {
+          _progressLabel = stage;
+          _progress = progress;
+        });
+      },
+    );
     if (mounted) {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? '离线数据更新成功！' : '下载失败：${CacheService.lastError ?? '请检查后端服务和网络'}'),
+          content: Text(
+            success
+                ? '离线数据更新成功！（景点/讲解/路线/路网）'
+                : '下载失败：${CacheService.lastError ?? '请检查后端服务和网络'}',
+          ),
           backgroundColor: success ? Colors.teal : Colors.redAccent,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -45,11 +76,24 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
   }
 
   Future<void> _handleClearCache() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('清理离线缓存'),
+        content: const Text('将删除本地景点、讲解、路线和路网缓存。清理后可通过「一键下载」重新拉取。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认清理')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     await CacheService.clearCache();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('本地缓存已清空'),
+          content: const Text('本地缓存已清空，可点击「一键下载」重新获取'),
           backgroundColor: AppTheme.primary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -68,12 +112,14 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
 
   Color _getCategoryColor(String? category) {
     switch (category?.trim()) {
-      case '自然景观': return AppTheme.primary;
-      case '教学设施': return AppTheme.primary;
-      case '历史建筑': return AppTheme.primary;
-      case '校园文化': return AppTheme.primary;
-      case '生活服务': return AppTheme.primary;
-      default: return AppTheme.primary;
+      case '自然景观':
+      case '教学设施':
+      case '历史建筑':
+      case '校园文化':
+      case '生活服务':
+        return AppTheme.primary;
+      default:
+        return AppTheme.primary;
     }
   }
 
@@ -84,19 +130,16 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // ====================== 背景层：全屏背景图 + 高斯模糊 + 蓝色蒙版 ======================
           Positioned.fill(
             child: ImageFiltered(
               imageFilter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 加载指定背景图
                   Image.asset(
                     'assets/images/bg.jpg',
                     fit: BoxFit.cover,
                   ),
-                  // 半透明蓝色蒙版，保证文字可读性
                   Container(
                     color: const Color(0xFFE0F2FE).withValues(alpha: 0.45),
                   ),
@@ -104,15 +147,13 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
               ),
             ),
           ),
-
-          // ====================== 内容层 ======================
           SafeArea(
             child: Column(
               children: [
                 _buildHeader(),
                 const SizedBox(height: 20),
                 _buildControlPanel(),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 Expanded(
                   child: _cachedSpots.isEmpty
                       ? _buildEmptyState()
@@ -126,7 +167,6 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     );
   }
 
-  // 标题栏
   Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -137,13 +177,15 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
             onTap: () => Navigator.pop(context),
           ),
           const SizedBox(width: 16),
-          const Text(
-            "离线地图数据",
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: AppTheme.primary,
-              letterSpacing: 0.5,
+          const Expanded(
+            child: Text(
+              "离线地图数据",
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                color: AppTheme.primary,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
         ],
@@ -151,7 +193,6 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     );
   }
 
-  // 控制面板（毛玻璃悬浮卡片）
   Widget _buildControlPanel() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -159,50 +200,54 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
         borderRadius: 24,
         padding: const EdgeInsets.all(24),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            const Text(
+              '离线能力概览',
+              style: TextStyle(
+                fontSize: 15,
+                color: Color(0xFF475569),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "已缓存景点",
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Color(0xFF475569),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      "${_cachedSpots.length}",
-                      style: const TextStyle(
-                        fontSize: 38,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-                _isLoading
-                    ? const CircularProgressIndicator(color: AppTheme.primary)
-                    : Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.cloud_done_rounded,
-                    color: AppTheme.primary,
-                    size: 32,
-                  ),
-                ),
+                _statChip('景点', _stats['spots'] ?? 0, Icons.place_rounded),
+                _statChip('讲解', _stats['guides'] ?? 0, Icons.record_voice_over_rounded),
+                _statChip('路线', _stats['routes'] ?? 0, Icons.route_rounded),
+                _statChip('路网边', _stats['graphEdges'] ?? 0, Icons.hub_rounded),
               ],
             ),
-            const SizedBox(height: 28),
+            if (_lastSyncTime != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                '上次同步：$_lastSyncTime',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+              ),
+            ],
+            if (_isLoading) ...[
+              const SizedBox(height: 16),
+              LinearProgressIndicator(
+                value: _progress > 0 ? _progress : null,
+                backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                color: AppTheme.primary,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _progressLabel,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+            ],
+            const SizedBox(height: 20),
+            const Text(
+              '弱网可用：查景点 · 看路线方向 · 阅读讲解',
+              style: TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.4),
+            ),
+            const SizedBox(height: 20),
             Row(
               children: [
                 Expanded(
@@ -232,7 +277,31 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     );
   }
 
-  // 空状态
+  Widget _statChip(String label, int count, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppTheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            '$label $count',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -245,7 +314,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
           ),
           const SizedBox(height: 20),
           const Text(
-            "暂无离线数据\n请点击上方按钮下载",
+            "暂无离线数据\n请点击「一键下载」获取景点、讲解、路线与路网",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 16,
@@ -258,7 +327,6 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     );
   }
 
-  // 缓存列表
   Widget _buildSpotList() {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -272,7 +340,6 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     );
   }
 
-  // 列表项（高级毛玻璃卡片）
   Widget _buildSpotItem(Map<String, dynamic> spot, Color color) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -328,7 +395,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
                 const Icon(Icons.check_circle_rounded, color: Colors.teal, size: 20),
                 const SizedBox(height: 4),
                 Text(
-                  _formatTime(spot['cached_at']),
+                  _formatTime(spot['cached_at'] as int?),
                   style: const TextStyle(
                     fontSize: 10,
                     color: Color(0xFF94A3B8),
@@ -342,7 +409,6 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     );
   }
 
-  // 毛玻璃卡片 通用组件
   Widget _glassCard({
     required Widget child,
     required double borderRadius,
@@ -372,7 +438,6 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     );
   }
 
-  // 毛玻璃按钮 通用组件
   Widget _glassButton({
     required String text,
     required IconData icon,
@@ -383,20 +448,20 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     return Container(
       decoration: isOutline
           ? BoxDecoration(
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-        borderRadius: BorderRadius.circular(16),
-      )
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+              borderRadius: BorderRadius.circular(16),
+            )
           : BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+              color: color,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -425,7 +490,6 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     );
   }
 
-  // 毛玻璃图标按钮 通用组件
   Widget _glassIconButton({
     required IconData icon,
     required VoidCallback onTap,

@@ -51,20 +51,25 @@ class _SearchPageState extends State<SearchPage> {
         });
       }
 
-      final res = await NetworkClient.get('/spot/list', queryParameters: {
-        'page': 1,
-        'size': 1000,
-      });
-      final data = res.data['data'];
-      final records = data is Map ? data['records'] : data;
-      if (records is List && mounted) {
-        setState(() {
-          _spots = records
-              .whereType<Map>()
-              .map((e) => SpotModel.fromJson(Map<String, dynamic>.from(e)))
-              .where((spot) => spot.latitude != 0 && spot.longitude != 0)
-              .toList();
+      try {
+        final res = await NetworkClient.get('/spot/list', queryParameters: {
+          'page': 1,
+          'size': 1000,
         });
+        final data = res.data['data'];
+        final records = data is Map ? data['records'] : data;
+        if (records is List && mounted) {
+          setState(() {
+            _spots = records
+                .whereType<Map>()
+                .map((e) => SpotModel.fromJson(Map<String, dynamic>.from(e)))
+                .where((spot) => spot.latitude != 0 && spot.longitude != 0)
+                .toList();
+          });
+          await CacheService.preloadSpots();
+        }
+      } catch (e) {
+        debugPrint('搜索页在线加载失败，使用离线缓存: $e');
       }
     } catch (e) {
       debugPrint('搜索页加载地点失败: $e');
@@ -94,6 +99,20 @@ class _SearchPageState extends State<SearchPage> {
       final desc = item['desc']!.toString().toLowerCase();
       final keywords = (item['keywords'] ?? '').toString().toLowerCase();
       return title.contains(q) || desc.contains(q) || keywords.contains(q);
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _offlineSpotResults(String query) async {
+    final offlineSpots = await CacheService.searchSpotsOffline(query);
+    return offlineSpots.map((spot) {
+      return {
+        'title': spot.name,
+        'type': '景点',
+        'desc': spot.description,
+        'keywords': '${spot.name} ${spot.category} ${spot.description}',
+        'spot': spot,
+        'offline': true,
+      };
     }).toList();
   }
 
@@ -205,12 +224,46 @@ class _SearchPageState extends State<SearchPage> {
 
   Widget _buildResults() {
     final res = _results;
+    if (res.isEmpty && _query.trim().isNotEmpty) {
+      return FutureBuilder<List<Map<String, dynamic>>>(
+        future: _offlineSpotResults(_query),
+        builder: (context, snapshot) {
+          final offline = snapshot.data ?? [];
+          if (offline.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.search_off_rounded,
+                      size: 64, color: Colors.grey.withValues(alpha: 0.3)),
+                  const SizedBox(height: 16),
+                  Text(
+                    _loadingSpots ? '正在加载校园地点...' : '暂无搜索结果',
+                    style: const TextStyle(color: Colors.grey),
+                  ),
+                  if (!_loadingSpots)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        '弱网时可先在「离线地图数据」页下载缓存',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }
+          return _buildResultList(offline, showOfflineBadge: true);
+        },
+      );
+    }
     if (res.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.search_off_rounded, size: 64, color: Colors.grey.withValues(alpha: 0.3)),
+            Icon(Icons.search_off_rounded,
+                size: 64, color: Colors.grey.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
             Text(
               _loadingSpots ? '正在加载校园地点...' : '暂无搜索结果',
@@ -220,12 +273,16 @@ class _SearchPageState extends State<SearchPage> {
         ),
       );
     }
+    return _buildResultList(res);
+  }
 
+  Widget _buildResultList(List<Map<String, dynamic>> items,
+      {bool showOfflineBadge = false}) {
     return ListView.separated(
-      itemCount: res.length,
+      itemCount: items.length,
       separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
       itemBuilder: (context, index) {
-        final item = res[index];
+        final item = items[index];
         IconData icon;
         Color color;
         if (item['type'] == '功能') {
@@ -248,7 +305,28 @@ class _SearchPageState extends State<SearchPage> {
             ),
             child: Icon(icon, color: color, size: 20),
           ),
-          title: Text(item['title']!, style: const TextStyle(fontWeight: FontWeight.w500)),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(item['title']!,
+                    style: const TextStyle(fontWeight: FontWeight.w500)),
+              ),
+              if (showOfflineBadge || item['offline'] == true)
+                Container(
+                  margin: const EdgeInsets.only(left: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.teal.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '离线',
+                    style: TextStyle(fontSize: 10, color: Colors.teal),
+                  ),
+                ),
+            ],
+          ),
           subtitle: Text(item['desc']!, style: const TextStyle(fontSize: 12)),
           trailing: const Icon(Icons.chevron_right_rounded, color: Colors.black26),
           onTap: () {
