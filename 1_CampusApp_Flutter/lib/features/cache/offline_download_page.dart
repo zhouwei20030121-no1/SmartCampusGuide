@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 import 'cache_service.dart';
 
 class OfflineDownloadPage extends StatefulWidget {
@@ -49,7 +50,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('本地缓存已清空'),
-          backgroundColor: Colors.blueAccent,
+          backgroundColor: AppTheme.primary,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
@@ -67,12 +68,12 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
 
   Color _getCategoryColor(String? category) {
     switch (category?.trim()) {
-      case '自然景观': return const Color(0xFF2563EB);
-      case '教学设施': return const Color(0xFF3B82F6);
-      case '历史建筑': return const Color(0xFF60A5FA);
-      case '校园文化': return const Color(0xFF93C5FD);
-      case '生活服务': return const Color(0xFFBFDBFE);
-      default: return const Color(0xFF3B82F6);
+      case '自然景观': return AppTheme.primary;
+      case '教学设施': return AppTheme.primary;
+      case '历史建筑': return AppTheme.primary;
+      case '校园文化': return AppTheme.primary;
+      case '生活服务': return AppTheme.primary;
+      default: return AppTheme.primary;
     }
   }
 
@@ -141,7 +142,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
             style: TextStyle(
               fontSize: 26,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1E40AF),
+              color: AppTheme.primary,
               letterSpacing: 0.5,
             ),
           ),
@@ -179,23 +180,23 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
                       style: const TextStyle(
                         fontSize: 38,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF1D4ED8),
+                        color: AppTheme.primary,
                       ),
                     ),
                   ],
                 ),
                 _isLoading
-                    ? const CircularProgressIndicator(color: Color(0xFF3B82F6))
+                    ? const CircularProgressIndicator(color: AppTheme.primary)
                     : Container(
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFDBEAFE),
+                    color: AppTheme.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Icon(
                     Icons.cloud_done_rounded,
-                    color: Color(0xFF3B82F6),
+                    color: AppTheme.primary,
                     size: 32,
                   ),
                 ),
@@ -218,7 +219,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
                   child: _glassButton(
                     text: "一键下载",
                     icon: Icons.download_rounded,
-                    color: const Color(0xFF2563EB),
+                    color: AppTheme.primary,
                     isOutline: false,
                     onTap: _isLoading ? null : _handleDownload,
                   ),
@@ -240,7 +241,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
           Icon(
             Icons.cloud_off_rounded,
             size: 80,
-            color: Colors.blueAccent.withOpacity(0.25),
+            color: AppTheme.primary.withValues(alpha: 0.25),
           ),
           const SizedBox(height: 20),
           const Text(
@@ -299,14 +300,14 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E3A8A),
+                      color: AppTheme.textMain,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
+                      color: AppTheme.primary.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -359,7 +360,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
             borderRadius: BorderRadius.circular(borderRadius),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1E40AF).withOpacity(0.04),
+                color: AppTheme.primary.withValues(alpha: 0.04),
                 blurRadius: 20,
                 offset: const Offset(0, 6),
               ),
@@ -438,7 +439,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
         border: Border.all(color: Colors.white.withOpacity(0.5)),
       ),
       child: IconButton(
-        icon: Icon(icon, size: 20, color: const Color(0xFF1E40AF)),
+        icon: Icon(icon, size: 20, color: AppTheme.primary),
         onPressed: onTap,
       ),
     );

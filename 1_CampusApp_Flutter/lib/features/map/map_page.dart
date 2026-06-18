@@ -324,7 +324,7 @@ class _MapPageState extends State<MapPage> {
                           height: 46,
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
-                              colors: [AppTheme.primary, Color(0xFF3A86C5)],
+                              colors: [AppTheme.primary, AppTheme.primary],
                             ),
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -495,8 +495,8 @@ class _MapPageState extends State<MapPage> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: _canAutoPlanRoute
-                        ? [AppTheme.primary, const Color(0xFF3A86C5)]
-                        : [const Color(0xFFC2DEF5), const Color(0xFF73B4E9)],
+                        ? [AppTheme.primary, AppTheme.primary]
+                        : [AppTheme.primary, AppTheme.primary],
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -680,14 +680,14 @@ class _MapPageState extends State<MapPage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade900.withValues(alpha: 0.15),
+                    color: AppTheme.primary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: Colors.blue.shade200.withValues(alpha: 0.4),
+                      color: AppTheme.primary.withValues(alpha: 0.4),
                       width: 1.5,
                     ),
                     boxShadow: [
-                      BoxShadow(color: Colors.blue.shade900.withValues(alpha: 0.1), blurRadius: 20)
+                      BoxShadow(color: AppTheme.primary.withValues(alpha: 0.1), blurRadius: 20)
                     ],
                   ),
                   child: Column(
@@ -696,14 +696,14 @@ class _MapPageState extends State<MapPage> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.map_outlined, size: 18, color: Colors.blue.shade800),
+                          const Icon(Icons.map_outlined, size: 18, color: AppTheme.primary),
                           const SizedBox(width: 6),
                           Text(
                             '西大纯净版导览图',
                             style: TextStyle(
                               fontWeight: FontWeight.w900,
                               fontSize: 14,
-                              color: Colors.blue.shade900,
+                              color: AppTheme.primary,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -733,10 +733,10 @@ class _MapPageState extends State<MapPage> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade900.withValues(alpha: 0.15),
+                    color: AppTheme.primary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.blue.shade200.withValues(alpha: 0.4), width: 1.5),
-                    boxShadow: [BoxShadow(color: Colors.blue.shade900.withValues(alpha: 0.1), blurRadius: 20)],
+                    border: Border.all(color: AppTheme.primary.withValues(alpha: 0.4), width: 1.5),
+                    boxShadow: [BoxShadow(color: AppTheme.primary.withValues(alpha: 0.1), blurRadius: 20)],
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -744,12 +744,12 @@ class _MapPageState extends State<MapPage> {
                       Icon(
                         _showLabels ? Icons.visibility : Icons.visibility_off,
                         size: 16,
-                        color: Colors.blue.shade800,
+                        color: AppTheme.primary,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         '地名',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.blue.shade900),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.primary),
                       ),
                       const SizedBox(width: 4),
                       SizedBox(
@@ -759,7 +759,7 @@ class _MapPageState extends State<MapPage> {
                           fit: BoxFit.fill,
                           child: Switch(
                             value: _showLabels,
-                            activeColor: Colors.blue.shade600,
+                            activeThumbColor: AppTheme.primary,
                             onChanged: (val) {
                               setState(() {
                                 _showLabels = val;
@@ -835,7 +835,7 @@ class _MapPageState extends State<MapPage> {
           const SizedBox(width: 10),
           Text(
             label,
-            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blue.shade900.withValues(alpha: 0.85)),
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.primary.withValues(alpha: 0.85)),
           ),
         ],
       ),
@@ -853,9 +853,9 @@ class _MapPageState extends State<MapPage> {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: Colors.blue.shade50.withValues(alpha: 0.6), // 恢复最初的 alpha: 0.6
+              color: AppTheme.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.blue.shade200.withValues(alpha: 0.5), width: 1.5),
+              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.24), width: 1.5),
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
             ),
             child: Icon(icon, color: color, size: 24),

@@ -594,7 +594,7 @@ class _RoutePageState extends State<RoutePage> {
                         height: 46,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [AppTheme.primary, Color(0xFF3A86C5)],
+                            colors: [AppTheme.primary, AppTheme.primary],
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -926,7 +926,7 @@ class _RoutePageState extends State<RoutePage> {
       _isLoadingRoute = false;
       Color routeColor;
       if (_currentStrategy == 'DISTANCE')
-        routeColor = Colors.blueAccent;
+        routeColor = AppTheme.primary;
       else if (_currentStrategy == 'TIME')
         routeColor = Colors.green;
       else
@@ -1198,7 +1198,7 @@ class _RoutePageState extends State<RoutePage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w900,
                       fontSize: 13,
-                      color: Colors.blue.shade900,
+                      color: AppTheme.primary,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1228,7 +1228,7 @@ class _RoutePageState extends State<RoutePage> {
                   Icon(
                     _showLabels ? Icons.visibility : Icons.visibility_off,
                     size: 16,
-                    color: Colors.blue.shade800,
+                    color: AppTheme.primary,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -1236,7 +1236,7 @@ class _RoutePageState extends State<RoutePage> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w900,
-                      color: Colors.blue.shade900,
+                      color: AppTheme.primary,
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -1247,7 +1247,7 @@ class _RoutePageState extends State<RoutePage> {
                       fit: BoxFit.fill,
                       child: Switch(
                         value: _showLabels,
-                        activeThumbColor: Colors.blue.shade600,
+                        activeThumbColor: AppTheme.primary,
                         onChanged: (val) => setState(() => _showLabels = val),
                       ),
                     ),
@@ -1314,8 +1314,8 @@ class _RoutePageState extends State<RoutePage> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: hasRoute
-                        ? [AppTheme.primary, const Color(0xFF3A86C5)]
-                        : [const Color(0xFFC2DEF5), const Color(0xFF73B4E9)],
+                        ? [AppTheme.primary, AppTheme.primary]
+                        : [AppTheme.primary, AppTheme.primary],
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1539,7 +1539,7 @@ class _RoutePageState extends State<RoutePage> {
                   child: _buildRouteOption(
                     '个性化',
                     _pathTimeStrs['PERSONALIZED']!,
-                    const Color(0xFF8E44AD),
+                    AppTheme.primary,
                     () {
                       setState(() => _currentStrategy = 'PERSONALIZED');
                       _drawCurrentRoute(autoZoom: true);
@@ -1811,7 +1811,7 @@ class _RoutePageState extends State<RoutePage> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Colors.blue.shade900.withValues(alpha: 0.85),
+              color: AppTheme.primary.withValues(alpha: 0.85),
             ),
           ),
         ],

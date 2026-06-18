@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/network/network_client.dart';
 import 'announcement_detail_page.dart';
 
@@ -45,13 +46,13 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF1E40AF),
+            color: AppTheme.primary,
             letterSpacing: 0.5,
           ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF1E40AF)),
+        iconTheme: const IconThemeData(color: AppTheme.primary),
         centerTitle: false,
       ),
       // ====================== 层叠背景 + 毛玻璃内容 ======================
@@ -69,7 +70,7 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
                     fit: BoxFit.cover,
                   ),
                   Container(
-                    color: const Color(0xFFE0F2FE).withOpacity(0.45),
+                    color: const Color(0xFFE0F2FE).withValues(alpha: 0.45),
                   ),
                 ],
               ),
@@ -81,7 +82,7 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
             child: _isLoading
                 ? const Center(
               child: CircularProgressIndicator(
-                color: Color(0xFF3B82F6),
+                color: AppTheme.primary,
               ),
             )
                 : _announcements.isEmpty
@@ -90,7 +91,7 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
                 '暂无校园公告',
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.blueAccent.withOpacity(0.4),
+                  color: AppTheme.primary.withValues(alpha: 0.4),
                 ),
               ),
             )
@@ -118,12 +119,12 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.65),
-            border: Border.all(color: Colors.white.withOpacity(0.6)),
+            color: Colors.white.withValues(alpha: 0.65),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
             borderRadius: BorderRadius.circular(22),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF1E40AF).withOpacity(0.05),
+                color: AppTheme.primary.withValues(alpha: 0.05),
                 blurRadius: 20,
                 offset: const Offset(0, 6),
               ),
@@ -144,7 +145,7 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
                 );
               },
               borderRadius: BorderRadius.circular(22),
-              splashColor: const Color(0xFF3B82F6).withOpacity(0.1),
+              splashColor: AppTheme.primary.withValues(alpha: 0.1),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
@@ -154,12 +155,12 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
                       width: 54,
                       height: 54,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFDBEAFE),
+                        color: AppTheme.primary.withValues(alpha: 0.12),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
                         Icons.campaign_rounded,
-                        color: Color(0xFF2563EB),
+                        color: AppTheme.primary,
                         size: 28,
                       ),
                     ),
@@ -175,7 +176,7 @@ class _AnnouncementListPageState extends State<AnnouncementListPage> {
                             style: const TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w600,
-                              color: Color(0xFF1E3A8A),
+                              color: AppTheme.textMain,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
