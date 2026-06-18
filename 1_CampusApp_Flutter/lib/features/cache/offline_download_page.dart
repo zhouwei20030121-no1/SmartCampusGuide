@@ -34,7 +34,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
       setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success ? '离线数据更新成功！' : '下载失败，请检查网络'),
+          content: Text(success ? '离线数据更新成功！' : '下载失败：${CacheService.lastError ?? '请检查后端服务和网络'}'),
           backgroundColor: success ? Colors.teal : Colors.redAccent,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -98,7 +98,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
                   ),
                   // 半透明蓝色蒙版，保证文字可读性
                   Container(
-                    color: const Color(0xFFE0F2FE).withOpacity(0.45),
+                    color: const Color(0xFFE0F2FE).withValues(alpha: 0.45),
                   ),
                 ],
               ),
@@ -285,7 +285,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.place_rounded, color: color, size: 26),
@@ -355,8 +355,8 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.65),
-            border: Border.all(color: Colors.white.withOpacity(0.6)),
+            color: Colors.white.withValues(alpha: 0.65),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
             borderRadius: BorderRadius.circular(borderRadius),
             boxShadow: [
               BoxShadow(
@@ -383,7 +383,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
     return Container(
       decoration: isOutline
           ? BoxDecoration(
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
         borderRadius: BorderRadius.circular(16),
       )
           : BoxDecoration(
@@ -391,7 +391,7 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.3),
+            color: color.withValues(alpha: 0.3),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -434,9 +434,9 @@ class _OfflineDownloadPageState extends State<OfflineDownloadPage> {
       width: 42,
       height: 42,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.7),
+        color: Colors.white.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.5)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
       ),
       child: IconButton(
         icon: Icon(icon, size: 20, color: AppTheme.primary),

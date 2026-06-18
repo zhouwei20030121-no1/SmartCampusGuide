@@ -13,8 +13,15 @@ import 'map_user_location_controller.dart';
 
 class MapPage extends StatefulWidget {
   final bool isTabVisible;
+  final int? initialSpotId;
+  final String? initialSpotName;
 
-  const MapPage({super.key, this.isTabVisible = true});
+  const MapPage({
+    super.key,
+    this.isTabVisible = true,
+    this.initialSpotId,
+    this.initialSpotName,
+  });
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -31,6 +38,7 @@ class _MapPageState extends State<MapPage> {
   final List<SpotModel> _waypoints = [];
   late final MapUserLocationController _userLocation = MapUserLocationController.shared;
   late final VoidCallback _userLocationListener;
+  bool _initialSpotDialogShown = false;
 
   // 控制高德底图自带文字显示的开关
   bool _showLabels = true;
@@ -104,6 +112,7 @@ class _MapPageState extends State<MapPage> {
       final spots = cachedRecords.map((e) => SpotModel.fromJson(e)).toList();
       setState(() => _allSpots = spots);
       _generateMarkers(spots);
+      _openInitialSpotIfReady();
     }
 
     // 与首页「附近景点推荐」一致：直接从后端拉完整数据（含图片路径）
@@ -119,6 +128,7 @@ class _MapPageState extends State<MapPage> {
             .toList();
         setState(() => _allSpots = spots);
         _generateMarkers(spots);
+        _openInitialSpotIfReady();
         await CacheService.preloadSpots();
       }
     } catch (e) {
@@ -131,6 +141,58 @@ class _MapPageState extends State<MapPage> {
       if (spot.id == id) return spot;
     }
     return null;
+  }
+
+  SpotModel? _findInitialSpot() {
+    final initialSpotId = widget.initialSpotId;
+    if (initialSpotId != null) {
+      final spot = _findSpotById(initialSpotId);
+      if (spot != null) return spot;
+    }
+
+    final initialSpotName = widget.initialSpotName?.trim();
+    if (initialSpotName == null || initialSpotName.isEmpty) return null;
+
+    String normalize(String value) => value.replaceAll(RegExp(r'\s+'), '');
+    final targetName = normalize(initialSpotName);
+    for (final spot in _allSpots) {
+      final spotName = normalize(spot.name);
+      if (spotName == targetName ||
+          spotName.contains(targetName) ||
+          targetName.contains(spotName)) {
+        return spot;
+      }
+    }
+    return null;
+  }
+
+  void _openInitialSpotIfReady() {
+    if (_initialSpotDialogShown || !mounted || _mapController == null || _allSpots.isEmpty) {
+      return;
+    }
+
+    final spot = _findInitialSpot();
+    if (spot == null) return;
+    _initialSpotDialogShown = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _mapController?.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(spot.latitude, spot.longitude),
+            zoom: 17,
+            tilt: 0,
+            bearing: 0,
+          ),
+        ),
+        animated: true,
+      );
+
+      Future<void>.delayed(const Duration(milliseconds: 250), () {
+        if (mounted) _showSpotGlassDialog(spot.id);
+      });
+    });
   }
 
   String _resolveSpotImageUrl(SpotModel spot) {
@@ -155,7 +217,7 @@ class _MapPageState extends State<MapPage> {
         width: double.infinity,
         height: 150,
         fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _buildSpotImagePlaceholder(),
+        errorWidget: (_, _, _) => _buildSpotImagePlaceholder(),
       ),
     );
   }
@@ -663,6 +725,7 @@ class _MapPageState extends State<MapPage> {
             onMapCreated: (controller) {
               _mapController = controller;
               _userLocation.syncFromService(force: true);
+              _openInitialSpotIfReady();
             },
             onCameraMove: (CameraPosition position) {
               _currentCameraPosition = position;
@@ -809,12 +872,19 @@ class _MapPageState extends State<MapPage> {
   // 匹配大头针颜色的渐变蓝图例
   Widget _buildLegendRow(double hue, String label) {
     Color displayColor;
-    if (hue == 240.0) displayColor = Colors.blue.shade900;
-    else if (hue == 225.0) displayColor = Colors.blue.shade700;
-    else if (hue == 210.0) displayColor = Colors.blue.shade500;
-    else if (hue == 195.0) displayColor = Colors.lightBlue.shade400;
-    else if (hue == 180.0) displayColor = Colors.cyan.shade300;
-    else displayColor = Colors.blue;
+    if (hue == 240.0) {
+      displayColor = Colors.blue.shade900;
+    } else if (hue == 225.0) {
+      displayColor = Colors.blue.shade700;
+    } else if (hue == 210.0) {
+      displayColor = Colors.blue.shade500;
+    } else if (hue == 195.0) {
+      displayColor = Colors.lightBlue.shade400;
+    } else if (hue == 180.0) {
+      displayColor = Colors.cyan.shade300;
+    } else {
+      displayColor = Colors.blue;
+    }
 
     return Padding(
       padding: const EdgeInsets.only(top: 6),

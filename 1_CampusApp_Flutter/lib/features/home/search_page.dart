@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../../core/network/network_client.dart';
+import '../../core/router/app_router.dart';
 import '../../core/theme/app_theme.dart';
+import '../cache/cache_service.dart';
+import '../spot/spot_model.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -13,20 +17,74 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _ctrl = TextEditingController();
   final FocusNode _focus = FocusNode();
   String _query = '';
+  List<SpotModel> _spots = [];
+  bool _loadingSpots = false;
 
-  // 全站功能与景点数据，keywords 字段用于模糊匹配
-  final List<Map<String, dynamic>> _allData = [
+  // 全站功能数据，keywords 字段用于模糊匹配
+  final List<Map<String, dynamic>> _functionData = [
     {'title': '西小导 AI 对话', 'type': '功能', 'route': '/chat', 'desc': 'AI 虚拟导游，RAG 多轮问答', 'keywords': '西小导 AI 问答 聊天 RAG 导游 虚拟导游 智能体'},
     {'title': 'AI 探校', 'type': '功能', 'route': '/ai_vision', 'desc': '拍下校园建筑获取详细介绍', 'keywords': 'AI 探校 识图 识别 建筑识别 相机 拍照 视觉'},
     {'title': '智能讲解', 'type': '功能', 'route': '/guide', 'desc': '基于 LBS 的多语种语音讲解', 'keywords': '讲解 语音 TTS 多语种 播报'},
     {'title': '路线规划', 'type': '功能', 'route': '/route', 'desc': '校园内智能导航与路线生成', 'keywords': '路线 规划 导航 寻路 步行'},
     {'title': '景点打卡', 'type': '功能', 'route': '/checkin', 'desc': '点亮地图徽章，记录足迹', 'keywords': '打卡 徽章 足迹 成就'},
     {'title': '校园地图', 'type': '功能', 'route': '/map', 'desc': '全局高德地图导览', 'keywords': '地图 导览 定位 GPS 高德'},
-    {'title': '中心图书馆', 'type': '景点', 'route': '/spot/2', 'desc': '藏书丰富的现代化学习中心', 'keywords': '图书馆 学习 自习 借书'},
-    {'title': '含弘门', 'type': '景点', 'route': '/spot/3', 'desc': '西南大学一号门标志建筑', 'keywords': '含弘门 一号门 校门 入口'},
-    {'title': '雨僧楼（第1教学楼）', 'type': '景点', 'route': '/spot/1', 'desc': '历史悠久的红砖建筑', 'keywords': '雨僧楼 1教 第一教学楼 吴宓 文学院'},
     {'title': '校车时刻表', 'type': '服务', 'route': '/bus', 'desc': '查询校园小黄车发车时间', 'keywords': '校车 小黄车 时刻表 班车'},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSpots();
+  }
+
+  Future<void> _loadSpots() async {
+    if (_loadingSpots) return;
+    setState(() => _loadingSpots = true);
+    try {
+      final cachedRecords = await CacheService.getCachedSpots();
+      if (cachedRecords.isNotEmpty && mounted) {
+        setState(() {
+          _spots = cachedRecords
+              .map((e) => SpotModel.fromJson(e))
+              .where((spot) => spot.latitude != 0 && spot.longitude != 0)
+              .toList();
+        });
+      }
+
+      final res = await NetworkClient.get('/spot/list', queryParameters: {
+        'page': 1,
+        'size': 1000,
+      });
+      final data = res.data['data'];
+      final records = data is Map ? data['records'] : data;
+      if (records is List && mounted) {
+        setState(() {
+          _spots = records
+              .whereType<Map>()
+              .map((e) => SpotModel.fromJson(Map<String, dynamic>.from(e)))
+              .where((spot) => spot.latitude != 0 && spot.longitude != 0)
+              .toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('搜索页加载地点失败: $e');
+    } finally {
+      if (mounted) setState(() => _loadingSpots = false);
+    }
+  }
+
+  List<Map<String, dynamic>> get _allData {
+    final spotData = _spots.map((spot) {
+      return {
+        'title': spot.name,
+        'type': '景点',
+        'desc': spot.description,
+        'keywords': '${spot.name} ${spot.category} ${spot.description}',
+        'spot': spot,
+      };
+    });
+    return [..._functionData, ...spotData];
+  }
 
   List<Map<String, dynamic>> get _results {
     if (_query.trim().isEmpty) return [];
@@ -154,7 +212,10 @@ class _SearchPageState extends State<SearchPage> {
           children: [
             Icon(Icons.search_off_rounded, size: 64, color: Colors.grey.withValues(alpha: 0.3)),
             const SizedBox(height: 16),
-            const Text('暂无搜索结果', style: TextStyle(color: Colors.grey)),
+            Text(
+              _loadingSpots ? '正在加载校园地点...' : '暂无搜索结果',
+              style: const TextStyle(color: Colors.grey),
+            ),
           ],
         ),
       );
@@ -162,7 +223,7 @@ class _SearchPageState extends State<SearchPage> {
 
     return ListView.separated(
       itemCount: res.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, indent: 16),
+      separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
       itemBuilder: (context, index) {
         final item = res[index];
         IconData icon;
@@ -191,9 +252,19 @@ class _SearchPageState extends State<SearchPage> {
           subtitle: Text(item['desc']!, style: const TextStyle(fontSize: 12)),
           trailing: const Icon(Icons.chevron_right_rounded, color: Colors.black26),
           onTap: () {
-            // 这里如果是景点，应该跳详情页；如果是功能，直接跳路由
-            if (item['route']!.isNotEmpty) {
-              Navigator.pushNamed(context, item['route']!);
+            final spot = item['spot'];
+            if (spot is SpotModel) {
+              Navigator.pushNamed(
+                context,
+                AppRouter.map,
+                arguments: {'spotId': spot.id, 'spotName': spot.name},
+              );
+              return;
+            }
+
+            final route = item['route']?.toString() ?? '';
+            if (route.isNotEmpty) {
+              Navigator.pushNamed(context, route);
             }
           },
         );

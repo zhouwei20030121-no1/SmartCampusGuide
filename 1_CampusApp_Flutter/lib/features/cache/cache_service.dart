@@ -1,8 +1,13 @@
+import 'package:flutter/foundation.dart';
+
 import '../../core/storage/local_storage.dart';
 import '../../core/network/network_client.dart';
 
 class CacheService {
+  static String? lastError;
+
   static Future<bool> preloadSpots() async {
+    lastError = null;
     try {
       final res = await NetworkClient.get('/spot/list', queryParameters: {
         'page': 1,
@@ -11,11 +16,14 @@ class CacheService {
 
       final responseData = res.data;
       if (responseData['code'] == 200) {
-        final records = responseData['data']['records'] as List<dynamic>?;
+        final data = responseData['data'];
+        final records = data is Map
+            ? data['records'] as List<dynamic>?
+            : data is List
+                ? data
+                : null;
 
         if (records != null && records.isNotEmpty) {
-          // 🌟 核心修复点：手动清洗后端数据，剔除 SQLite 表中没有的字段
-          // 并且新建了 Map 对象，防止出现“Map不可修改”的报错
           List<Map<String, dynamic>> safeDbSpots = records.map((e) {
             final json = e as Map<String, dynamic>;
             return {
@@ -34,11 +42,13 @@ class CacheService {
           await LocalStorage.saveSpotList(safeDbSpots);
           return true;
         }
+        lastError = '后端没有返回可缓存的景点数据';
       }
+      lastError ??= '后端返回异常：${responseData['message'] ?? responseData['code'] ?? '未知错误'}';
       return false;
     } catch (e) {
-      // 加了一行日志打印，如果再遇到离线保存失败，在控制台一眼就能看出来
-      print('缓存写入数据库报错啦: $e');
+      lastError = e.toString();
+      debugPrint('缓存写入数据库报错啦: $e');
       return false;
     }
   }

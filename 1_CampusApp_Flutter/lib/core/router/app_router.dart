@@ -51,7 +51,13 @@ class AppRouter {
       case profile:
         return MaterialPageRoute(builder: (_) => const ProfilePage());
       case map:
-        return MaterialPageRoute(builder: (_) => const MapPage());
+        final args = settings.arguments as Map<String, dynamic>?;
+        return MaterialPageRoute(
+          builder: (_) => MapPage(
+            initialSpotId: int.tryParse(args?['spotId']?.toString() ?? ''),
+            initialSpotName: args?['spotName']?.toString(),
+          ),
+        );
       case spotDetail:
         final args = settings.arguments as Map<String, dynamic>?;
         return MaterialPageRoute(

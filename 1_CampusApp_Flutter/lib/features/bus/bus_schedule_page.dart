@@ -133,6 +133,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       });
       if (res.data['code'] == 200 && mounted) {
         var data = Map<String, dynamic>.from(res.data['data'] ?? {});
+        data = _validatedPlanResult(data, to);
         if (!_hasUsablePlan(data)) {
           data = _localPlan(_fromCtrl.text.trim(), to);
         }
@@ -172,6 +173,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       if (res.data['code'] == 200 && mounted) {
         final data = Map<String, dynamic>.from(res.data['data'] ?? {});
         var plan = data['plan'] is Map ? Map<String, dynamic>.from(data['plan']) : <String, dynamic>{};
+        plan = _validatedPlanResult(plan, parsed['to'] ?? _toCtrl.text.trim());
         if (!_hasUsablePlan(plan)) {
           plan = _localPlan(parsed['from'] ?? '', parsed['to'] ?? '');
         }
@@ -554,6 +556,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
     final crowding = plan['crowding'] is Map ? Map<String, dynamic>.from(plan['crowding']) : <String, dynamic>{};
     final eta = plan['eta'] is Map ? Map<String, dynamic>.from(plan['eta']) : <String, dynamic>{};
     final stations = (plan['stations'] as List<dynamic>? ?? const []).map((item) => item.toString()).toList();
+    final summary = _planSummaryForDisplay(plan, eta);
     return _glass(
       margin: const EdgeInsets.only(bottom: 12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -564,7 +567,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(plan['lineName']?.toString() ?? '推荐方案', style: const TextStyle(fontWeight: FontWeight.w900, color: AppTheme.textMain)),
               const SizedBox(height: 4),
-              Text(plan['summary']?.toString() ?? '', style: const TextStyle(fontSize: 12, color: AppTheme.textSub)),
+              Text(summary, style: const TextStyle(fontSize: 12, color: AppTheme.textSub)),
             ]),
           ),
           _crowdChip(crowding['level']?.toString() ?? '低'),
@@ -572,7 +575,7 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
           _metric('步行', "${plan['walkToStartMinutes']} + ${plan['walkFromEndMinutes']} 分钟"),
-          _metric('等车', "${plan['waitMinutes']} 分钟"),
+          _metric('等车', _waitText(plan, eta)),
           _metric('乘车', "${plan['rideMinutes']} 分钟"),
           _metric('末班', eta['lastBus']?.toString() ?? '--'),
         ]),
@@ -783,10 +786,8 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         final names = (list as List).map((item) => _stationName(Map<String, dynamic>.from(item as Map))).where((name) => name.isNotEmpty).toList();
         if (names.length < 2) continue;
         paths.add({'line': lineMap, 'names': names});
-        final i1 = names.indexOf(start);
-        final i2 = names.indexOf(resolvedTo);
-        if (i1 >= 0 && i2 >= 0 && i1 != i2) {
-          final segment = i1 < i2 ? names.sublist(i1, i2 + 1) : names.sublist(i2, i1 + 1).reversed.toList();
+        final segment = _bestStationSegment(names, start, resolvedTo);
+        if (segment.isNotEmpty) {
           candidates.add(_buildLocalBusPlan(lineMap, segment, start, resolvedTo));
         }
       }
@@ -799,19 +800,11 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
         final secondLine = Map<String, dynamic>.from(second['line'] as Map);
         final firstNames = List<String>.from(first['names'] as List);
         final secondNames = List<String>.from(second['names'] as List);
-        final firstStart = firstNames.indexOf(start);
-        final secondEnd = secondNames.indexOf(resolvedTo);
-        if (firstStart < 0 || secondEnd < 0) continue;
+        if (!firstNames.contains(start) || !secondNames.contains(resolvedTo)) continue;
         for (final transfer in firstNames.toSet().intersection(secondNames.toSet())) {
           if (transfer == start || transfer == resolvedTo) continue;
-          final firstTransfer = firstNames.indexOf(transfer);
-          final secondTransfer = secondNames.indexOf(transfer);
-          final left = firstStart < firstTransfer
-              ? firstNames.sublist(firstStart, firstTransfer + 1)
-              : firstNames.sublist(firstTransfer, firstStart + 1).reversed.toList();
-          final right = secondTransfer < secondEnd
-              ? secondNames.sublist(secondTransfer, secondEnd + 1)
-              : secondNames.sublist(secondEnd, secondTransfer + 1).reversed.toList();
+          final left = _bestStationSegment(firstNames, start, transfer);
+          final right = _bestStationSegment(secondNames, transfer, resolvedTo);
           if (left.length < 2 || right.length < 2) continue;
           candidates.add(_buildLocalBusPlan(
             firstLine,
@@ -843,6 +836,23 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
       'plans': plans,
       'best': plans.first,
     };
+  }
+
+  List<String> _bestStationSegment(List<String> names, String start, String to) {
+    List<String> best = const [];
+    for (var i = 0; i < names.length; i++) {
+      if (names[i] != start) continue;
+      for (var j = 0; j < names.length; j++) {
+        if (i == j || names[j] != to) continue;
+        final segment = i < j
+            ? names.sublist(i, j + 1)
+            : names.sublist(j, i + 1).reversed.toList();
+        if (best.isEmpty || segment.length < best.length) {
+          best = segment;
+        }
+      }
+    }
+    return best;
   }
 
   Map<String, dynamic> _nearestFromLocal() {
@@ -939,6 +949,79 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
     return plan['available'] == true && plans is List && plans.isNotEmpty;
   }
 
+  Map<String, dynamic> _validatedPlanResult(Map<String, dynamic> plan, String requestedTo) {
+    final resolvedTo = _resolveStationName(requestedTo);
+    if (resolvedTo.isEmpty || !_hasUsablePlan(plan)) return plan;
+
+    final validPlans = <Map<String, dynamic>>[];
+    for (final raw in (plan['plans'] as List<dynamic>).whereType<Map>()) {
+      final item = Map<String, dynamic>.from(raw);
+      final stations = (item['stations'] as List<dynamic>? ?? const [])
+          .map((station) => station.toString())
+          .toList();
+      final destinationIndex = stations.indexWhere((station) => _sameStation(station, resolvedTo));
+      if (destinationIndex < 0) continue;
+
+      if (destinationIndex != stations.length - 1) {
+        final trimmed = stations.sublist(0, destinationIndex + 1);
+        item['stations'] = trimmed;
+        item['stationCount'] = math.max(0, trimmed.length - 1);
+        item['rideMinutes'] = math.max(3, (trimmed.length - 1) * 3 + (_asDouble(item['transferCount']).toInt() * 6));
+        item['totalMinutes'] = (_asDouble(item['walkToStartMinutes']) +
+                _asDouble(item['waitMinutes']) +
+                _asDouble(item['rideMinutes']) +
+                _asDouble(item['walkFromEndMinutes']))
+            .round();
+      }
+      validPlans.add(item);
+    }
+
+    if (validPlans.isEmpty) {
+      return {
+        ...plan,
+        'available': false,
+        'message': '后端返回的校车方案未到达$requestedTo，已切换本地规划。',
+        'plans': const [],
+        'best': null,
+      };
+    }
+
+    return {
+      ...plan,
+      'available': true,
+      'plans': validPlans,
+      'best': validPlans.first,
+    };
+  }
+
+  bool _sameStation(String a, String b) {
+    final left = _normalizeStationText(a);
+    final right = _normalizeStationText(b);
+    return left == right || left.contains(right) || right.contains(left);
+  }
+
+  String _planSummaryForDisplay(Map<String, dynamic> plan, Map<String, dynamic> eta) {
+    final lineName = plan['lineName']?.toString() ?? '推荐方案';
+    final ride = plan['rideMinutes']?.toString() ?? '0';
+    final total = plan['totalMinutes']?.toString() ?? '0';
+    final wait = _waitText(plan, eta);
+    if (wait.contains('首班') || wait.contains('停运')) {
+      return '$lineName，$wait，乘车约$ride分钟';
+    }
+    return plan['summary']?.toString().isNotEmpty == true
+        ? plan['summary'].toString()
+        : '$lineName，预计等车$wait，全程约$total分钟';
+  }
+
+  String _waitText(Map<String, dynamic> plan, Map<String, dynamic> eta) {
+    final running = eta['running'] != false;
+    final wait = _asDouble(plan['waitMinutes']).round();
+    final nextBus = eta['nextBus']?.toString() ?? '';
+    if (!running || wait >= 900) return '当前停运';
+    if (wait >= 90 && nextBus.isNotEmpty) return '首班 $nextBus';
+    return '$wait 分钟';
+  }
+
   Map<String, String> _parseAssistantQuery(String message) {
     final mentioned = <MapEntry<int, String>>[];
     for (final name in _allKnownStations()) {
@@ -1010,7 +1093,11 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
     if (normalized.isEmpty) return '';
     for (final name in _allKnownStations()) {
       final n = _normalizeStationText(name);
-      if (n == normalized || n.contains(normalized) || normalized.contains(n)) return name;
+      if (n == normalized) return name;
+    }
+    for (final name in _allKnownStations()) {
+      final n = _normalizeStationText(name);
+      if (n.contains(normalized) || normalized.contains(n)) return name;
     }
     return '';
   }
@@ -1048,7 +1135,11 @@ class _BusSchedulePageState extends State<BusSchedulePage> {
     final normalized = _normalizeStationText(text);
     for (final name in _fallbackStationCoords.keys) {
       final n = _normalizeStationText(name);
-      if (n == normalized || n.contains(normalized) || normalized.contains(n)) return name;
+      if (n == normalized) return name;
+    }
+    for (final name in _fallbackStationCoords.keys) {
+      final n = _normalizeStationText(name);
+      if (n.contains(normalized) || normalized.contains(n)) return name;
     }
     return text;
   }

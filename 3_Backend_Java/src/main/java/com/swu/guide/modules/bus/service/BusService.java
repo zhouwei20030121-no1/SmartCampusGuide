@@ -515,16 +515,25 @@ public class BusService {
 
     private BusStation findStationByName(String name, List<BusStation> stations) {
         String target = normalizeName(name);
-        return stations.stream()
+        BusStation exact = stations.stream()
                 .filter(station -> {
                     String candidate = normalizeName(station.getStationName());
                     return candidate.equals(target)
-                            || candidate.contains(target)
+                            || stationAliases(station.getStationName()).stream()
+                            .anyMatch(alias -> normalizeName(alias).equals(target));
+                })
+                .findFirst()
+                .orElse(null);
+        if (exact != null) return exact;
+
+        return stations.stream()
+                .filter(station -> {
+                    String candidate = normalizeName(station.getStationName());
+                    return candidate.contains(target)
                             || target.contains(candidate)
                             || stationAliases(station.getStationName()).stream().anyMatch(alias -> {
                         String normalizedAlias = normalizeName(alias);
-                        return normalizedAlias.equals(target)
-                                || normalizedAlias.contains(target)
+                        return normalizedAlias.contains(target)
                                 || target.contains(normalizedAlias);
                     });
                 })
@@ -678,13 +687,25 @@ public class BusService {
         }
 
         private List<String> segment(String from, String to) {
-            int start = stations.indexOf(from);
-            int end = stations.indexOf(to);
-            if (start < 0 || end < 0 || start == end) return List.of();
-            if (start < end) return new ArrayList<>(stations.subList(start, end + 1));
-            List<String> reversed = new ArrayList<>(stations.subList(end, start + 1));
-            Collections.reverse(reversed);
-            return reversed;
+            List<String> best = List.of();
+            for (int start = 0; start < stations.size(); start++) {
+                if (!Objects.equals(stations.get(start), from)) continue;
+                for (int end = 0; end < stations.size(); end++) {
+                    if (start == end || !Objects.equals(stations.get(end), to)) continue;
+
+                    List<String> candidate;
+                    if (start < end) {
+                        candidate = new ArrayList<>(stations.subList(start, end + 1));
+                    } else {
+                        candidate = new ArrayList<>(stations.subList(end, start + 1));
+                        Collections.reverse(candidate);
+                    }
+                    if (best.isEmpty() || candidate.size() < best.size()) {
+                        best = candidate;
+                    }
+                }
+            }
+            return best;
         }
     }
 
