@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/network/network_client.dart';
 import '../../core/theme/app_theme.dart';
+import '../cache/cache_service.dart';
 
 class GuidePage extends StatefulWidget {
   final String? spotName;
@@ -45,6 +46,12 @@ class _GuidePageState extends State<GuidePage> {
   Future<void> _fetchGuide() async {
     if (_spotName.trim().isEmpty) return;
     setState(() => _loading = true);
+
+    final cached = await CacheService.getCachedGuideBySpotName(_spotName);
+    if (cached != null && cached.isNotEmpty && mounted) {
+      setState(() => _guideText = cached);
+    }
+
     try {
       final res = await NetworkClient.dio.post('/ai/guide/dynamic', data: {
         'spotName': _spotName,

@@ -4,11 +4,19 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:dio/dio.dart';
 
 class NetworkClient {
-  static String get baseUrl {
+  static String get baseUrl => apiBaseUrls.first;
+
+  static List<String> get apiBaseUrls {
     const envUrl = String.fromEnvironment('API_BASE_URL');
-    if (envUrl.isNotEmpty) return envUrl;
-    if (!kIsWeb && Platform.isAndroid) return 'http://10.0.2.2:8080';
-    return 'http://127.0.0.1:8080';
+    final urls = <String>[
+      if (envUrl.isNotEmpty) envUrl,
+      if (!kIsWeb && Platform.isAndroid) 'http://10.0.2.2:8080',
+      'http://127.0.0.1:8080',
+      'http://localhost:8080',
+      if (!kIsWeb && Platform.isAndroid) 'http://127.0.0.1:8080',
+      'https://genna-boldhearted-dewily.ngrok-free.dev',
+    ];
+    return urls.toSet().toList();
   }
 
   static String get aiBaseUrl {
@@ -18,7 +26,6 @@ class NetworkClient {
     return 'http://127.0.0.1:5000';
   }
 
-  // 保存当前登录账号，方便个人中心页面拉取后端信息。
   static String currentAccount = '';
   static int currentUserId = 1;
   static String currentToken = '';
@@ -43,66 +50,64 @@ class NetworkClient {
   }
 
   static Dio _createDio(String primaryUrl, Duration timeout) {
-    final d = Dio(
+    return Dio(
       BaseOptions(
         baseUrl: primaryUrl,
         connectTimeout: timeout,
         receiveTimeout: timeout,
+        headers: const {
+          'ngrok-skip-browser-warning': 'true',
+        },
       ),
     );
-    
-    d.interceptors.add(InterceptorsWrapper(
-      onError: (err, handler) async {
-        final isConnectionError = err.type == DioExceptionType.connectionTimeout || 
-                                  err.type == DioExceptionType.receiveTimeout || 
-                                  err.type == DioExceptionType.connectionError ||
-                                  err.type == DioExceptionType.unknown;
-        if (isConnectionError) {
-          final req = err.requestOptions;
-          if (!req.baseUrl.contains('ngrok')) {
-            req.baseUrl = 'https://genna-boldhearted-dewily.ngrok-free.dev';
-            try {
-              req.headers['ngrok-skip-browser-warning'] = 'true';
-              final fullUrl = req.path.startsWith('http') ? req.path : req.baseUrl + req.path;
-              final response = await d.request(
-                fullUrl,
-                data: req.data,
-                queryParameters: req.queryParameters,
-                options: Options(
-                  method: req.method,
-                  headers: req.headers,
-                  responseType: req.responseType,
-                  contentType: req.contentType,
-                ),
-              );
-              return handler.resolve(response);
-            } catch (e) {
-              if (e is DioException) return handler.next(e);
-            }
-          }
-        }
-        return handler.next(err);
-      }
-    ));
-    return d;
   }
 
-  static final Dio dio = _createDio(baseUrl, const Duration(seconds: 10));
+  static final Dio dio = _createDio(baseUrl, const Duration(seconds: 15));
   static final Dio aiDio = _createDio(aiBaseUrl, const Duration(seconds: 30));
 
-  static Future<Response> get(
-    String path, {
-    Object? data,
-    Map<String, dynamic>? queryParameters,
-  }) {
-    return dio.get(path, data: data, queryParameters: queryParameters);
+  static Future<Response<dynamic>> _requestWithFallback(
+    Future<Response<dynamic>> Function(Dio client) action, {
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    Object? lastError;
+    for (final url in apiBaseUrls) {
+      try {
+        final client = url == dio.options.baseUrl
+            ? dio
+            : _createDio(url, timeout);
+        return await action(client);
+      } catch (e) {
+        lastError = e;
+      }
+    }
+
+    if (lastError is DioException) {
+      throw lastError;
+    }
+    throw DioException(
+      requestOptions: RequestOptions(path: ''),
+      message: '无法连接后端服务，请确认 Java 后端已在 8080 端口启动。最后错误：$lastError',
+      type: DioExceptionType.connectionError,
+    );
   }
 
-  static Future<Response> post(
+  static Future<Response<dynamic>> get(
     String path, {
     Object? data,
     Map<String, dynamic>? queryParameters,
   }) {
-    return dio.post(path, data: data, queryParameters: queryParameters);
+    return _requestWithFallback(
+      (client) => client.get(path, data: data, queryParameters: queryParameters),
+    );
+  }
+
+  static Future<Response<dynamic>> post(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+  }) {
+    return _requestWithFallback(
+      (client) => client.post(path, data: data, queryParameters: queryParameters),
+    );
   }
 }

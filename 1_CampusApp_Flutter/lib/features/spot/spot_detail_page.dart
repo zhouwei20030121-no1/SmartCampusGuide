@@ -10,6 +10,7 @@ import 'package:dio/dio.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/network/network_client.dart';
+import '../cache/cache_service.dart';
 import 'spot_model.dart';
 
 class SpotDetailPage extends StatefulWidget {
@@ -39,10 +40,24 @@ class _SpotDetailPageState extends State<SpotDetailPage> {
   }
 
   Future<void> _fetchRealData() async {
+    Map<String, dynamic>? cachedSpot;
+    String? cachedGuide;
+    try {
+      final cachedSpots = await CacheService.getCachedSpots();
+      for (final s in cachedSpots) {
+        if (s['id'] == widget.spotId) {
+          cachedSpot = s;
+          break;
+        }
+      }
+      final guide = await CacheService.getCachedGuide(widget.spotId);
+      cachedGuide = guide?['script_content']?.toString();
+    } catch (_) {}
+
     try {
       final responses = await Future.wait([
-        NetworkClient.dio.get('/spot/${widget.spotId}'),
-        NetworkClient.dio.get('/guide/content/${widget.spotId}')
+        NetworkClient.get('/spot/${widget.spotId}'),
+        NetworkClient.get('/guide/content/${widget.spotId}')
       ].map((future) => future.catchError((e) {
         debugPrint('关联请求失败: $e');
         return Response(requestOptions: RequestOptions(path: ''), data: {'code': 500});
@@ -56,6 +71,12 @@ class _SpotDetailPageState extends State<SpotDetailPage> {
         if (mounted) {
           setState(() {
             _spotData = SpotModel.fromJson(data);
+          });
+        }
+      } else if (cachedSpot != null) {
+        if (mounted) {
+          setState(() {
+            _spotData = SpotModel.fromJson(cachedSpot!);
           });
         }
       } else {
@@ -76,6 +97,8 @@ class _SpotDetailPageState extends State<SpotDetailPage> {
         if (guideData['scriptContent'] != null && guideData['scriptContent'].toString().isNotEmpty) {
           _guideScript = _stripHtmlIfNeeded(guideData['scriptContent']);
         }
+      } else if (cachedGuide != null && cachedGuide.isNotEmpty) {
+        _guideScript = _stripHtmlIfNeeded(cachedGuide);
       }
 
       if (mounted) {
@@ -88,10 +111,21 @@ class _SpotDetailPageState extends State<SpotDetailPage> {
 
     } catch (e) {
       debugPrint('==== 网络请求异常: $e ====');
+      if (cachedSpot != null && mounted) {
+        setState(() {
+          _spotData = SpotModel.fromJson(cachedSpot!);
+          if (cachedGuide != null && cachedGuide.isNotEmpty) {
+            _guideScript = _stripHtmlIfNeeded(cachedGuide);
+          }
+          _isLoading = false;
+          _errorMessage = '';
+        });
+        return;
+      }
       if (mounted) {
         setState(() {
           _isLoading = false;
-          _errorMessage = '网络连接异常，请检查后端是否运行并配置了正确的IP';
+          _errorMessage = '网络连接异常。请先在「离线地图数据」页下载缓存，或检查后端 IP 配置。';
         });
       }
     }
