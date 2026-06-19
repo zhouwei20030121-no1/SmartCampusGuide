@@ -4,3 +4,4 @@ chroma_db/
 __pycache__/
 *.pyc
 *.log
+audio_output/

@@ -422,9 +422,13 @@ public class AiGuideService {
     private String stripStageDirections(String text) {
         if (text == null) return "";
         return text
-                .replaceAll("[（(][^）)]*(?:语速|音量|停顿|转身|指向|动作|镜头|表情|放慢|提高|pause|slow|volume|gesture|turn|look)[^）)]*[）)]", "")
+                .replaceAll("[（(][^（）()]{0,120}[）)]", "")
+                .replaceAll("\\*\\*([^*]+)\\*\\*", "$1")
+                .replaceAll("[*#>`_~]+", "")
+                .replaceAll("(脚步声|手指|指向|转身|微笑|笑意|镜头|旁白|动作|语气|停顿|音效|音乐|掌声|轻声|大声|慢速|快速)[^。！？\\n]{0,80}[。！？]?", "")
                 .replaceAll("[\\r\\n]{3,}", "\n\n")
                 .replaceAll("[ \\t]{2,}", " ")
+                .replaceAll("^[，,。；;\\s]+|[，,。；;\\s]+$", "")
                 .trim();
     }
 
@@ -466,7 +470,7 @@ public class AiGuideService {
         String explicitStyle = "auto".equalsIgnoreCase(String.valueOf(styleCode)) ? "" : "额外风格要求：" + styleCode + "。";
         return "你是西南大学虚拟导游「西小导」。用户身份是" + persona + "。" + style
                 + "。" + voiceStyle + "。" + explicitStyle + "请使用" + languageName(language) + "输出。像真实导游一样自然讲解，少用套话，多用短句。"
-                + "不要输出括号里的动作提示、语速提示、舞台说明或 Markdown。";
+                + "硬性格式要求：只输出可直接朗读的正文；不要输出任何括号内容；不要写脚步声、手势、表情、镜头、舞台动作、语气说明；不要使用 Markdown、星号、小标题或项目符号。";
     }
 
     private String templateGuide(String spotName, String persona) {

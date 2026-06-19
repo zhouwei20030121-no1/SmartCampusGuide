@@ -4,7 +4,7 @@ import AVFoundation
 import CoreLocation
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, CLLocationManagerDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, CLLocationManagerDelegate, AVSpeechSynthesizerDelegate {
   private let ttsChannelName = "smart_campus_guide/tts"
   private let locationChannelName = "smart_campus_guide/location"
   private let speechSynthesizer = AVSpeechSynthesizer()
@@ -12,6 +12,7 @@ import CoreLocation
   private var ttsChannel: FlutterMethodChannel?
   private var locationChannel: FlutterMethodChannel?
   private var pendingLocationResult: FlutterResult?
+  private var didLogSpeechVoices = false
 
   override func application(
     _ application: UIApplication,
@@ -22,6 +23,7 @@ import CoreLocation
       setupTtsChannel(messenger: controller.binaryMessenger)
       setupLocationChannel(messenger: controller.binaryMessenger)
     }
+    speechSynthesizer.delegate = self
     locationManager.delegate = self
     locationManager.desiredAccuracy = kCLLocationAccuracyBest
     return launched
@@ -47,7 +49,8 @@ import CoreLocation
         let text = args?["text"] as? String ?? ""
         let voice = args?["voice"] as? String ?? ""
         let language = args?["language"] as? String ?? "zh"
-        result(self.speak(text: text, voice: voice, language: language))
+        let rate = (args?["rate"] as? NSNumber)?.doubleValue ?? 1.0
+        result(self.speak(text: text, voice: voice, language: language, rate: rate))
       case "stop":
         self.speechSynthesizer.stopSpeaking(at: .immediate)
         result(["ok": true])
@@ -142,7 +145,7 @@ import CoreLocation
     result(["ok": false, "reason": "定位失败：\(error.localizedDescription)"])
   }
 
-  private func speak(text: String, voice: String, language: String) -> [String: Any] {
+  private func speak(text: String, voice: String, language: String, rate: Double) -> [String: Any] {
     let content = normalizeForSpeech(text)
     if content.isEmpty {
       return ["ok": false, "reason": "讲解词为空"]
@@ -167,8 +170,8 @@ import CoreLocation
     speechSynthesizer.stopSpeaking(at: .immediate)
     for (index, chunk) in chunks.enumerated() {
       let utterance = AVSpeechUtterance(string: chunk)
-      utterance.voice = bestVoice(for: voiceLanguage(for: language))
-      applyVoiceProfile(voice, to: utterance)
+      utterance.voice = bestVoice(for: voiceLanguage(for: language), profile: voice)
+      applyVoiceProfile(voice, rate: rate, to: utterance)
       utterance.postUtteranceDelay = index < chunks.count - 1 ? pauseAfter(chunk) : 0.08
       speechSynthesizer.speak(utterance)
     }
@@ -183,30 +186,86 @@ import CoreLocation
     if normalized.hasPrefix("ja") {
       return "ja-JP"
     }
+    if normalized.hasPrefix("fr") {
+      return "fr-FR"
+    }
+    if normalized.hasPrefix("ko") {
+      return "ko-KR"
+    }
     return "zh-CN"
   }
 
-  private func bestVoice(for language: String) -> AVSpeechSynthesisVoice? {
-    let candidates = AVSpeechSynthesisVoice.speechVoices()
-      .filter { $0.language == language }
-      .sorted { lhs, rhs in lhs.quality.rawValue > rhs.quality.rawValue }
-    return candidates.first ?? AVSpeechSynthesisVoice(language: language)
+  private func bestVoice(for language: String, profile: String) -> AVSpeechSynthesisVoice? {
+    logSpeechVoicesIfNeeded()
+    let allVoices = AVSpeechSynthesisVoice.speechVoices()
+    let exactLanguageVoices = allVoices.filter { $0.language == language }
+    let relatedChineseVoices = allVoices.filter { $0.language.hasPrefix("zh") }
+    let candidates = exactLanguageVoices.isEmpty && language.hasPrefix("zh")
+      ? relatedChineseVoices
+      : exactLanguageVoices
+
+    let preferredNames: [String]
+    switch profile {
+    case "young_male":
+      preferredNames = ["Reed", "Eddy", "Rocko", "Grandpa", "Gordon", "Daniel"]
+    case "young_female":
+      preferredNames = ["Flo", "Sandy", "Shelley", "Tingting", "Meijia", "Sinji"]
+    default:
+      preferredNames = ["Tingting", "Flo", "Sandy", "Shelley", "Meijia"]
+    }
+
+    for preferredName in preferredNames {
+      if let voice = candidates.first(where: { $0.name.localizedCaseInsensitiveContains(preferredName) }) {
+        NSLog("SmartGuideTTS selected profile=\(profile) language=\(language) voice=\(voice.name) id=\(voice.identifier)")
+        return voice
+      }
+    }
+
+    let fallback = AVSpeechSynthesisVoice(language: language)
+      ?? candidates.first
+      ?? AVSpeechSynthesisVoice(language: "zh-CN")
+    NSLog("SmartGuideTTS fallback profile=\(profile) language=\(language) voice=\(fallback?.name ?? "nil") id=\(fallback?.identifier ?? "nil")")
+    return fallback
   }
 
-  private func applyVoiceProfile(_ voice: String, to utterance: AVSpeechUtterance) {
+  private func applyVoiceProfile(_ voice: String, rate: Double, to utterance: AVSpeechUtterance) {
+    // 外部语速倍率（如 0.8/1.0/1.25），限幅避免过快过慢
+    let multiplier = Float(min(max(rate, 0.5), 1.5))
     switch voice {
     case "young_male":
-      utterance.rate = 0.41
-      utterance.pitchMultiplier = 0.94
+      utterance.rate = 0.40 * multiplier
+      utterance.pitchMultiplier = 0.96
     case "young_female":
-      utterance.rate = 0.40
+      utterance.rate = 0.41 * multiplier
       utterance.pitchMultiplier = 1.04
     default:
-      utterance.rate = 0.39
-      utterance.pitchMultiplier = 0.99
+      utterance.rate = 0.39 * multiplier
+      utterance.pitchMultiplier = 1.02
     }
     utterance.volume = 1.0
     utterance.preUtteranceDelay = 0.05
+  }
+
+  private func logSpeechVoicesIfNeeded() {
+    guard !didLogSpeechVoices else { return }
+    didLogSpeechVoices = true
+    let voices = AVSpeechSynthesisVoice.speechVoices()
+      .filter { $0.language.hasPrefix("zh") }
+      .map { "\($0.name)<\($0.language)>[\($0.identifier)]" }
+      .joined(separator: " | ")
+    NSLog("SmartGuideTTS availableChineseVoices \(voices)")
+  }
+
+  func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+    NSLog("SmartGuideTTS started voice=\(utterance.voice?.identifier ?? "default") rate=\(utterance.rate) pitch=\(utterance.pitchMultiplier) textLength=\(utterance.speechString.count)")
+  }
+
+  func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    NSLog("SmartGuideTTS finished textLength=\(utterance.speechString.count)")
+  }
+
+  func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+    NSLog("SmartGuideTTS cancelled textLength=\(utterance.speechString.count)")
   }
 
   private func normalizeForSpeech(_ text: String) -> String {

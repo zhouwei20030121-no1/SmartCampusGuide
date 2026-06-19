@@ -489,7 +489,7 @@ class RAGService:
             f"你是西南大学的虚拟导游「西小导」。\n"
             f"用户身份：{persona}。请{style}。\n"
             f"请结合以下背景知识，向用户讲解「{spot_name}」。\n"
-            f"要求：口语化，适合TTS语音播报，控制在350到500字；语气像一位亲切的学长学姐在带路，不要像新闻播音稿，也不要堆砌口号；多用短句、逗号和自然停顿；必须优先使用背景知识里的具体信息，不要只说泛泛的欢迎词；如果背景知识不足，要明确说资料有限，并围绕地点功能、周边环境和参观提示展开。\n"
+            f"要求：口语化，适合TTS语音播报，控制在300字以内；语气像一位亲切的学长学姐在带路，不要像新闻播音稿，也不要堆砌口号；多用短句、逗号和自然停顿；必须优先使用背景知识里的具体信息，不要只说泛泛的欢迎词；如果背景知识不足，要明确说资料有限，并围绕地点功能、周边环境和参观提示展开。\n"
             f"背景知识：\n{context if context else spot_name + '是西南大学校园内的重要地点。'}"
         )
 
@@ -587,9 +587,11 @@ class RAGService:
                     f"讲解风格：{selected_style}\n"
                     f"环境状态：{env_text}\n"
                     f"检索增强资料：\n{context}\n\n"
-                    "请基于资料生成一段 450 到 700 字的中文讲解词。必须包含具体事实、空间位置、用途、历史或校园生活关联；"
+                    "请基于资料生成一段不超过 300 字的中文讲解词。必须包含具体事实、空间位置、用途、历史或校园生活关联；"
                     "不要只写欢迎词。语气自然，适合 TTS 播报，多用短句和自然停顿。若资料不足，请明确说资料有限，"
-                    "并围绕当前地点功能、周边环境和参观建议展开。不要输出 Markdown。"
+                    "并围绕当前地点功能、周边环境和参观建议展开。\n"
+                    "硬性格式要求：只输出可直接朗读的正文；不要输出任何括号内容；不要写脚步声、手势、表情、镜头、舞台动作、语气说明；"
+                    "不要使用 Markdown、星号、项目符号、小标题或旁白标注。"
                 )
                 text = await self._complete_text(prompt, temperature=0.72, max_tokens=1200)
             except Exception as exc:
@@ -598,11 +600,12 @@ class RAGService:
         if not text:
             guide = await self.generate_guide(spot_name, normalized_persona)
             text = str(guide.get("text", "")).strip()
+        text = self._sanitize_spoken_guide(text)
 
         translated = None
         if normalized_language not in {"zh", "zh-cn", "cn"}:
             translation = await self.translate_text(text, normalized_language, "zh")
-            translated = translation.get("text", text)
+            translated = self._sanitize_spoken_guide(translation.get("text", text))
 
         return {
             "spot_name": spot_name,
@@ -779,10 +782,10 @@ class RAGService:
     def _resolve_style(self, persona: str, style: str) -> str:
         if style and style != "auto":
             guide_modes = {
-                "standard": "standard 1-minute campus audio guide; balanced facts, daily use, location context; about 300-450 Chinese characters",
-                "deep": "deep 3-minute guide for visitors or alumni; include more history, spatial details, campus memories and visiting suggestions; about 750-1100 Chinese characters",
-                "story": "fun story guide for check-in; combine retrieved facts with approved user comments; warm, narrative, but do not invent unsupported history; about 500-800 Chinese characters",
-                "practical": "practical guide for freshmen; focus on functions, nearby canteens, dorms, teaching buildings, hospital, express pickup and how to use this place; about 350-600 Chinese characters",
+                "standard": "standard 1-minute campus audio guide; balanced facts, daily use, location context; about 200-300 Chinese characters",
+                "deep": "concise but informative guide for visitors or alumni; pick the single most relevant history, spatial detail or campus memory; about 250-300 Chinese characters",
+                "story": "fun story guide for check-in; combine retrieved facts with approved user comments; warm, narrative, but do not invent unsupported history; about 250-300 Chinese characters",
+                "practical": "practical guide for freshmen; focus on functions, nearby canteens, dorms, teaching buildings, hospital, express pickup and how to use this place; about 250-300 Chinese characters",
             }
             return guide_modes.get(style, style)
         return {
@@ -790,6 +793,22 @@ class RAGService:
             "校友": "怀旧叙事风格，突出校园记忆和时间感",
             "游客": "正式官方风格，兼顾历史文化与参观价值",
         }.get(persona, "亲切自然的校园导览风格")
+
+    def _sanitize_spoken_guide(self, text: str) -> str:
+        clean = (text or "").strip()
+        if not clean:
+            return ""
+        clean = re.sub(r"[（(][^（）()]{0,120}[）)]", "", clean)
+        clean = re.sub(r"\*\*([^*]+)\*\*", r"\1", clean)
+        clean = re.sub(r"[*#>`_~]+", "", clean)
+        clean = re.sub(
+            r"(脚步声|手指|指向|转身|微笑|笑意|镜头|旁白|动作|语气|停顿|音效|音乐|掌声|轻声|大声|慢速|快速)[^。！？\n]{0,80}[。！？]?",
+            "",
+            clean,
+        )
+        clean = re.sub(r"[ \t]{2,}", " ", clean)
+        clean = re.sub(r"\n{3,}", "\n\n", clean)
+        return clean.strip(" \n，,。；;")
 
     def _format_environment(self, environment: dict[str, Any]) -> str:
         if not environment:

@@ -10,6 +10,7 @@ import '../../core/theme/app_theme.dart';
 import '../cache/cache_service.dart';
 import '../location/location_service.dart';
 import '../spot/spot_model.dart';
+import 'campus_vector_map_layer.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -20,8 +21,6 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   static const _swuCenter = LatLng(29.8218, 106.4256);
-  static const _tileUrlClean =
-      'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7&ltype=3';
 
   final MapController _mapController = MapController();
   final TextEditingController _searchController = TextEditingController();
@@ -378,14 +377,7 @@ class _MapPageState extends State<MapPage> {
               },
             ),
             children: [
-              TileLayer(
-                urlTemplate: _tileUrlClean,
-                subdomains: const ['1', '2', '3', '4'],
-                userAgentPackageName: 'com.swu.smartCampusGuide',
-                maxZoom: 19,
-                // 高 DPI 屏请求高清瓦片，避免地图模糊
-                retinaMode: RetinaMode.isHighDensity(context),
-              ),
+              const CampusVectorMapLayer(),
               MarkerLayer(
                 markers: visibleSpots.map((spot) {
                   final selected = _selectedSpot?.id == spot.id;
@@ -393,7 +385,8 @@ class _MapPageState extends State<MapPage> {
                     point: LatLng(spot.latitude, spot.longitude),
                     width: selected ? 170 : (_showLabels ? 96 : 44),
                     height: selected ? 76 : (_showLabels ? 64 : 44),
-                    alignment: Alignment.topCenter,
+                    // 图标紧贴坐标点，名字在图标下方（marker 整体位于坐标点下方）
+                    alignment: Alignment.bottomCenter,
                     child: GestureDetector(
                       onTap: () {
                         setState(() => _selectedSpot = spot);
@@ -742,6 +735,8 @@ class _SelectedMapMarker extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        _MapMarker(color: color, icon: icon),
+        const SizedBox(height: 4),
         Container(
           constraints: const BoxConstraints(maxWidth: 160),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -763,8 +758,6 @@ class _SelectedMapMarker extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        const SizedBox(height: 4),
-        _MapMarker(color: color, icon: icon),
       ],
     );
   }

@@ -1,7 +1,9 @@
 // lib/features/home/home_page.dart
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -10,9 +12,11 @@ import 'package:latlong2/latlong.dart';
 import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart';
 import '../map/map_page.dart';
+import '../map/campus_vector_map_layer.dart';
 import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
 import '../spot/spot_model.dart'; // 引入数据模型
+import '../story/campus_story_page.dart';
 
 const Color _schoolBlue = Color(0xFF023D83);
 
@@ -693,17 +697,25 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   );
 
   static const _swuCenter = LatLng(29.8218, 106.4256);
-  static const _tileUrlClean =
-      'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7&ltype=3';
   static const _guideTriggerRadiusMeters = 80.0;
 
   final MapController _mapController = MapController();
   final LocationService _loc = LocationService();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  StreamSubscription<void>? _audioCompleteSub;
+  int _playbackSerial = 0;
   bool _playing = false;
   String _guideText = '';
   bool _loadingGuide = false;
-  final String _language = 'zh';
-  final String _voice = 'gentle_guide';
+  bool _checkingIn = false;
+  bool _loadingStory = false;
+  String _checkinNotice = '';
+  // 讲解可调设置（迁自 dev：身份/语言/音色/讲解模式/语速）
+  String _persona = '新生';
+  String _language = 'zh';
+  String _voice = 'gentle_guide';
+  String _guideMode = 'standard';
+  double _speechRate = 1.0;
   double _zoom = 16.6;
 
   String? _triggeredSpot;
@@ -733,7 +745,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   int _guideSpotsCacheKey = -1;
   List<_GuideSpot> get _spots {
     if (_backendSpots.isEmpty) return _fallbackGuideSpots;
-    if (_guideSpotsCache != null && _guideSpotsCacheKey == _backendSpots.length) {
+    if (_guideSpotsCache != null &&
+        _guideSpotsCacheKey == _backendSpots.length) {
       return _guideSpotsCache!;
     }
     final list = <_GuideSpot>[];
@@ -744,11 +757,13 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           s.longitude > 106.50) {
         continue; // 过滤无效/越界坐标
       }
-      list.add(_GuideSpot(
-        s.name,
-        LatLng(s.latitude, s.longitude),
-        _guideIconForCategory(s.category),
-      ));
+      list.add(
+        _GuideSpot(
+          s.name,
+          LatLng(s.latitude, s.longitude),
+          _guideIconForCategory(s.category),
+        ),
+      );
     }
     _guideSpotsCache = list.isEmpty ? _fallbackGuideSpots : list;
     _guideSpotsCacheKey = _backendSpots.length;
@@ -815,6 +830,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   @override
   void dispose() {
     _stopGuideSpeech();
+    _audioCompleteSub?.cancel();
+    _audioPlayer.dispose();
     _loc.removeListener(_handleLocationChanged);
     super.dispose();
   }
@@ -829,7 +846,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     setState(() {
       _triggeredSpot = spotName;
       _playing = true;
+      _checkinNotice = '';
     });
+    _autoCheckin(spotName);
     if (shouldFetchGuide) {
       _fetchGuideContent(spotName);
     } else {
@@ -911,18 +930,55 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       _loadingGuide = true;
       _guideText = '';
     });
+    var text = '';
+    // 优先走 /dynamic（带身份/音色/模式/语言 + 环境上下文，讲解更个性化）
     try {
-      final res = await NetworkClient.dio.get(
-        '/ai/guide/generate',
-        queryParameters: {'spotName': spot, 'persona': '新生'},
+      final res = await NetworkClient.dio.post(
+        '/ai/guide/dynamic',
+        data: {
+          'spotName': spot,
+          'persona': _persona,
+          'language': _language,
+          'voice': _voice,
+          'style': _guideMode,
+          'guideMode': _guideMode,
+          'forceRefresh': true,
+          'environment': {
+            'client': 'mobile_app',
+            'scene': 'smart_audio_guide',
+            'triggerMode': _loc.locationMode,
+            'speedMps': _loc.speedMps,
+          },
+        },
       );
       if (res.data['code'] == 200) {
-        setState(() => _guideText = res.data['data']['text'] ?? '');
+        text = _sanitizeGuideText((res.data['data']['text'] ?? '').toString());
       }
-    } catch (_) {
-      setState(() => _guideText = _getGuideText(spot));
-    } finally {
-      if (mounted) setState(() => _loadingGuide = false);
+    } catch (_) {}
+    // /dynamic 不可用时回退 /generate
+    if (text.isEmpty) {
+      try {
+        final res = await NetworkClient.dio.get(
+          '/ai/guide/generate',
+          queryParameters: {
+            'spotName': spot,
+            'persona': _persona,
+            'language': _language,
+          },
+        );
+        if (res.data['code'] == 200) {
+          text = _sanitizeGuideText(
+            (res.data['data']['text'] ?? '').toString(),
+          );
+        }
+      } catch (_) {}
+    }
+    if (text.isEmpty) text = _sanitizeGuideText(_getGuideText(spot));
+    if (mounted) {
+      setState(() {
+        _guideText = text;
+        _loadingGuide = false;
+      });
     }
     if (mounted && _triggeredSpot == spot && _playing) {
       _playGuide(spot);
@@ -930,17 +986,55 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   String _currentGuideText(String spot) {
-    final generated = _guideText.trim();
-    return generated.isNotEmpty ? generated : _getGuideText(spot);
+    final generated = _sanitizeGuideText(_guideText);
+    return generated.isNotEmpty
+        ? generated
+        : _sanitizeGuideText(_getGuideText(spot));
   }
 
-  Future<bool> _speakGuideText(String text) async {
-    final content = text.trim();
+  Future<bool> _speakGuideText(String text, int playbackSerial) async {
+    final content = _sanitizeGuideText(text);
     if (content.isEmpty) return false;
+    final voice = _voice;
+    final language = _language;
+    final rate = _speechRate;
+    try {
+      final res = await NetworkClient.aiDio.post(
+        '/api/tts/synthesize',
+        data: {
+          'text': content,
+          'voice': voice,
+          'language': language,
+          'rate': rate,
+        },
+      );
+      final payload = res.data['data'];
+      final audioUrl = payload is Map ? payload['url']?.toString() : null;
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        if (!mounted || playbackSerial != _playbackSerial) return false;
+        final resolvedUrl = _resolveTtsAudioUrl(audioUrl);
+        await _stopGuideSpeech(invalidate: false);
+        if (!mounted || playbackSerial != _playbackSerial) return false;
+        await _audioPlayer.setReleaseMode(ReleaseMode.stop);
+        _audioCompleteSub?.cancel();
+        _audioCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
+          if (mounted && playbackSerial == _playbackSerial) {
+            setState(() => _playing = false);
+          }
+        });
+        await _audioPlayer.play(UrlSource(resolvedUrl));
+        return true;
+      }
+    } catch (e) {
+      debugPrint('云端 TTS 播放失败，回退系统 TTS: $e');
+    }
+    if (!mounted || playbackSerial != _playbackSerial) return false;
+    await _stopGuideSpeech(invalidate: false);
+    if (!mounted || playbackSerial != _playbackSerial) return false;
     try {
       final result = await _ttsChannel.invokeMapMethod<String, dynamic>(
         'speak',
-        {'text': content, 'voice': _voice, 'language': _language},
+        {'text': content, 'voice': voice, 'language': language, 'rate': rate},
       );
       if (result?['ok'] == true) return true;
       _showTtsNotice(result?['reason']?.toString() ?? 'TTS 播放失败');
@@ -953,7 +1047,39 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     return false;
   }
 
-  Future<void> _stopGuideSpeech() async {
+  String _sanitizeGuideText(String text) {
+    return text
+        .replaceAll(RegExp(r'[（(][^（）()]{0,120}[）)]'), '')
+        .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m.group(1) ?? '')
+        .replaceAll(RegExp(r'[*#>`_~]+'), '')
+        .replaceAll(
+          RegExp(
+            r'(脚步声|手指|指向|转身|微笑|笑意|镜头|旁白|动作|语气|停顿|音效|音乐|掌声|轻声|大声|慢速|快速)[^。！？\n]{0,80}[。！？]?',
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim()
+        .replaceAll(RegExp(r'^[，,。；;\s]+|[，,。；;\s]+$'), '');
+  }
+
+  String _resolveTtsAudioUrl(String url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    final base = NetworkClient.aiBaseUrl.replaceFirst(RegExp(r'/$'), '');
+    final path = url.startsWith('/') ? url : '/$url';
+    return '$base$path';
+  }
+
+  Future<void> _stopGuideSpeech({bool invalidate = true}) async {
+    if (invalidate) _playbackSerial++;
+    _audioCompleteSub?.cancel();
+    _audioCompleteSub = null;
+    try {
+      await _audioPlayer.stop();
+    } catch (e) {
+      debugPrint('云端 TTS 停止失败: $e');
+    }
     try {
       await _ttsChannel.invokeMethod('stop');
     } catch (e) {
@@ -962,15 +1088,221 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   Future<void> _playGuide(String spot) async {
+    final playbackSerial = ++_playbackSerial;
+    await _stopGuideSpeech(invalidate: false);
+    if (!mounted || playbackSerial != _playbackSerial) return;
     setState(() => _playing = true);
-    final ok = await _speakGuideText(_currentGuideText(spot));
-    if (!mounted || _triggeredSpot != spot) return;
+    final ok = await _speakGuideText(_currentGuideText(spot), playbackSerial);
+    if (!mounted ||
+        playbackSerial != _playbackSerial ||
+        _triggeredSpot != spot) {
+      return;
+    }
     if (!ok) setState(() => _playing = false);
   }
 
   Future<void> _pauseGuide() async {
     await _stopGuideSpeech();
     if (mounted) setState(() => _playing = false);
+  }
+
+  Future<void> _restartGuideAudioIfNeeded(String spot) async {
+    final shouldReplay = _playing;
+    await _stopGuideSpeech();
+    if (!mounted) return;
+    setState(() => _playing = false);
+    if (shouldReplay) {
+      await _playGuide(spot);
+    }
+  }
+
+  Future<void> _autoCheckin(String spot, {bool manual = false}) async {
+    if (_checkingIn) return;
+    setState(() => _checkingIn = true);
+    try {
+      final res = await NetworkClient.dio.post(
+        '/checkin/by-spot-name',
+        data: {'userId': NetworkClient.currentUserId, 'spotName': spot},
+      );
+      final ok = res.data['code'] == 200;
+      final spotName = res.data['data']?['spotName']?.toString() ?? spot;
+      final message = ok
+          ? '已打卡：$spotName'
+          : (res.data['message'] ?? res.data['msg'] ?? '打卡失败').toString();
+      if (!mounted) return;
+      setState(() => _checkinNotice = message);
+      if (manual) _showTtsNotice(message);
+    } catch (e) {
+      debugPrint('智能讲解打卡失败: $e');
+      if (!mounted) return;
+      const message = '未匹配到可打卡景点';
+      setState(() => _checkinNotice = message);
+      if (manual) _showTtsNotice(message);
+    } finally {
+      if (mounted) setState(() => _checkingIn = false);
+    }
+  }
+
+  Future<void> _openStoryDialog(String spot) async {
+    setState(() => _loadingStory = true);
+    final stories = <Map<String, dynamic>>[];
+    try {
+      final res = await NetworkClient.dio.get(
+        '/ai/story/list',
+        queryParameters: {
+          'spotName': spot,
+          'language': _language,
+          'page': 1,
+          'size': 30,
+        },
+      );
+      final records = res.data['data']?['records'];
+      if (records is List) {
+        stories.addAll(
+          records.whereType<Map>().map(
+            (item) => Map<String, dynamic>.from(item),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('校园故事列表加载失败: $e');
+    } finally {
+      if (mounted) setState(() => _loadingStory = false);
+    }
+    if (!mounted) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.58,
+        minChildSize: 0.36,
+        maxChildSize: 0.88,
+        builder: (context, controller) => Container(
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.94),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.auto_stories_outlined,
+                    color: AppTheme.warning,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$spot 的校园故事',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.textMain,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: stories.isEmpty
+                    ? ListView(
+                        controller: controller,
+                        children: const [
+                          SizedBox(height: 42),
+                          Icon(
+                            Icons.auto_stories_outlined,
+                            size: 48,
+                            color: AppTheme.primary,
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            '这个地点暂时还没有校园故事，可以到“我的-写校园故事”里补充。',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.6,
+                              color: AppTheme.textSub,
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        controller: controller,
+                        itemCount: stories.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final story = stories[index];
+                          final title =
+                              (story['title'] ?? story['spotName'] ?? '校园故事')
+                                  .toString();
+                          final content =
+                              (story['storyContent'] ?? story['story'] ?? '')
+                                  .toString();
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      CampusStoryDetailPage(story: story),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: AppTheme.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.textMain,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    content,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      height: 1.55,
+                                      color: AppTheme.textSub,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showTtsNotice(String message) {
@@ -998,14 +1330,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             },
           ),
           children: [
-            TileLayer(
-              urlTemplate: _tileUrlClean,
-              subdomains: const ['1', '2', '3', '4'],
-              userAgentPackageName: 'com.swu.smartCampusGuide',
-              maxZoom: 19,
-              // 高 DPI 屏请求高清瓦片，避免地图模糊
-              retinaMode: RetinaMode.isHighDensity(context),
-            ),
+            const CampusVectorMapLayer(),
             MarkerLayer(
               markers: [
                 for (final spot in _spots)
@@ -1013,7 +1338,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                     point: spot.position,
                     width: spot.name == _triggeredSpot ? 150 : 104,
                     height: spot.name == _triggeredSpot ? 76 : 62,
-                    alignment: Alignment.topCenter,
+                    // 图标紧贴坐标点，名字在图标下方
+                    alignment: Alignment.bottomCenter,
                     child: GestureDetector(
                       onTap: () => _triggerGuide(
                         spot.name,
@@ -1138,6 +1464,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   Widget _buildAudioPlayer(String? spot) {
     final hasContent = spot != null;
+    final expanded = hasContent && _playing;
+    final textHeight = expanded
+        ? math.min(260.0, MediaQuery.of(context).size.height * 0.30)
+        : 96.0;
     return ClipRRect(
       borderRadius: BorderRadius.circular(24),
       child: BackdropFilter(
@@ -1242,10 +1572,13 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                   ),
                 ],
               ),
+              if (hasContent) _buildGuideOptions(spot, expanded),
               if (hasContent)
-                Container(
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
                   margin: const EdgeInsets.only(top: 10),
-                  height: 96,
+                  height: textHeight,
                   decoration: BoxDecoration(
                     color: AppTheme.primary.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
@@ -1253,7 +1586,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(10),
+                      padding: EdgeInsets.all(expanded ? 14 : 10),
                       child: _loadingGuide
                           ? const Center(
                               child: SizedBox(
@@ -1264,15 +1597,43 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                                 ),
                               ),
                             )
-                          : Text(
-                              _guideText.isNotEmpty
-                                  ? _guideText
-                                  : _getGuideText(spot),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppTheme.textMain,
-                                height: 1.6,
-                              ),
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _guideText.isNotEmpty
+                                      ? _guideText
+                                      : _getGuideText(spot),
+                                  style: TextStyle(
+                                    fontSize: expanded ? 14 : 13,
+                                    color: AppTheme.textMain,
+                                    height: 1.6,
+                                  ),
+                                ),
+                                if (_checkinNotice.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.verified_rounded,
+                                        size: 16,
+                                        color: AppTheme.success,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          _checkinNotice,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppTheme.success,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ],
                             ),
                     ),
                   ),
@@ -1282,6 +1643,260 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         ),
       ),
     );
+  }
+
+  Widget _buildGuideOptions(String spot, bool expanded) {
+    if (!expanded) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        children: [
+          _optionRow([
+            _optionMenu(
+              icon: Icons.person_outline,
+              value: _persona,
+              items: const {'新生': '新生', '校友': '校友', '游客': '游客'},
+              onChanged: (value) {
+                setState(() => _persona = value);
+                _fetchGuideContent(spot);
+              },
+            ),
+            _optionMenu(
+              icon: Icons.translate,
+              value: _languageLabel(_language),
+              items: const {
+                'zh': '中文',
+                'en': 'EN',
+                'ja': '日本語',
+                'fr': 'FR',
+                'ko': '한국어',
+              },
+              onChanged: (value) {
+                setState(() => _language = value);
+                _fetchGuideContent(spot);
+              },
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _optionRow([
+            _optionMenu(
+              icon: Icons.record_voice_over_outlined,
+              value: _voiceLabel(_voice),
+              items: const {
+                'gentle_guide': '阳光女声',
+                'young_female': '温柔女声',
+                'young_male': '朝气男声',
+                'calm_male': '京腔男声',
+              },
+              onChanged: (value) {
+                setState(() => _voice = value);
+                _restartGuideAudioIfNeeded(spot);
+              },
+            ),
+            _optionMenu(
+              icon: Icons.tune_rounded,
+              value: _guideModeLabel(_guideMode),
+              items: const {
+                'standard': '标准讲解',
+                'deep': '深度讲解',
+                'story': '趣味故事',
+                'practical': '实用信息',
+              },
+              onChanged: (value) {
+                setState(() => _guideMode = value);
+                _fetchGuideContent(spot);
+              },
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _optionRow([
+            _optionMenu(
+              icon: Icons.speed_rounded,
+              value:
+                  '${_speechRate.toStringAsFixed(_speechRate == 1.0 ? 0 : 2)}x',
+              items: const {'0.8': '0.8x', '1.0': '1.0x', '1.25': '1.25x'},
+              onChanged: (value) {
+                setState(() => _speechRate = double.tryParse(value) ?? 1.0);
+                _restartGuideAudioIfNeeded(spot);
+              },
+            ),
+            _actionChip(
+              icon: Icons.flag_outlined,
+              label: _checkingIn ? '打卡中' : '打卡',
+              onTap: _checkingIn
+                  ? null
+                  : () => _autoCheckin(spot, manual: true),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _optionRow([
+            _actionChip(
+              icon: Icons.more_time_rounded,
+              label: '讲详细点',
+              onTap: () {
+                setState(() => _guideMode = 'deep');
+                _fetchGuideContent(spot);
+              },
+            ),
+            _actionChip(
+              icon: Icons.swap_calls_rounded,
+              label: '换个角度',
+              onTap: () {
+                setState(() {
+                  _guideMode = _persona == '新生' ? 'practical' : 'standard';
+                  _persona = _persona == '游客' ? '校友' : '游客';
+                });
+                _fetchGuideContent(spot);
+              },
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _optionRow([
+            _actionChip(
+              icon: Icons.theater_comedy_outlined,
+              label: '讲个故事',
+              onTap: () {
+                setState(() => _guideMode = 'story');
+                _fetchGuideContent(spot);
+              },
+            ),
+            _actionChip(
+              icon: Icons.auto_stories_outlined,
+              label: _loadingStory ? '加载中' : '校园故事',
+              onTap: _loadingStory ? null : () => _openStoryDialog(spot),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _optionRow(List<Widget> children) {
+    return Row(
+      children: [
+        for (int i = 0; i < children.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: children[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _optionMenu({
+    required IconData icon,
+    required String value,
+    required Map<String, String> items,
+    required ValueChanged<String> onChanged,
+  }) {
+    return PopupMenuButton<String>(
+      tooltip: value,
+      onSelected: onChanged,
+      itemBuilder: (context) => items.entries
+          .map(
+            (entry) =>
+                PopupMenuItem(value: entry.key, child: Text(entry.value)),
+          )
+          .toList(),
+      child: Container(
+        height: 32,
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 9),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.65),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: AppTheme.primary),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textMain,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _actionChip({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 32,
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.success.withValues(
+            alpha: onTap == null ? 0.08 : 0.14,
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.success.withValues(alpha: 0.22)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: AppTheme.success),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textMain,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _voiceLabel(String voice) {
+    return switch (voice) {
+      'young_male' => '朝气男声',
+      'young_female' => '温柔女声',
+      'calm_male' => '京腔男声',
+      _ => '阳光女声',
+    };
+  }
+
+  String _guideModeLabel(String mode) {
+    return switch (mode) {
+      'deep' => '深度讲解',
+      'story' => '趣味故事',
+      'practical' => '实用信息',
+      _ => '标准讲解',
+    };
+  }
+
+  String _languageLabel(String language) {
+    return switch (language) {
+      'en' => 'EN',
+      'ja' => '日本語',
+      'fr' => 'FR',
+      'ko' => '한국어',
+      _ => '中文',
+    };
   }
 
   String _getGuideText(String spot) {

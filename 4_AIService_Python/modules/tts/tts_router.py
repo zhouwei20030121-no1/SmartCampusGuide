@@ -15,6 +15,8 @@ class ScriptRequest(BaseModel):
 class SynthesizeRequest(BaseModel):
     text: str
     language: str = "zh"
+    voice: str = "gentle_guide"
+    rate: float = 1.0
 
 
 @router.post("/generate-script")
@@ -29,7 +31,12 @@ async def generate_script(req: ScriptRequest):
 @router.post("/synthesize")
 async def synthesize(req: SynthesizeRequest):
     try:
-        result = await tts_service.synthesize(req.text, req.language)
+        result = await tts_service.synthesize(req.text, req.language, req.voice, req.rate)
         return ApiResponse.ok(result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/voices")
+async def voices():
+    return ApiResponse.ok(tts_service.list_voices())

@@ -9,6 +9,7 @@ import '../../core/network/network_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../cache/cache_service.dart';
 import '../location/location_service.dart';
+import '../map/campus_vector_map_layer.dart';
 import '../spot/spot_model.dart';
 import 'amap_route_api.dart';
 
@@ -36,8 +37,6 @@ class RoutePage extends StatefulWidget {
 
 class _RoutePageState extends State<RoutePage> {
   static const _swuCenter = LatLng(29.8218, 106.4256);
-  static const _tileUrlClean =
-      'https://wprd0{s}.is.autonavi.com/appmaptile?x={x}&y={y}&z={z}&lang=zh_cn&size=1&scl=1&style=7&ltype=3';
 
   final MapController _mapController = MapController();
   final TextEditingController _startController = TextEditingController();
@@ -609,14 +608,7 @@ class _RoutePageState extends State<RoutePage> {
               },
             ),
             children: [
-              TileLayer(
-                urlTemplate: _tileUrlClean,
-                subdomains: const ['1', '2', '3', '4'],
-                userAgentPackageName: 'com.swu.smartCampusGuide',
-                maxZoom: 19,
-                // 高 DPI 屏请求高清瓦片，避免地图模糊
-                retinaMode: RetinaMode.isHighDensity(context),
-              ),
+              const CampusVectorMapLayer(),
               if (_routePoints.length >= 2)
                 PolylineLayer(
                   polylines: [

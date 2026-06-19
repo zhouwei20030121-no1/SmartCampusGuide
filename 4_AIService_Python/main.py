@@ -1,5 +1,8 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from modules.tts.tts_router import router as tts_router
@@ -19,6 +22,10 @@ app.add_middleware(
 app.include_router(tts_router, prefix="/api/tts", tags=["TTS语音合成"])
 app.include_router(rag_router, prefix="/api/rag", tags=["RAG知识库"])
 app.include_router(vision_router, prefix="/api/vision", tags=["AI视觉识别"])
+
+audio_output_dir = os.path.join(os.path.dirname(__file__), "audio_output")
+os.makedirs(audio_output_dir, exist_ok=True)
+app.mount("/api/tts/audio", StaticFiles(directory=audio_output_dir), name="tts_audio")
 
 
 @app.get("/")

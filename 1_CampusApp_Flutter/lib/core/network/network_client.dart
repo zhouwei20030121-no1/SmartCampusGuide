@@ -44,7 +44,8 @@ class NetworkClient {
     }
   }
 
-  static Dio _createDio(String primaryUrl, Duration timeout) {
+  static Dio _createDio(String primaryUrl, Duration timeout,
+      {bool ngrokFallback = true}) {
     final d = Dio(
       BaseOptions(
         baseUrl: primaryUrl,
@@ -53,6 +54,10 @@ class NetworkClient {
       ),
     );
     
+    // AI 服务(TTS/RAG)不做 ngrok 回退：端点只在 AI 5000，
+    // 回退到 ngrok→Caddy→后端只会 404，慢应靠加大超时而非改道。
+    if (!ngrokFallback) return d;
+
     d.interceptors.add(InterceptorsWrapper(
       onError: (err, handler) async {
         final isConnectionError = err.type == DioExceptionType.connectionTimeout || 
@@ -90,7 +95,9 @@ class NetworkClient {
   }
 
   static final Dio dio = _createDio(baseUrl, const Duration(seconds: 10));
-  static final Dio aiDio = _createDio(aiBaseUrl, const Duration(seconds: 30));
+  // 语音合成(qwen-tts)合成长音频较慢，超时给足；且不走 ngrok 回退
+  static final Dio aiDio =
+      _createDio(aiBaseUrl, const Duration(seconds: 90), ngrokFallback: false);
 
   static Future<Response> get(
     String path, {
