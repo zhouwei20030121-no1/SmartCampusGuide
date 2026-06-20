@@ -1103,6 +1103,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   void _triggerGuide(String spot, {double? distance, bool autoPlay = true}) {
+    final metricStart = DateTime.now();
+    if (autoPlay) {
+      debugPrint('[TTS_METRIC] click_start spot=$spot trigger=map');
+    }
     final shouldFetchGuide = spot != _triggeredSpot;
     _stopGuideSpeech();
     _cancelDwellTimer();
@@ -1127,9 +1131,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     _autoCheckin(spot);
     _fetchComments(spot);
     if (shouldFetchGuide) {
-      _fetchGuideContent(spot);
+      _fetchGuideContent(spot, metricStart: metricStart);
     } else {
-      if (autoPlay) _playGuide(spot);
+      if (autoPlay) _playGuide(spot, metricStart: metricStart);
     }
   }
 
@@ -1444,38 +1448,30 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         : _sanitizeGuideText(_getGuideText(spot));
   }
 
-  Future<bool> _speakGuideText(String text, int playbackSerial) async {
+  Future<bool> _speakGuideText(
+    String text,
+    int playbackSerial, {
+    required DateTime metricStart,
+  }) async {
     final content = _sanitizeGuideText(text);
     if (content.isEmpty) return false;
     final voice = _voice;
     final language = _language;
     final rate = _speechRate;
+    final elapsedMs = DateTime.now().difference(metricStart).inMilliseconds;
+    debugPrint(
+      '[TTS_METRIC] tts_request_start serial=$playbackSerial elapsed_ms=$elapsedMs chars=${content.length} voice=$voice language=$language',
+    );
     try {
-      final res = await NetworkClient.aiDio.post(
-        '/api/tts/synthesize',
-        data: {
-          'text': content,
-          'voice': voice,
-          'language': language,
-          'rate': rate,
-        },
+      final ok = await _playCloudTtsChunks(
+        content,
+        playbackSerial,
+        metricStart: metricStart,
+        voice: voice,
+        language: language,
+        rate: rate,
       );
-      final payload = res.data['data'];
-      final audioUrl = payload is Map ? payload['url']?.toString() : null;
-      if (audioUrl != null && audioUrl.isNotEmpty) {
-        if (!mounted || playbackSerial != _playbackSerial) return false;
-        await _stopGuideSpeech(invalidate: false);
-        if (!mounted || playbackSerial != _playbackSerial) return false;
-        await _audioPlayer.setReleaseMode(ReleaseMode.stop);
-        _audioCompleteSub?.cancel();
-        _audioCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
-          if (mounted && playbackSerial == _playbackSerial) {
-            setState(() => _playing = false);
-          }
-        });
-        await _audioPlayer.play(UrlSource(_resolveTtsAudioUrl(audioUrl)));
-        return true;
-      }
+      if (ok) return true;
     } catch (e) {
       debugPrint('云端 TTS 播放失败，回退系统 TTS: $e');
     }
@@ -1497,6 +1493,129 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       debugPrint('TTS 播放失败: $e');
     }
     return false;
+  }
+
+  Future<bool> _playCloudTtsChunks(
+    String text,
+    int playbackSerial, {
+    required DateTime metricStart,
+    required String voice,
+    required String language,
+    required double rate,
+  }) async {
+    final chunks = _splitTtsChunks(text);
+    if (chunks.isEmpty) return false;
+
+    await _audioPlayer.setReleaseMode(ReleaseMode.stop);
+    _audioCompleteSub?.cancel();
+    _audioCompleteSub = null;
+
+    Future<String?> synthesize(int index) {
+      return _synthesizeTtsAudioUrl(
+        chunks[index],
+        voice: voice,
+        language: language,
+        rate: rate,
+      );
+    }
+
+    var nextAudio = synthesize(0);
+    for (var index = 0; index < chunks.length; index++) {
+      final audioUrl = await nextAudio;
+      if (!mounted || playbackSerial != _playbackSerial) return false;
+      if (audioUrl == null || audioUrl.isEmpty) {
+        if (index == 0) return false;
+        break;
+      }
+
+      nextAudio = index + 1 < chunks.length
+          ? synthesize(index + 1)
+          : Future<String?>.value(null);
+
+      final completed = await _playTtsAudioUrlAndWait(
+        audioUrl,
+        playbackSerial,
+        metricStart,
+        chunkIndex: index,
+      );
+      if (!completed) return false;
+    }
+
+    if (mounted && playbackSerial == _playbackSerial) {
+      setState(() => _playing = false);
+    }
+    return true;
+  }
+
+  Future<String?> _synthesizeTtsAudioUrl(
+    String text, {
+    required String voice,
+    required String language,
+    required double rate,
+  }) async {
+    final res = await NetworkClient.aiDio.post(
+      '/api/tts/synthesize',
+      data: {'text': text, 'voice': voice, 'language': language, 'rate': rate},
+    );
+    final payload = res.data['data'];
+    final audioUrl = payload is Map ? payload['url']?.toString() : null;
+    if (audioUrl == null || audioUrl.isEmpty) return null;
+    return _resolveTtsAudioUrl(audioUrl);
+  }
+
+  Future<bool> _playTtsAudioUrlAndWait(
+    String audioUrl,
+    int playbackSerial,
+    DateTime metricStart, {
+    required int chunkIndex,
+  }) async {
+    final completed = Completer<void>();
+    _audioCompleteSub?.cancel();
+    _audioCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
+      if (!completed.isCompleted) completed.complete();
+    });
+    final elapsedMs = DateTime.now().difference(metricStart).inMilliseconds;
+    debugPrint(
+      '[TTS_METRIC] audio_play_start serial=$playbackSerial chunk=${chunkIndex + 1} elapsed_ms=$elapsedMs url=$audioUrl',
+    );
+    await _audioPlayer.play(UrlSource(audioUrl));
+
+    while (!completed.isCompleted) {
+      if (!mounted || playbackSerial != _playbackSerial) return false;
+      await Future.any([
+        completed.future,
+        Future<void>.delayed(const Duration(milliseconds: 180)),
+      ]);
+    }
+    return mounted && playbackSerial == _playbackSerial;
+  }
+
+  List<String> _splitTtsChunks(String text) {
+    final normalized = _sanitizeGuideText(
+      text,
+    ).replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.isEmpty) return const [];
+
+    final chunks = <String>[];
+    final buffer = StringBuffer();
+    final sentencePattern = RegExp(r'[^。！？!?；;]+[。！？!?；;]?');
+    for (final match in sentencePattern.allMatches(normalized)) {
+      final sentence = match.group(0)?.trim() ?? '';
+      if (sentence.isEmpty) continue;
+      final wouldExceed = buffer.length + sentence.length > 90;
+      if (wouldExceed && buffer.isNotEmpty) {
+        chunks.add(buffer.toString().trim());
+        buffer.clear();
+      }
+      buffer.write(sentence);
+      if (buffer.length >= 70) {
+        chunks.add(buffer.toString().trim());
+        buffer.clear();
+      }
+    }
+    if (buffer.isNotEmpty) chunks.add(buffer.toString().trim());
+    if (chunks.isEmpty && normalized.isNotEmpty) return [normalized];
+    return chunks;
   }
 
   String _sanitizeGuideText(String text) {
@@ -1539,12 +1658,17 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     }
   }
 
-  Future<void> _playGuide(String spot) async {
+  Future<void> _playGuide(String spot, {DateTime? metricStart}) async {
+    final effectiveMetricStart = metricStart ?? DateTime.now();
     final playbackSerial = ++_playbackSerial;
     await _stopGuideSpeech(invalidate: false);
     if (!mounted || playbackSerial != _playbackSerial) return;
     setState(() => _playing = true);
-    final ok = await _speakGuideText(_currentGuideText(spot), playbackSerial);
+    final ok = await _speakGuideText(
+      _currentGuideText(spot),
+      playbackSerial,
+      metricStart: effectiveMetricStart,
+    );
     if (mounted && !ok) {
       setState(() => _playing = false);
     }
@@ -1700,7 +1824,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     );
   }
 
-  Future<void> _fetchGuideContent(String spot) async {
+  Future<void> _fetchGuideContent(String spot, {DateTime? metricStart}) async {
+    final effectiveMetricStart = metricStart ?? DateTime.now();
     setState(() {
       _loadingGuide = true;
       _guideText = '';
@@ -1736,7 +1861,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         _loadingGuide = false;
       });
       if (_triggeredSpot == spot && _playing) {
-        await _playGuide(spot);
+        await _playGuide(spot, metricStart: effectiveMetricStart);
         return;
       }
       return;
@@ -1765,7 +1890,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         _loadingGuide = false;
       });
       if (_triggeredSpot == spot && _playing) {
-        await _playGuide(spot);
+        await _playGuide(spot, metricStart: effectiveMetricStart);
       }
     }
   }
@@ -2728,7 +2853,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                             if (_playing) {
                               _pauseGuide();
                             } else {
-                              _playGuide(spot!);
+                              final metricStart = DateTime.now();
+                              debugPrint('[TTS_METRIC] click_start spot=$spot');
+                              _playGuide(spot!, metricStart: metricStart);
                             }
                           }
                         : null,

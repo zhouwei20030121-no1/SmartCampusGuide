@@ -102,46 +102,49 @@ class _GuidePageState extends State<GuidePage> {
       await _stop();
       return;
     }
+    final metricStart = DateTime.now();
+    debugPrint('[TTS_METRIC] click_start spot=$_spotName');
+    await _startPlayback(metricStart: metricStart);
+  }
+
+  Future<void> _startPlayback({DateTime? metricStart}) async {
+    final effectiveMetricStart = metricStart ?? DateTime.now();
     if (_guideText.trim().isEmpty) {
       await _fetchGuide();
     }
     final text = _sanitizeGuideText(_guideText);
     if (text.isEmpty) return;
     final playbackSerial = ++_playbackSerial;
-    await _stop(updateState: false, invalidate: false);
+    await _stop(updateState: false, invalidate: false, markStopped: false);
     if (!mounted || playbackSerial != _playbackSerial) return;
-    setState(() => _isPlaying = true);
     final voice = _voice;
     final language = _language;
     final rate = _rate;
+    final elapsedMs = DateTime.now()
+        .difference(effectiveMetricStart)
+        .inMilliseconds;
+    debugPrint(
+      '[TTS_METRIC] tts_request_start serial=$playbackSerial elapsed_ms=$elapsedMs chars=${text.length} voice=$voice language=$language',
+    );
+    setState(() => _isPlaying = true);
     try {
-      final res = await NetworkClient.aiDio.post(
-        '/api/tts/synthesize',
-        data: {
-          'text': text,
-          'voice': voice,
-          'language': language,
-          'rate': rate,
-        },
+      final ok = await _playCloudTtsChunks(
+        text,
+        playbackSerial,
+        metricStart: effectiveMetricStart,
+        voice: voice,
+        language: language,
+        rate: rate,
       );
-      final payload = res.data['data'];
-      final audioUrl = payload is Map ? payload['url']?.toString() : null;
-      if (audioUrl != null && audioUrl.isNotEmpty) {
-        if (!mounted || playbackSerial != _playbackSerial) return;
-        await _audioPlayer.setReleaseMode(ReleaseMode.stop);
-        _audioCompleteSub?.cancel();
-        _audioCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
-          if (mounted && playbackSerial == _playbackSerial) {
-            setState(() => _isPlaying = false);
-          }
-        });
-        await _audioPlayer.play(UrlSource(_resolveTtsAudioUrl(audioUrl)));
+      if (ok) {
         return;
       }
     } catch (e) {
       debugPrint('云端 TTS 播放失败，回退系统 TTS: $e');
     }
 
+    if (!mounted || playbackSerial != _playbackSerial) return;
+    await _stop(updateState: false, invalidate: false, markStopped: false);
     if (!mounted || playbackSerial != _playbackSerial) return;
     try {
       final result = await _ttsChannel.invokeMapMethod<String, dynamic>(
@@ -163,12 +166,141 @@ class _GuidePageState extends State<GuidePage> {
     }
   }
 
-  Future<void> _stop({bool updateState = true, bool invalidate = true}) async {
-    if (invalidate) _playbackSerial++;
-    if (updateState && mounted) {
+  Future<bool> _playCloudTtsChunks(
+    String text,
+    int playbackSerial, {
+    required DateTime metricStart,
+    required String voice,
+    required String language,
+    required double rate,
+  }) async {
+    final chunks = _splitTtsChunks(text);
+    if (chunks.isEmpty) return false;
+
+    await _audioPlayer.setReleaseMode(ReleaseMode.stop);
+    _audioCompleteSub?.cancel();
+    _audioCompleteSub = null;
+
+    Future<String?> synthesize(int index) {
+      return _synthesizeTtsAudioUrl(
+        chunks[index],
+        voice: voice,
+        language: language,
+        rate: rate,
+      );
+    }
+
+    var nextAudio = synthesize(0);
+    for (var index = 0; index < chunks.length; index++) {
+      final audioUrl = await nextAudio;
+      if (!mounted || playbackSerial != _playbackSerial) return false;
+      if (audioUrl == null || audioUrl.isEmpty) {
+        if (index == 0) return false;
+        break;
+      }
+
+      nextAudio = index + 1 < chunks.length
+          ? synthesize(index + 1)
+          : Future<String?>.value(null);
+
+      final completed = await _playTtsAudioUrlAndWait(
+        audioUrl,
+        playbackSerial,
+        metricStart,
+        chunkIndex: index,
+      );
+      if (!completed) return false;
+    }
+
+    if (mounted && playbackSerial == _playbackSerial) {
       setState(() => _isPlaying = false);
-    } else {
-      _isPlaying = false;
+    }
+    return true;
+  }
+
+  Future<String?> _synthesizeTtsAudioUrl(
+    String text, {
+    required String voice,
+    required String language,
+    required double rate,
+  }) async {
+    final res = await NetworkClient.aiDio.post(
+      '/api/tts/synthesize',
+      data: {'text': text, 'voice': voice, 'language': language, 'rate': rate},
+    );
+    final payload = res.data['data'];
+    final audioUrl = payload is Map ? payload['url']?.toString() : null;
+    if (audioUrl == null || audioUrl.isEmpty) return null;
+    return _resolveTtsAudioUrl(audioUrl);
+  }
+
+  Future<bool> _playTtsAudioUrlAndWait(
+    String audioUrl,
+    int playbackSerial,
+    DateTime metricStart, {
+    required int chunkIndex,
+  }) async {
+    final completed = Completer<void>();
+    _audioCompleteSub?.cancel();
+    _audioCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
+      if (!completed.isCompleted) completed.complete();
+    });
+    final elapsedMs = DateTime.now().difference(metricStart).inMilliseconds;
+    debugPrint(
+      '[TTS_METRIC] audio_play_start serial=$playbackSerial chunk=${chunkIndex + 1} elapsed_ms=$elapsedMs url=$audioUrl',
+    );
+    await _audioPlayer.play(UrlSource(audioUrl));
+
+    while (!completed.isCompleted) {
+      if (!mounted || playbackSerial != _playbackSerial) return false;
+      await Future.any([
+        completed.future,
+        Future<void>.delayed(const Duration(milliseconds: 180)),
+      ]);
+    }
+    return mounted && playbackSerial == _playbackSerial;
+  }
+
+  List<String> _splitTtsChunks(String text) {
+    final normalized = _sanitizeGuideText(
+      text,
+    ).replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.isEmpty) return const [];
+
+    final chunks = <String>[];
+    final buffer = StringBuffer();
+    final sentencePattern = RegExp(r'[^。！？!?；;]+[。！？!?；;]?');
+    for (final match in sentencePattern.allMatches(normalized)) {
+      final sentence = match.group(0)?.trim() ?? '';
+      if (sentence.isEmpty) continue;
+      final wouldExceed = buffer.length + sentence.length > 90;
+      if (wouldExceed && buffer.isNotEmpty) {
+        chunks.add(buffer.toString().trim());
+        buffer.clear();
+      }
+      buffer.write(sentence);
+      if (buffer.length >= 70) {
+        chunks.add(buffer.toString().trim());
+        buffer.clear();
+      }
+    }
+    if (buffer.isNotEmpty) chunks.add(buffer.toString().trim());
+    if (chunks.isEmpty && normalized.isNotEmpty) return [normalized];
+    return chunks;
+  }
+
+  Future<void> _stop({
+    bool updateState = true,
+    bool invalidate = true,
+    bool markStopped = true,
+  }) async {
+    if (invalidate) _playbackSerial++;
+    if (markStopped) {
+      if (updateState && mounted) {
+        setState(() => _isPlaying = false);
+      } else {
+        _isPlaying = false;
+      }
     }
     _audioCompleteSub?.cancel();
     _audioCompleteSub = null;
@@ -187,6 +319,8 @@ class _GuidePageState extends State<GuidePage> {
     String? mode,
     double? rate,
   }) {
+    final wasPlaying = _isPlaying;
+    final metricStart = DateTime.now();
     setState(() {
       if (persona != null) _persona = persona;
       if (language != null) _language = language;
@@ -194,8 +328,14 @@ class _GuidePageState extends State<GuidePage> {
       if (mode != null) _guideMode = mode;
       if (rate != null) _rate = rate;
     });
-    _stop();
-    _fetchGuide();
+    Future<void>(() async {
+      await _stop();
+      await _fetchGuide();
+      if (wasPlaying && mounted) {
+        debugPrint('[TTS_METRIC] click_start spot=$_spotName reason=reload');
+        await _startPlayback(metricStart: metricStart);
+      }
+    });
   }
 
   String _sanitizeGuideText(String text) {
