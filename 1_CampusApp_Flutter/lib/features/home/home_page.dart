@@ -6,6 +6,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:amap_flutter_map/amap_flutter_map.dart';
 import 'package:amap_flutter_base/amap_flutter_base.dart';
 import 'package:dio/dio.dart';
@@ -20,7 +21,6 @@ import '../route/amap_route_api.dart';
 import '../spot/spot_model.dart';
 import '../story/campus_story_page.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
 
 const Color _schoolBlue = Color(0xFF023D83);
 
@@ -148,10 +148,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   Offset _clampXiaoDaoOffset(
-      Offset offset,
-      BoxConstraints constraints,
-      EdgeInsets safePadding,
-      ) {
+    Offset offset,
+    BoxConstraints constraints,
+    EdgeInsets safePadding,
+  ) {
     const edgePadding = 12.0;
     final minX = edgePadding;
     final maxX = math.max(
@@ -311,7 +311,7 @@ class _TabHomeState extends State<_TabHome> {
     // 每30分钟刷新一次天气
     _weatherTimer = Timer.periodic(
       const Duration(minutes: 30),
-          (_) => _fetchRealWeather(),
+      (_) => _fetchRealWeather(),
     );
   }
 
@@ -330,12 +330,14 @@ class _TabHomeState extends State<_TabHome> {
         'https://restapi.amap.com/v3/weather/weatherInfo',
         queryParameters: {
           'key': AMapRouteApi.webApiKey, // 复用你现有的高德 Web API Key
-          'city': '500109',              // 重庆市北碚区的 adcode
-          'extensions': 'base',          // base 表示获取实时天气
+          'city': '500109', // 重庆市北碚区的 adcode
+          'extensions': 'base', // base 表示获取实时天气
         },
       );
 
-      if (res.data['status'] == '1' && res.data['lives'] != null && res.data['lives'].isNotEmpty) {
+      if (res.data['status'] == '1' &&
+          res.data['lives'] != null &&
+          res.data['lives'].isNotEmpty) {
         // 提取实况天气字符串，如 "晴", "多云", "小雨"
         final String weatherStr = res.data['lives'][0]['weather'].toString();
         debugPrint('当前北碚区天气: $weatherStr');
@@ -361,7 +363,10 @@ class _TabHomeState extends State<_TabHome> {
   // 从后端获取所有景点的真实数据，确保 ID 绝对正确
   Future<void> _fetchAllSpotsFromDB() async {
     try {
-      final res = await NetworkClient.dio.get('/spot/list', queryParameters: {'page': 1, 'size': 100});
+      final res = await NetworkClient.dio.get(
+        '/spot/list',
+        queryParameters: {'page': 1, 'size': 100},
+      );
       if (res.data['code'] == 200) {
         final records = res.data['data']['records'] as List;
         _allSpots = records.map((e) => SpotModel.fromJson(e)).toList();
@@ -436,9 +441,7 @@ class _TabHomeState extends State<_TabHome> {
 
     final maxVisitCount = validSpots.isEmpty
         ? 1
-        : validSpots
-        .map((e) => e.visitCount)
-        .reduce((a, b) => a > b ? a : b);
+        : validSpots.map((e) => e.visitCount).reduce((a, b) => a > b ? a : b);
 
     final hour = DateTime.now().hour;
 
@@ -450,10 +453,7 @@ class _TabHomeState extends State<_TabHome> {
       // ===================
       // 1 距离因子
       // ===================
-      double distanceScore =
-      distance > 1000
-          ? 0
-          : (1000 - distance) / 1000;
+      double distanceScore = distance > 1000 ? 0 : (1000 - distance) / 1000;
 
       // ===================
       // 2 热度因子
@@ -493,21 +493,18 @@ class _TabHomeState extends State<_TabHome> {
       // ===================
       // 综合评分
       // ===================
-      double score = distanceScore * 0.35 +
+      double score =
+          distanceScore * 0.35 +
           popularityScore * 0.25 +
           checkinScore * 0.20 +
           timeScore * 0.10 +
           weatherScore * 0.10;
 
-      return {
-        "spot": spot,
-        "distance": distance,
-        "score": score,
-      };
+      return {"spot": spot, "distance": distance, "score": score};
     }).toList();
 
     scoredSpots.sort(
-          (a, b) => (b["score"] as double).compareTo(a["score"] as double),
+      (a, b) => (b["score"] as double).compareTo(a["score"] as double),
     );
 
     if (mounted) {
@@ -533,7 +530,8 @@ class _TabHomeState extends State<_TabHome> {
     }
 
     // 优先级 3：天气场景推荐
-    if (_currentWeather == '雨天' && (spot.category.contains("生活服务") || spot.category.contains("教学设施"))) {
+    if (_currentWeather == '雨天' &&
+        (spot.category.contains("生活服务") || spot.category.contains("教学设施"))) {
       return "☔ 雨天室内好去处";
     }
     if (_currentWeather == '晴天' && spot.category.contains("自然景观")) {
@@ -767,7 +765,10 @@ class _TabHomeState extends State<_TabHome> {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.8), width: 1.5),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.8),
+          width: 1.5,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -779,25 +780,49 @@ class _TabHomeState extends State<_TabHome> {
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('✨ 智能景点推荐', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
+                  Text(
+                    '✨ 智能景点推荐',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textMain,
+                    ),
+                  ),
                   SizedBox(height: 2),
-                  Text('综合距离、热度、打卡与场景推荐', style: TextStyle(fontSize: 11, color: AppTheme.textSub)),
+                  Text(
+                    '综合距离、热度、打卡与场景推荐',
+                    style: TextStyle(fontSize: 11, color: AppTheme.textSub),
+                  ),
                 ],
               ),
               // 全部景点跳转按钮
               GestureDetector(
                 onTap: () => Navigator.pushNamed(context, '/spot/list'),
-                child: const Text('全部景点 >', style: TextStyle(fontSize: 13, color: AppTheme.primary, fontWeight: FontWeight.w600)),
+                child: const Text(
+                  '全部景点 >',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
           if (_isLoading)
-            const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator(strokeWidth: 2))),
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
 
           if (!_isLoading && _closestSpots.isEmpty)
-            const Center(child: Text('暂无附近景点', style: TextStyle(color: AppTheme.textSub))),
+            const Center(
+              child: Text('暂无附近景点', style: TextStyle(color: AppTheme.textSub)),
+            ),
 
           // 动态渲染 3 个真实景点
           ..._closestSpots.map((item) {
@@ -809,7 +834,7 @@ class _TabHomeState extends State<_TabHome> {
               spot,
               '${spot.name} (距您约${distStr}米)',
               '${_recommendReason(spot, dist)} · ${spot.description}',
-                  () {
+              () {
                 Navigator.pushNamed(
                   context,
                   '/spot/detail',
@@ -824,11 +849,11 @@ class _TabHomeState extends State<_TabHome> {
   }
 
   Widget _spotTile(
-      SpotModel spot,
-      String title,
-      String subtitle,
-      VoidCallback onTap,
-      ) {
+    SpotModel spot,
+    String title,
+    String subtitle,
+    VoidCallback onTap,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -844,29 +869,29 @@ class _TabHomeState extends State<_TabHome> {
                   borderRadius: BorderRadius.circular(14),
                   child: imageUrl.isNotEmpty
                       ? CachedNetworkImage(
-                    imageUrl: imageUrl,
-                    width: 54,
-                    height: 54,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(
-                      width: 54,
-                      height: 54,
-                      color: const Color(0xCCFAFADB),
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        color: AppTheme.primary,
-                      ),
-                    ),
-                  )
+                          imageUrl: imageUrl,
+                          width: 54,
+                          height: 54,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => Container(
+                            width: 54,
+                            height: 54,
+                            color: const Color(0xCCFAFADB),
+                            child: const Icon(
+                              Icons.image_not_supported,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        )
                       : Container(
-                    width: 54,
-                    height: 54,
-                    color: const Color(0xCCFAFADB),
-                    child: const Icon(
-                      Icons.image,
-                      color: AppTheme.primary,
-                    ),
-                  ),
+                          width: 54,
+                          height: 54,
+                          color: const Color(0xCCFAFADB),
+                          child: const Icon(
+                            Icons.image,
+                            color: AppTheme.primary,
+                          ),
+                        ),
                 );
               },
             ),
@@ -875,9 +900,24 @@ class _TabHomeState extends State<_TabHome> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppTheme.textMain)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppTheme.textMain,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(fontSize: 11, color: AppTheme.textSub), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSub,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
@@ -900,9 +940,14 @@ class _TabSmartAudio extends StatefulWidget {
 }
 
 class _TabSmartAudioState extends State<_TabSmartAudio> {
-  static const MethodChannel _ttsChannel = MethodChannel('smart_campus_guide/tts');
+  static const MethodChannel _ttsChannel = MethodChannel(
+    'smart_campus_guide/tts',
+  );
 
+  final AudioPlayer _audioPlayer = AudioPlayer();
   final LocationService _loc = LocationService();
+  StreamSubscription<void>? _audioCompleteSub;
+  int _playbackSerial = 0;
   bool _playing = false;
   String _guideText = '';
   bool _loadingGuide = false;
@@ -978,12 +1023,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     '购物',
     '售卖',
   ];
-  static const _blockedPoiTypes = [
-    '餐饮服务',
-    '购物服务',
-    '生活服务',
-    '金融保险服务',
-  ];
+  static const _blockedPoiTypes = ['餐饮服务', '购物服务', '生活服务', '金融保险服务'];
   // 用户模拟位置（点击地图移动，初始放在校园中心）
   LatLng _userPos = _swuCenter;
   late Marker _userMarker;
@@ -1079,8 +1119,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       _pendingSpot = null;
       _pendingSince = null;
       _pendingRemainingSeconds = 0;
-      _spotCooldownUntil[spot] =
-          DateTime.now().add(const Duration(minutes: _cooldownMinutes));
+      _spotCooldownUntil[spot] = DateTime.now().add(
+        const Duration(minutes: _cooldownMinutes),
+      );
     });
 
     _autoCheckin(spot);
@@ -1093,11 +1134,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   void _handleNearbyCandidate(
-      String spot,
-      LatLng pos, {
-        required double distance,
-        required bool fromDemo,
-      }) {
+    String spot,
+    LatLng pos, {
+    required double distance,
+    required bool fromDemo,
+  }) {
     _evaluateRoutePriority(pos);
 
     final cooldownUntil = _spotCooldownUntil[spot];
@@ -1115,8 +1156,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       setState(() {
         _nearbySpot = spot;
         _nearbyDist = distance;
-        _poiLookupNotice =
-        '已靠近「$spot」，但你移动较快，先不自动触发讲解';
+        _poiLookupNotice = '已靠近「$spot」，但你移动较快，先不自动触发讲解';
       });
       return;
     }
@@ -1201,7 +1241,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final routeDistance = guideState.distanceToActiveRoute(pos);
     if (routeDistance > _routeDeviationMeters) {
       _routePriorityNotice =
-      '你已偏离${guideState.routeLabel}约${routeDistance.toStringAsFixed(0)}米，可继续播放附近景点讲解';
+          '你已偏离${guideState.routeLabel}约${routeDistance.toStringAsFixed(0)}米，可继续播放附近景点讲解';
     } else {
       _routePriorityNotice = '';
     }
@@ -1211,15 +1251,17 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     if (_checkingIn) return;
     setState(() => _checkingIn = true);
     try {
-      final res = await NetworkClient.dio.post('/checkin/by-spot-name', data: {
-        'userId': NetworkClient.currentUserId,
-        'spotName': spot,
-      });
+      final res = await NetworkClient.dio.post(
+        '/checkin/by-spot-name',
+        data: {'userId': NetworkClient.currentUserId, 'spotName': spot},
+      );
       final ok = res.data['code'] == 200;
       final spotName = res.data['data']?['spotName']?.toString() ?? spot;
       if (!mounted) return;
       setState(() {
-        _checkinNotice = ok ? '已打卡：$spotName' : (res.data['message'] ?? res.data['msg'] ?? '打卡失败').toString();
+        _checkinNotice = ok
+            ? '已打卡：$spotName'
+            : (res.data['message'] ?? res.data['msg'] ?? '打卡失败').toString();
       });
       if (manual) {
         _showTtsNotice(_checkinNotice);
@@ -1243,10 +1285,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   Future<void> _triggerNearestPoi(
-      LatLng pos, {
-        required bool fromDemo,
-        bool autoCenter = true,
-      }) async {
+    LatLng pos, {
+    required bool fromDemo,
+    bool autoCenter = true,
+  }) async {
     final seq = ++_poiLookupSeq;
     setState(() {
       _lookingUpPoi = true;
@@ -1283,8 +1325,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         }
 
         final name = candidate['name']!.toString().trim();
-        final distance =
-        double.tryParse(candidate['distance']?.toString() ?? '');
+        final distance = double.tryParse(
+          candidate['distance']?.toString() ?? '',
+        );
         final poiPos =
             _parseAmapLocation(candidate['location']?.toString()) ?? pos;
         _selectedPoiName = name;
@@ -1395,22 +1438,55 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   String _currentGuideText(String spot) {
-    final generated = _guideText.trim();
-    return generated.isNotEmpty ? generated : _getGuideText(spot);
+    final generated = _sanitizeGuideText(_guideText);
+    return generated.isNotEmpty
+        ? generated
+        : _sanitizeGuideText(_getGuideText(spot));
   }
 
-  Future<bool> _speakGuideText(String text) async {
-    final content = text.trim();
+  Future<bool> _speakGuideText(String text, int playbackSerial) async {
+    final content = _sanitizeGuideText(text);
     if (content.isEmpty) return false;
+    final voice = _voice;
+    final language = _language;
+    final rate = _speechRate;
+    try {
+      final res = await NetworkClient.aiDio.post(
+        '/api/tts/synthesize',
+        data: {
+          'text': content,
+          'voice': voice,
+          'language': language,
+          'rate': rate,
+        },
+      );
+      final payload = res.data['data'];
+      final audioUrl = payload is Map ? payload['url']?.toString() : null;
+      if (audioUrl != null && audioUrl.isNotEmpty) {
+        if (!mounted || playbackSerial != _playbackSerial) return false;
+        await _stopGuideSpeech(invalidate: false);
+        if (!mounted || playbackSerial != _playbackSerial) return false;
+        await _audioPlayer.setReleaseMode(ReleaseMode.stop);
+        _audioCompleteSub?.cancel();
+        _audioCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
+          if (mounted && playbackSerial == _playbackSerial) {
+            setState(() => _playing = false);
+          }
+        });
+        await _audioPlayer.play(UrlSource(_resolveTtsAudioUrl(audioUrl)));
+        return true;
+      }
+    } catch (e) {
+      debugPrint('云端 TTS 播放失败，回退系统 TTS: $e');
+    }
+
+    if (!mounted || playbackSerial != _playbackSerial) return false;
+    await _stopGuideSpeech(invalidate: false);
+    if (!mounted || playbackSerial != _playbackSerial) return false;
     try {
       final result = await _ttsChannel.invokeMapMethod<String, dynamic>(
         'speak',
-        {
-          'text': content,
-          'voice': _voice,
-          'language': _language,
-          'rate': _speechRate,
-        },
+        {'text': content, 'voice': voice, 'language': language, 'rate': rate},
       );
       if (result?['ok'] == true) {
         return true;
@@ -1423,7 +1499,39 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     return false;
   }
 
-  Future<void> _stopGuideSpeech() async {
+  String _sanitizeGuideText(String text) {
+    return text
+        .replaceAll(RegExp(r'[（(][^（）()]{0,120}[）)]'), '')
+        .replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m.group(1) ?? '')
+        .replaceAll(RegExp(r'[*#>`_~]+'), '')
+        .replaceAll(
+          RegExp(
+            r'(脚步声|手指|指向|转身|微笑|笑意|镜头|旁白|动作|语气|停顿|音效|音乐|掌声|轻声|大声|慢速|快速)[^。！？\n]{0,80}[。！？]?',
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'[ \t]{2,}'), ' ')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim()
+        .replaceAll(RegExp(r'^[，,。；;\s]+|[，,。；;\s]+$'), '');
+  }
+
+  String _resolveTtsAudioUrl(String url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    final base = NetworkClient.aiBaseUrl.replaceFirst(RegExp(r'/$'), '');
+    final path = url.startsWith('/') ? url : '/$url';
+    return '$base$path';
+  }
+
+  Future<void> _stopGuideSpeech({bool invalidate = true}) async {
+    if (invalidate) _playbackSerial++;
+    _audioCompleteSub?.cancel();
+    _audioCompleteSub = null;
+    try {
+      await _audioPlayer.stop();
+    } catch (e) {
+      debugPrint('云端 TTS 停止失败: $e');
+    }
     try {
       await _ttsChannel.invokeMethod('stop');
     } catch (e) {
@@ -1432,8 +1540,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   Future<void> _playGuide(String spot) async {
+    final playbackSerial = ++_playbackSerial;
+    await _stopGuideSpeech(invalidate: false);
+    if (!mounted || playbackSerial != _playbackSerial) return;
     setState(() => _playing = true);
-    final ok = await _speakGuideText(_currentGuideText(spot));
+    final ok = await _speakGuideText(_currentGuideText(spot), playbackSerial);
     if (mounted && !ok) {
       setState(() => _playing = false);
     }
@@ -1455,6 +1566,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   void dispose() {
     _stopGuideSpeech();
     _cancelDwellTimer();
+    _audioPlayer.dispose();
     _commentController.dispose();
     _loc.removeListener(_handleLocationChanged);
     super.dispose();
@@ -1467,11 +1579,18 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         // 高德地图
         AMapWidget(
           mapType: MapType.normal,
-          privacyStatement: const AMapPrivacyStatement(hasContains: true, hasShow: true, hasAgree: true),
-          initialCameraPosition: const CameraPosition(target: _swuCenter, zoom: 17, tilt: 0, bearing: 0),
-          markers: {
-            _userMarker,
-          }.toSet(),
+          privacyStatement: const AMapPrivacyStatement(
+            hasContains: true,
+            hasShow: true,
+            hasAgree: true,
+          ),
+          initialCameraPosition: const CameraPosition(
+            target: _swuCenter,
+            zoom: 17,
+            tilt: 0,
+            bearing: 0,
+          ),
+          markers: {_userMarker}.toSet(),
           onMapCreated: (c) {
             _mapCtrl = c;
             WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1487,28 +1606,58 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         ),
         // 缩放按钮（右上角）
         Positioned(
-          right: 16, top: 80,
-          child: Column(children: [
-            _zoomBtn(Icons.add, () => _mapCtrl?.moveCamera(CameraUpdate.zoomIn()), tooltip: '放大'),
-            const SizedBox(height: 6),
-            _zoomBtn(Icons.remove, () => _mapCtrl?.moveCamera(CameraUpdate.zoomOut()), tooltip: '缩小'),
-            const SizedBox(height: 6),
-            _zoomBtn(Icons.gps_fixed, _useRealLocation, tooltip: '真实定位'),
-            const SizedBox(height: 6),
-            _zoomBtn(
-              Icons.center_focus_strong,
-                  () => _mapCtrl?.moveCamera(CameraUpdate.newCameraPosition(CameraPosition(target: _userPos, zoom: 17, tilt: 0, bearing: 0))),
-              tooltip: '回到当前位置',
-            ),
-          ]),
+          right: 16,
+          top: 80,
+          child: Column(
+            children: [
+              _zoomBtn(
+                Icons.add,
+                () => _mapCtrl?.moveCamera(CameraUpdate.zoomIn()),
+                tooltip: '放大',
+              ),
+              const SizedBox(height: 6),
+              _zoomBtn(
+                Icons.remove,
+                () => _mapCtrl?.moveCamera(CameraUpdate.zoomOut()),
+                tooltip: '缩小',
+              ),
+              const SizedBox(height: 6),
+              _zoomBtn(Icons.gps_fixed, _useRealLocation, tooltip: '真实定位'),
+              const SizedBox(height: 6),
+              _zoomBtn(
+                Icons.center_focus_strong,
+                () => _mapCtrl?.moveCamera(
+                  CameraUpdate.newCameraPosition(
+                    CameraPosition(
+                      target: _userPos,
+                      zoom: 17,
+                      tilt: 0,
+                      bearing: 0,
+                    ),
+                  ),
+                ),
+                tooltip: '回到当前位置',
+              ),
+            ],
+          ),
         ),
         // 顶部状态条
         Positioned(top: 16, left: 16, right: 66, child: _buildStatusBar()),
         // 触发横幅
         if (_pendingSpot != null)
-          Positioned(top: 76, left: 16, right: 16, child: _buildPendingBanner(_pendingSpot!))
+          Positioned(
+            top: 76,
+            left: 16,
+            right: 16,
+            child: _buildPendingBanner(_pendingSpot!),
+          )
         else if (_triggeredSpot != null)
-          Positioned(top: 76, left: 16, right: 16, child: _buildTriggerBanner(_triggeredSpot!)),
+          Positioned(
+            top: 76,
+            left: 16,
+            right: 16,
+            child: _buildTriggerBanner(_triggeredSpot!),
+          ),
         // 底部音频
         AnimatedPositioned(
           duration: const Duration(milliseconds: 240),
@@ -1522,18 +1671,28 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     );
   }
 
-  Widget _zoomBtn(IconData icon, VoidCallback onTap, {required String tooltip}) {
+  Widget _zoomBtn(
+    IconData icon,
+    VoidCallback onTap, {
+    required String tooltip,
+  }) {
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 38, height: 38,
+          width: 38,
+          height: 38,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4)],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.1),
+                blurRadius: 4,
+              ),
+            ],
           ),
           child: Icon(icon, color: AppTheme.primary, size: 20),
         ),
@@ -1548,21 +1707,24 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     });
     var text = '';
     try {
-      final res = await NetworkClient.dio.post('/ai/guide/dynamic', data: {
-        'spotName': spot,
-        'persona': _persona,
-        'language': _language,
-        'voice': _voice,
-        'style': _guideMode,
-        'guideMode': _guideMode,
-        'environment': {
-          'client': 'mobile_app',
-          'scene': 'smart_audio_guide',
-          'triggerMode': _pendingFromDemo ? 'manual_demo' : _loc.locationMode,
-          'speedMps': _loc.speedMps,
-          'distanceMeters': _nearbyDist,
+      final res = await NetworkClient.dio.post(
+        '/ai/guide/dynamic',
+        data: {
+          'spotName': spot,
+          'persona': _persona,
+          'language': _language,
+          'voice': _voice,
+          'style': _guideMode,
+          'guideMode': _guideMode,
+          'environment': {
+            'client': 'mobile_app',
+            'scene': 'smart_audio_guide',
+            'triggerMode': _pendingFromDemo ? 'manual_demo' : _loc.locationMode,
+            'speedMps': _loc.speedMps,
+            'distanceMeters': _nearbyDist,
+          },
         },
-      });
+      );
       if (res.data['code'] == 200) {
         text = (res.data['data']['text'] ?? '').toString().trim();
       }
@@ -1570,20 +1732,24 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     if (text.isNotEmpty) {
       if (!mounted) return;
       setState(() {
-        _guideText = text;
+        _guideText = _sanitizeGuideText(text);
         _loadingGuide = false;
       });
       if (_triggeredSpot == spot && _playing) {
-        final ok = await _speakGuideText(text);
-        if (mounted && !ok) {
-          setState(() => _playing = false);
-        }
+        await _playGuide(spot);
+        return;
       }
       return;
     }
     try {
-      final res = await NetworkClient.dio.get('/ai/guide/generate',
-          queryParameters: {'spotName': spot, 'persona': _persona, 'language': _language});
+      final res = await NetworkClient.dio.get(
+        '/ai/guide/generate',
+        queryParameters: {
+          'spotName': spot,
+          'persona': _persona,
+          'language': _language,
+        },
+      );
       if (res.data['code'] == 200) {
         text = (res.data['data']['text'] ?? '').toString().trim();
       }
@@ -1595,14 +1761,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         text = _getGuideText(spot);
       }
       setState(() {
-        _guideText = text;
+        _guideText = _sanitizeGuideText(text);
         _loadingGuide = false;
       });
       if (_triggeredSpot == spot && _playing) {
-        final ok = await _speakGuideText(text);
-        if (mounted && !ok) {
-          setState(() => _playing = false);
-        }
+        await _playGuide(spot);
       }
     }
   }
@@ -1611,15 +1774,22 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     setState(() => _loadingStory = true);
     final stories = <Map<String, dynamic>>[];
     try {
-      final res = await NetworkClient.dio.get('/ai/story/list', queryParameters: {
-        'spotName': spot,
-        'language': _language,
-        'page': 1,
-        'size': 30,
-      });
+      final res = await NetworkClient.dio.get(
+        '/ai/story/list',
+        queryParameters: {
+          'spotName': spot,
+          'language': _language,
+          'page': 1,
+          'size': 30,
+        },
+      );
       final records = res.data['data']?['records'];
       if (records is List) {
-        stories.addAll(records.whereType<Map>().map((item) => Map<String, dynamic>.from(item)));
+        stories.addAll(
+          records.whereType<Map>().map(
+            (item) => Map<String, dynamic>.from(item),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('校园故事列表加载失败: $e');
@@ -1641,72 +1811,122 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             color: Colors.white.withValues(alpha: 0.92),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              const Icon(Icons.auto_stories_outlined, color: AppTheme.warning),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('$spot 的校园故事',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppTheme.textMain)),
-              ),
-              IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
-            ]),
-            const SizedBox(height: 10),
-            Expanded(
-              child: stories.isEmpty
-                  ? ListView(
-                controller: controller,
-                children: const [
-                  SizedBox(height: 42),
-                  Icon(Icons.auto_stories_outlined, size: 48, color: AppTheme.primary),
-                  SizedBox(height: 12),
-                  Text(
-                    '这个地点暂时还没有校园故事。你可以在"我的-写校园故事"里补充一段，其他人讲解时也会看到。',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 14, height: 1.6, color: AppTheme.textSub),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(
+                    Icons.auto_stories_outlined,
+                    color: AppTheme.warning,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$spot 的校园故事',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.textMain,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded),
                   ),
                 ],
-              )
-                  : ListView.separated(
-                controller: controller,
-                itemCount: stories.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final story = stories[index];
-                  final title = (story['title'] ?? story['spotName'] ?? '校园故事').toString();
-                  final content = (story['storyContent'] ?? story['story'] ?? '').toString();
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => CampusStoryDetailPage(story: story)),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primary.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
-                      ),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppTheme.textMain)),
-                        const SizedBox(height: 8),
-                        Text(
-                          content,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13, height: 1.55, color: AppTheme.textSub),
-                        ),
-                      ]),
-                    ),
-                  );
-                },
               ),
-            ),
-          ]),
+              const SizedBox(height: 10),
+              Expanded(
+                child: stories.isEmpty
+                    ? ListView(
+                        controller: controller,
+                        children: const [
+                          SizedBox(height: 42),
+                          Icon(
+                            Icons.auto_stories_outlined,
+                            size: 48,
+                            color: AppTheme.primary,
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            '这个地点暂时还没有校园故事。你可以在"我的-写校园故事"里补充一段，其他人讲解时也会看到。',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              height: 1.6,
+                              color: AppTheme.textSub,
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView.separated(
+                        controller: controller,
+                        itemCount: stories.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final story = stories[index];
+                          final title =
+                              (story['title'] ?? story['spotName'] ?? '校园故事')
+                                  .toString();
+                          final content =
+                              (story['storyContent'] ?? story['story'] ?? '')
+                                  .toString();
+                          return InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      CampusStoryDetailPage(story: story),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primary.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: AppTheme.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.textMain,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    content,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      height: 1.55,
+                                      color: AppTheme.textSub,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1715,14 +1935,21 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   Future<void> _fetchComments(String spot) async {
     setState(() => _loadingComments = true);
     try {
-      final res = await NetworkClient.dio.get('/comment/spot-name', queryParameters: {'spotName': spot});
+      final res = await NetworkClient.dio.get(
+        '/comment/spot-name',
+        queryParameters: {'spotName': spot},
+      );
       final data = res.data['data'];
       if (res.data['code'] == 200 && data is List) {
         if (!mounted) return;
         setState(() {
           _spotComments
             ..clear()
-            ..addAll(data.whereType<Map>().map((item) => Map<String, dynamic>.from(item)));
+            ..addAll(
+              data.whereType<Map>().map(
+                (item) => Map<String, dynamic>.from(item),
+              ),
+            );
         });
       }
     } catch (e) {
@@ -1739,18 +1966,23 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       return;
     }
     try {
-      final res = await NetworkClient.dio.post('/comment/by-spot-name', data: {
-        'userId': NetworkClient.currentUserId,
-        'spotName': spot,
-        'content': content,
-        'rating': 5,
-      });
+      final res = await NetworkClient.dio.post(
+        '/comment/by-spot-name',
+        data: {
+          'userId': NetworkClient.currentUserId,
+          'spotName': spot,
+          'content': content,
+          'rating': 5,
+        },
+      );
       if (res.data['code'] == 200) {
         _commentController.clear();
         _showTtsNotice('评论已提交，审核通过后会展示');
         _fetchComments(spot);
       } else {
-        _showTtsNotice((res.data['message'] ?? res.data['msg'] ?? '评论提交失败').toString());
+        _showTtsNotice(
+          (res.data['message'] ?? res.data['msg'] ?? '评论提交失败').toString(),
+        );
       }
     } catch (e) {
       debugPrint('评论提交失败: $e');
@@ -1762,17 +1994,22 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     if (_submittingFeedback) return;
     setState(() => _submittingFeedback = true);
     try {
-      final res = await NetworkClient.dio.post('/stats/guide-feedback', data: {
-        'userId': NetworkClient.currentUserId,
-        'spotName': spot,
-        'feedback': feedback,
-        'persona': _persona,
-        'language': _language,
-        'guideMode': _guideMode,
-      });
+      final res = await NetworkClient.dio.post(
+        '/stats/guide-feedback',
+        data: {
+          'userId': NetworkClient.currentUserId,
+          'spotName': spot,
+          'feedback': feedback,
+          'persona': _persona,
+          'language': _language,
+          'guideMode': _guideMode,
+        },
+      );
       if (!mounted) return;
       setState(() {
-        _feedbackNotice = res.data['code'] == 200 ? '已收到反馈：$feedback' : '反馈提交失败';
+        _feedbackNotice = res.data['code'] == 200
+            ? '已收到反馈：$feedback'
+            : '反馈提交失败';
       });
     } catch (_) {
       if (!mounted) return;
@@ -1791,28 +2028,55 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.primary.withValues(alpha: 0.1)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.tips_and_updates_outlined, size: 16, color: AppTheme.primary),
-          const SizedBox(width: 6),
-          const Text('讲解反馈', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
-          const Spacer(),
-          if (_submittingFeedback)
-            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-        ]),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          _smallFeedbackChip(spot, '有用'),
-          _smallFeedbackChip(spot, '太长'),
-          _smallFeedbackChip(spot, '不准确'),
-          _smallFeedbackChip(spot, '想听历史'),
-          _smallFeedbackChip(spot, '想听实用信息'),
-        ]),
-        if (_feedbackNotice.isNotEmpty) ...[
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.tips_and_updates_outlined,
+                size: 16,
+                color: AppTheme.primary,
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                '讲解反馈',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textMain,
+                ),
+              ),
+              const Spacer(),
+              if (_submittingFeedback)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
           const SizedBox(height: 8),
-          Text(_feedbackNotice, style: const TextStyle(fontSize: 11, color: AppTheme.success)),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _smallFeedbackChip(spot, '有用'),
+              _smallFeedbackChip(spot, '太长'),
+              _smallFeedbackChip(spot, '不准确'),
+              _smallFeedbackChip(spot, '想听历史'),
+              _smallFeedbackChip(spot, '想听实用信息'),
+            ],
+          ),
+          if (_feedbackNotice.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              _feedbackNotice,
+              style: const TextStyle(fontSize: 11, color: AppTheme.success),
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 
@@ -1820,7 +2084,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     return ActionChip(
       label: Text(label, style: const TextStyle(fontSize: 11)),
       visualDensity: VisualDensity.compact,
-      onPressed: _submittingFeedback ? null : () => _submitGuideFeedback(spot, label),
+      onPressed: _submittingFeedback
+          ? null
+          : () => _submitGuideFeedback(spot, label),
       backgroundColor: Colors.white.withValues(alpha: 0.72),
       side: BorderSide(color: AppTheme.primary.withValues(alpha: 0.12)),
     );
@@ -1854,28 +2120,38 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
           ),
-          child: Row(children: [
-            Container(
-              width: 10, height: 10,
-              decoration: BoxDecoration(
-                color: _triggeredSpot != null ? AppTheme.success : AppTheme.primary,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                statusText,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: _triggeredSpot != null ? AppTheme.success : AppTheme.darkBlue,
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: _triggeredSpot != null
+                      ? AppTheme.success
+                      : AppTheme.primary,
+                  shape: BoxShape.circle,
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(modeLabel, style: const TextStyle(fontSize: 11, color: AppTheme.textSub)),
-          ]),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: _triggeredSpot != null
+                        ? AppTheme.success
+                        : AppTheme.darkBlue,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                modeLabel,
+                style: const TextStyle(fontSize: 11, color: AppTheme.textSub),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1893,22 +2169,36 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
           ),
-          child: Row(children: [
-            const Icon(Icons.check_circle, color: AppTheme.success, size: 22),
-            const SizedBox(width: 10),
-            Expanded(child: Text('已进入「$spot」范围，讲解已触发',
-                style: const TextStyle(fontWeight: FontWeight.w600, color: AppTheme.textMain, fontSize: 14))),
-            GestureDetector(
-              onTap: () {
-                _stopGuideSpeech();
-                setState(() {
-                  _triggeredSpot = null;
-                  _playing = false;
-                });
-              },
-              child: const Icon(Icons.close, size: 18, color: AppTheme.textSub),
-            ),
-          ]),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle, color: AppTheme.success, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '已进入「$spot」范围，讲解已触发',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textMain,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  _stopGuideSpeech();
+                  setState(() {
+                    _triggeredSpot = null;
+                    _playing = false;
+                  });
+                },
+                child: const Icon(
+                  Icons.close,
+                  size: 18,
+                  color: AppTheme.textSub,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1931,36 +2221,66 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             color: Colors.white.withValues(alpha: 0.86),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.primary.withValues(alpha: 0.28)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12)],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 12,
+              ),
+            ],
           ),
-          child: Row(children: [
-            Icon(ready ? Icons.play_circle_outline : Icons.hourglass_top_rounded,
-                color: ready ? AppTheme.success : AppTheme.primary, size: 24),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('靠近「$spot」',
-                    style: const TextStyle(fontWeight: FontWeight.w800, color: AppTheme.textMain, fontSize: 14)),
-                const SizedBox(height: 3),
-                Text(subtitle, style: const TextStyle(color: AppTheme.textSub, fontSize: 12, height: 1.35)),
-              ]),
-            ),
-            TextButton(
-              onPressed: () {
-                _cancelDwellTimer();
-                setState(() {
-                  _pendingSpot = null;
-                  _triggerNotice = '';
-                });
-              },
-              child: const Text('稍后'),
-            ),
-            FilledButton(
-              onPressed: ready ? () => _triggerGuide(spot, distance: _pendingDistance) : null,
-              style: FilledButton.styleFrom(backgroundColor: AppTheme.primary),
-              child: const Text('播放'),
-            ),
-          ]),
+          child: Row(
+            children: [
+              Icon(
+                ready ? Icons.play_circle_outline : Icons.hourglass_top_rounded,
+                color: ready ? AppTheme.success : AppTheme.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '靠近「$spot」',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.textMain,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: AppTheme.textSub,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  _cancelDwellTimer();
+                  setState(() {
+                    _pendingSpot = null;
+                    _triggerNotice = '';
+                  });
+                },
+                child: const Text('稍后'),
+              ),
+              FilledButton(
+                onPressed: ready
+                    ? () => _triggerGuide(spot, distance: _pendingDistance)
+                    : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                ),
+                child: const Text('播放'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1970,115 +2290,127 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     if (!expanded) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 10),
-      child: Column(children: [
-        _optionRow([
-          _optionMenu(
-            icon: Icons.person_outline,
-            value: _persona,
-            items: const {'新生': '新生', '校友': '校友', '游客': '游客'},
-            onChanged: (value) {
-              setState(() => _persona = value);
-              _fetchGuideContent(spot);
-            },
-          ),
-          _optionMenu(
-            icon: Icons.translate,
-            value: _languageLabel(_language),
-            items: const {'zh': '中文', 'en': 'EN', 'ja': '日本語', 'fr': 'FR', 'ko': '한국어'},
-            onChanged: (value) {
-              setState(() => _language = value);
-              _fetchGuideContent(spot);
-            },
-          ),
-        ]),
-        const SizedBox(height: 8),
-        _optionRow([
-          _optionMenu(
-            icon: Icons.record_voice_over_outlined,
-            value: _voiceLabel(_voice),
-            items: const {
-              'gentle_guide': '温柔导游',
-              'young_female': '青年女声',
-              'young_male': '青年男声',
-            },
-            onChanged: (value) {
-              setState(() => _voice = value);
-              if (_playing) {
-                _playGuide(spot);
-              }
-            },
-          ),
-          _optionMenu(
-            icon: Icons.tune_rounded,
-            value: _guideModeLabel(_guideMode),
-            items: const {
-              'standard': '标准讲解',
-              'deep': '深度讲解',
-              'story': '趣味故事',
-              'practical': '实用信息',
-            },
-            onChanged: (value) {
-              setState(() => _guideMode = value);
-              _fetchGuideContent(spot);
-            },
-          ),
-        ]),
-        const SizedBox(height: 8),
-        _optionRow([
-          _optionMenu(
-            icon: Icons.speed_rounded,
-            value: '${_speechRate.toStringAsFixed(_speechRate == 1.0 ? 0 : 2)}x',
-            items: const {'0.8': '0.8x', '1.0': '1.0x', '1.25': '1.25x'},
-            onChanged: (value) {
-              setState(() => _speechRate = double.tryParse(value) ?? 1.0);
-              if (_playing) _playGuide(spot);
-            },
-          ),
-          _actionChip(
-            icon: Icons.flag_outlined,
-            label: _checkingIn ? '打卡中' : '打卡',
-            onTap: _checkingIn ? null : () => _autoCheckin(spot, manual: true),
-          ),
-        ]),
-        const SizedBox(height: 8),
-        _optionRow([
-          _actionChip(
-            icon: Icons.more_time_rounded,
-            label: '讲详细点',
-            onTap: () {
-              setState(() => _guideMode = 'deep');
-              _fetchGuideContent(spot);
-            },
-          ),
-          _actionChip(
-            icon: Icons.swap_calls_rounded,
-            label: '换个角度',
-            onTap: () {
-              setState(() {
-                _guideMode = _persona == '新生' ? 'practical' : 'standard';
-                _persona = _persona == '游客' ? '校友' : '游客';
-              });
-              _fetchGuideContent(spot);
-            },
-          ),
-        ]),
-        const SizedBox(height: 8),
-        _optionRow([
-          _actionChip(
-            icon: Icons.theater_comedy_outlined,
-            label: '讲个故事',
-            onTap: () {
-              setState(() => _guideMode = 'story');
-              _fetchGuideContent(spot);
-            },
-          ),
-          _actionChip(
-            icon: Icons.auto_stories_outlined,
-            label: _loadingStory ? '加载中' : '校园故事',
-            onTap: _loadingStory ? null : () => _openStoryDialog(spot),
-          ),
-        ]),
-      ]),
+      child: Column(
+        children: [
+          _optionRow([
+            _optionMenu(
+              icon: Icons.person_outline,
+              value: _persona,
+              items: const {'新生': '新生', '校友': '校友', '游客': '游客'},
+              onChanged: (value) {
+                setState(() => _persona = value);
+                _fetchGuideContent(spot);
+              },
+            ),
+            _optionMenu(
+              icon: Icons.translate,
+              value: _languageLabel(_language),
+              items: const {
+                'zh': '中文',
+                'en': 'EN',
+                'ja': '日本語',
+                'fr': 'FR',
+                'ko': '한국어',
+              },
+              onChanged: (value) {
+                setState(() => _language = value);
+                _fetchGuideContent(spot);
+              },
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _optionRow([
+            _optionMenu(
+              icon: Icons.record_voice_over_outlined,
+              value: _voiceLabel(_voice),
+              items: const {
+                'gentle_guide': '阳光女声',
+                'young_female': '温柔女声',
+                'young_male': '朝气男声',
+                'calm_male': '京腔男声',
+              },
+              onChanged: (value) {
+                setState(() => _voice = value);
+                if (_playing) {
+                  _playGuide(spot);
+                }
+              },
+            ),
+            _optionMenu(
+              icon: Icons.tune_rounded,
+              value: _guideModeLabel(_guideMode),
+              items: const {
+                'standard': '标准讲解',
+                'deep': '深度讲解',
+                'story': '趣味故事',
+                'practical': '实用信息',
+              },
+              onChanged: (value) {
+                setState(() => _guideMode = value);
+                _fetchGuideContent(spot);
+              },
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _optionRow([
+            _optionMenu(
+              icon: Icons.speed_rounded,
+              value:
+                  '${_speechRate.toStringAsFixed(_speechRate == 1.0 ? 0 : 2)}x',
+              items: const {'0.8': '0.8x', '1.0': '1.0x', '1.25': '1.25x'},
+              onChanged: (value) {
+                setState(() => _speechRate = double.tryParse(value) ?? 1.0);
+                if (_playing) _playGuide(spot);
+              },
+            ),
+            _actionChip(
+              icon: Icons.flag_outlined,
+              label: _checkingIn ? '打卡中' : '打卡',
+              onTap: _checkingIn
+                  ? null
+                  : () => _autoCheckin(spot, manual: true),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _optionRow([
+            _actionChip(
+              icon: Icons.more_time_rounded,
+              label: '讲详细点',
+              onTap: () {
+                setState(() => _guideMode = 'deep');
+                _fetchGuideContent(spot);
+              },
+            ),
+            _actionChip(
+              icon: Icons.swap_calls_rounded,
+              label: '换个角度',
+              onTap: () {
+                setState(() {
+                  _guideMode = _persona == '新生' ? 'practical' : 'standard';
+                  _persona = _persona == '游客' ? '校友' : '游客';
+                });
+                _fetchGuideContent(spot);
+              },
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _optionRow([
+            _actionChip(
+              icon: Icons.theater_comedy_outlined,
+              label: '讲个故事',
+              onTap: () {
+                setState(() => _guideMode = 'story');
+                _fetchGuideContent(spot);
+              },
+            ),
+            _actionChip(
+              icon: Icons.auto_stories_outlined,
+              label: _loadingStory ? '加载中' : '校园故事',
+              onTap: _loadingStory ? null : () => _openStoryDialog(spot),
+            ),
+          ]),
+        ],
+      ),
     );
   }
 
@@ -2103,7 +2435,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       tooltip: value,
       onSelected: onChanged,
       itemBuilder: (context) => items.entries
-          .map((entry) => PopupMenuItem(value: entry.key, child: Text(entry.value)))
+          .map(
+            (entry) =>
+                PopupMenuItem(value: entry.key, child: Text(entry.value)),
+          )
           .toList(),
       child: Container(
         height: 32,
@@ -2114,18 +2449,25 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
         ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, size: 15, color: AppTheme.primary),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textMain),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: AppTheme.primary),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textMain,
+                ),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -2143,22 +2485,31 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: AppTheme.success.withValues(alpha: onTap == null ? 0.08 : 0.14),
+          color: AppTheme.success.withValues(
+            alpha: onTap == null ? 0.08 : 0.14,
+          ),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppTheme.success.withValues(alpha: 0.22)),
         ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, size: 15, color: AppTheme.success),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.textMain),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 15, color: AppTheme.success),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textMain,
+                ),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -2173,57 +2524,102 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppTheme.primary.withValues(alpha: 0.12)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.forum_outlined, size: 16, color: AppTheme.primary),
-          const SizedBox(width: 6),
-          const Text('历史互动评论', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textMain)),
-          const Spacer(),
-          if (_loadingComments)
-            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-        ]),
-        const SizedBox(height: 8),
-        if (recent.isEmpty)
-          const Text('还没有审核通过的评论，来留下第一段校园记忆吧。', style: TextStyle(fontSize: 12, color: AppTheme.textSub, height: 1.5))
-        else
-          ...recent.map((item) => Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text('"${item['content'] ?? ''}"', style: const TextStyle(fontSize: 12, color: AppTheme.textMain, height: 1.45)),
-          )),
-        Row(children: [
-          Expanded(
-            child: TextField(
-              controller: _commentController,
-              minLines: 1,
-              maxLines: 2,
-              decoration: InputDecoration(
-                hintText: '写下你的校园感想',
-                isDense: true,
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.72),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.forum_outlined,
+                size: 16,
+                color: AppTheme.primary,
               ),
-              style: const TextStyle(fontSize: 12),
+              const SizedBox(width: 6),
+              const Text(
+                '历史互动评论',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textMain,
+                ),
+              ),
+              const Spacer(),
+              if (_loadingComments)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (recent.isEmpty)
+            const Text(
+              '还没有审核通过的评论，来留下第一段校园记忆吧。',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSub,
+                height: 1.5,
+              ),
+            )
+          else
+            ...recent.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  '"${item['content'] ?? ''}"',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textMain,
+                    height: 1.45,
+                  ),
+                ),
+              ),
             ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _commentController,
+                  minLines: 1,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: '写下你的校园感想',
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.72),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 9,
+                    ),
+                  ),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: '提交评论',
+                onPressed: () => _submitComment(spot),
+                icon: const Icon(Icons.send_rounded),
+                color: AppTheme.primary,
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          IconButton(
-            tooltip: '提交评论',
-            onPressed: () => _submitComment(spot),
-            icon: const Icon(Icons.send_rounded),
-            color: AppTheme.primary,
-          ),
-        ]),
-      ]),
+        ],
+      ),
     );
   }
 
   String _voiceLabel(String voice) {
     return switch (voice) {
-      'young_male' => '青年男声',
-      'young_female' => '青年女声',
-      _ => '温柔导游',
+      'young_male' => '朝气男声',
+      'young_female' => '温柔女声',
+      'calm_male' => '京腔男声',
+      _ => '阳光女声',
     };
   }
 
@@ -2261,91 +2657,176 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.75),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 1.5),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 16)],
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.9),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 16,
+              ),
+            ],
           ),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              Container(
-                width: 46, height: 46,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                      colors: hasContent ? [AppTheme.primary, const Color(0xFF01306B)] : [const Color(0xFFB8C9E0), const Color(0xFF2A5794)]),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(hasContent ? Icons.volume_up : Icons.headphones, color: Colors.white, size: 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: hasContent
+                            ? [AppTheme.primary, const Color(0xFF01306B)]
+                            : [
+                                const Color(0xFFB8C9E0),
+                                const Color(0xFF2A5794),
+                              ],
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      hasContent ? Icons.volume_up : Icons.headphones,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          hasContent ? '正在讲解：$spot' : '等待选择地图地名...',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: AppTheme.textMain,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          hasContent
+                              ? (_playing ? 'AI语音讲解播放中' : '已暂停')
+                              : '点击高德地名或地图位置模拟移动',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: hasContent
+                                ? AppTheme.success
+                                : AppTheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: hasContent
+                        ? () {
+                            if (_playing) {
+                              _pauseGuide();
+                            } else {
+                              _playGuide(spot!);
+                            }
+                          }
+                        : null,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: hasContent
+                            ? (_playing ? AppTheme.warning : AppTheme.success)
+                            : AppTheme.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        hasContent
+                            ? (_playing
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded)
+                            : Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                  Text(hasContent ? '正在讲解：$spot' : '等待选择地图地名...',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppTheme.textMain)),
-                  const SizedBox(height: 3),
-                  Text(hasContent ? (_playing ? 'AI语音讲解播放中' : '已暂停') : '点击高德地名或地图位置模拟移动',
-                      style: TextStyle(fontSize: 11, color: hasContent ? AppTheme.success : AppTheme.primary)),
-                ]),
-              ),
-              GestureDetector(
-                onTap: hasContent
-                    ? () {
-                  if (_playing) {
-                    _pauseGuide();
-                  } else {
-                    _playGuide(spot!);
-                  }
-                }
-                    : null,
-                child: Container(
-                  padding: const EdgeInsets.all(10),
+              if (hasContent) _buildGuideOptions(spot, expanded),
+              if (hasContent)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  margin: const EdgeInsets.only(top: 10),
+                  height: textHeight,
                   decoration: BoxDecoration(
-                    color: hasContent ? (_playing ? AppTheme.warning : AppTheme.success) : AppTheme.primary,
-                    shape: BoxShape.circle,
+                    color: AppTheme.primary.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                      hasContent ? (_playing ? Icons.pause_rounded : Icons.play_arrow_rounded) : Icons.play_arrow_rounded,
-                      color: Colors.white, size: 18),
-                ),
-              ),
-            ]),
-            if (hasContent) _buildGuideOptions(spot, expanded),
-            if (hasContent)
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                margin: const EdgeInsets.only(top: 10),
-                height: textHeight,
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(expanded ? 14 : 10),
-                    child: _loadingGuide
-                        ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                        : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(_guideText.isNotEmpty ? _guideText : _getGuideText(spot),
-                          style: TextStyle(fontSize: expanded ? 14 : 13, color: AppTheme.textMain, height: 1.65)),
-                      if (_checkinNotice.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Row(children: [
-                          const Icon(Icons.verified_rounded, size: 16, color: AppTheme.success),
-                          const SizedBox(width: 6),
-                          Expanded(child: Text(_checkinNotice, style: const TextStyle(fontSize: 12, color: AppTheme.success, fontWeight: FontWeight.w700))),
-                        ]),
-                      ],
-                      if (expanded) ...[
-                        const SizedBox(height: 12),
-                        _buildCommentSection(spot),
-                        const SizedBox(height: 12),
-                        _buildFeedbackSection(spot),
-                      ],
-                    ]),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SingleChildScrollView(
+                      padding: EdgeInsets.all(expanded ? 14 : 10),
+                      child: _loadingGuide
+                          ? const Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _guideText.isNotEmpty
+                                      ? _guideText
+                                      : _getGuideText(spot),
+                                  style: TextStyle(
+                                    fontSize: expanded ? 14 : 13,
+                                    color: AppTheme.textMain,
+                                    height: 1.65,
+                                  ),
+                                ),
+                                if (_checkinNotice.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.verified_rounded,
+                                        size: 16,
+                                        color: AppTheme.success,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          _checkinNotice,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: AppTheme.success,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                if (expanded) ...[
+                                  const SizedBox(height: 12),
+                                  _buildCommentSection(spot),
+                                  const SizedBox(height: 12),
+                                  _buildFeedbackSection(spot),
+                                ],
+                              ],
+                            ),
+                    ),
                   ),
                 ),
-              ),
-          ]),
+            ],
+          ),
         ),
       ),
     );
@@ -2353,9 +2834,12 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   String _getGuideText(String spot) {
     const texts = {
-      '中心图书馆': '欢迎来到西南大学中心图书馆！这里是西南地区最大的高校图书馆之一，馆藏丰富，环境优雅。配备了阅览区、自习区、电子阅览室等多个功能区域，是同学们学习、研究的最佳场所。',
-      '第八教学楼': '您看到的是西南大学第八教学楼，是校园内最繁忙的教学楼之一。每天都有大量师生在这里上课、自习，充满了浓厚的学术氛围。配备了现代化的多媒体教室。',
-      '樟树林': '您已进入西南大学著名的樟树林！这片茂密的樟树林是校园内最具特色的自然景观。阳光透过枝叶洒下斑驳光影，是散步、晨读的绝佳去处，也是无数学子留下美好回忆的地方。',
+      '中心图书馆':
+          '欢迎来到西南大学中心图书馆！这里是西南地区最大的高校图书馆之一，馆藏丰富，环境优雅。配备了阅览区、自习区、电子阅览室等多个功能区域，是同学们学习、研究的最佳场所。',
+      '第八教学楼':
+          '您看到的是西南大学第八教学楼，是校园内最繁忙的教学楼之一。每天都有大量师生在这里上课、自习，充满了浓厚的学术氛围。配备了现代化的多媒体教室。',
+      '樟树林':
+          '您已进入西南大学著名的樟树林！这片茂密的樟树林是校园内最具特色的自然景观。阳光透过枝叶洒下斑驳光影，是散步、晨读的绝佳去处，也是无数学子留下美好回忆的地方。',
       '校史馆': '欢迎来到西南大学校史馆！这里记录着学校百余年的辉煌历程，从创立之初到如今的蓬勃发展，每一件展品都承载着西大人的记忆与荣光。',
       '行署楼': '行署楼是西南大学的标志性建筑之一，具有重要的历史价值和独特的建筑风格。它见证了学校的发展和变迁，是了解校园历史文化的必访之地。',
       '共青团花园': '共青团花园是校园内一处美丽的园林景观，四季花开，景色宜人。这里是同学们休闲放松、社团活动的好去处。',
@@ -2366,7 +2850,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       '中心体育馆': '中心体育馆是校园体育活动的核心场所，承办过多次大型体育赛事和校园活动，是西大学子挥洒汗水、展现青春活力的地方。',
       '田家炳教育书院': '田家炳教育书院是西南大学重要的教育基地，以著名慈善家田家炳先生命名，承载着教书育人的崇高使命。',
     };
-    return texts[spot] ?? '欢迎来到$spot！这里是西南大学校园内的重要地点。请跟随AI导游的讲解，慢慢探索这片美丽的校园，感受百年学府的深厚底蕴与独特魅力。';
+    return texts[spot] ??
+        '欢迎来到$spot！这里是西南大学校园内的重要地点。请跟随AI导游的讲解，慢慢探索这片美丽的校园，感受百年学府的深厚底蕴与独特魅力。';
   }
 }
 

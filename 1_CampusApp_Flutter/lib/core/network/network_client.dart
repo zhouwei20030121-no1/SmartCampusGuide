@@ -55,15 +55,13 @@ class NetworkClient {
         baseUrl: primaryUrl,
         connectTimeout: timeout,
         receiveTimeout: timeout,
-        headers: const {
-          'ngrok-skip-browser-warning': 'true',
-        },
+        headers: const {'ngrok-skip-browser-warning': 'true'},
       ),
     );
   }
 
   static final Dio dio = _createDio(baseUrl, const Duration(seconds: 15));
-  static final Dio aiDio = _createDio(aiBaseUrl, const Duration(seconds: 30));
+  static final Dio aiDio = _createDio(aiBaseUrl, const Duration(seconds: 90));
 
   static Future<Response<dynamic>> _requestWithFallback(
     Future<Response<dynamic>> Function(Dio client) action, {
@@ -97,7 +95,8 @@ class NetworkClient {
     Map<String, dynamic>? queryParameters,
   }) {
     return _requestWithFallback(
-      (client) => client.get(path, data: data, queryParameters: queryParameters),
+      (client) =>
+          client.get(path, data: data, queryParameters: queryParameters),
     );
   }
 
@@ -107,7 +106,8 @@ class NetworkClient {
     Map<String, dynamic>? queryParameters,
   }) {
     return _requestWithFallback(
-      (client) => client.post(path, data: data, queryParameters: queryParameters),
+      (client) =>
+          client.post(path, data: data, queryParameters: queryParameters),
     );
   }
 }

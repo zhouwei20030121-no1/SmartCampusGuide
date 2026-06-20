@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DEFAULT_DASHSCOPE_API_KEY = "sk-ws-H.RPIHMML.qwHX.MEUCIQC5elR9dl9vwW0nmoMQPL2WBECatb6FRkJ51l9x02p9JgIgQly6TpqRH0MprRxvZoP6Ggx8R3CvZmJtexmxgQ3YxQk"
+
 
 class Settings:
     PORT: int = int(os.getenv("AI_PORT", 5000))
@@ -20,6 +22,15 @@ class Settings:
     CHROMA_COLLECTION: str = os.getenv("CHROMA_COLLECTION", "smart_campus_knowledge")
     TTS_ACCESS_KEY: str = os.getenv("TTS_ACCESS_KEY", "")
     TTS_SECRET_KEY: str = os.getenv("TTS_SECRET_KEY", "")
+    DASHSCOPE_API_KEY: str = os.getenv(
+        "DASHSCOPE_API_KEY",
+        os.getenv("TTS_API_KEY", DEFAULT_DASHSCOPE_API_KEY),
+    )
+    TTS_MODEL: str = os.getenv("TTS_MODEL", "qwen-tts-latest")
+    TTS_BASE_URL: str = os.getenv(
+        "TTS_BASE_URL",
+        "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    )
 
 
 settings = Settings()

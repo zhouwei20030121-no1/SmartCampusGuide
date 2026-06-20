@@ -26,6 +26,7 @@ dependencies:
   carousel_slider: ^5.1.2       # 高清图片轮播图
   video_player: ^2.8.2          # 核心视频播放能力
   chewie: ^1.7.5                # 封装好的视频播放器UI控制栏
+  audioplayers: ^6.1.0          # 云端 TTS 音频播放
 
   flutter_pdfview: ^1.3.2
   path_provider: ^2.1.3
