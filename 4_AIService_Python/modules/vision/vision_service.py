@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import logging
+import math
 from pathlib import Path
 import time
 from typing import Any
@@ -12,9 +13,11 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 audit_logger = logging.getLogger("vision_debug")
+trace_logger = logging.getLogger("vision_vector_trace")
 
 _AI_SERVICE_ROOT = Path(__file__).resolve().parents[2]
 _VISION_DEBUG_LOG = _AI_SERVICE_ROOT / "vision_debug.log"
+_VISION_VECTOR_TRACE_LOG = _AI_SERVICE_ROOT / "vision_vector_trace.jsonl"
 
 if not audit_logger.handlers:
     _VISION_DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -23,6 +26,14 @@ if not audit_logger.handlers:
     audit_logger.addHandler(handler)
     audit_logger.setLevel(logging.INFO)
     audit_logger.propagate = False
+
+if not trace_logger.handlers:
+    _VISION_VECTOR_TRACE_LOG.parent.mkdir(parents=True, exist_ok=True)
+    trace_handler = logging.FileHandler(_VISION_VECTOR_TRACE_LOG, encoding="utf-8")
+    trace_handler.setFormatter(logging.Formatter("%(message)s"))
+    trace_logger.addHandler(trace_handler)
+    trace_logger.setLevel(logging.INFO)
+    trace_logger.propagate = False
 
 
 _UNRECOGNIZED_RESULT = {
@@ -59,6 +70,39 @@ def _audit(request_id: str, event: str, **payload: Any) -> None:
         audit_logger.info(json.dumps(safe_payload, ensure_ascii=False, default=str))
     except Exception as exc:
         logger.warning("写入视觉识别调试日志失败: %s", exc)
+
+
+def _trace(request_id: str, stage: str, **payload: Any) -> None:
+    """Write JSONL evidence for CLIP vector search, Qwen review, and RAG verification."""
+    safe_payload = {
+        "request_id": request_id,
+        "stage": stage,
+        "timestamp_ms": int(time.time() * 1000),
+        **payload,
+    }
+    try:
+        trace_logger.info(json.dumps(safe_payload, ensure_ascii=False, default=str))
+    except Exception as exc:
+        logger.warning("写入视觉向量追踪日志失败: %s", exc)
+
+
+def _vector_summary(vector: list[float], sample_size: int = 16) -> dict[str, Any]:
+    """Summarize a high-dimensional vector without flooding logs with hundreds of values."""
+    if not vector:
+        return {"dim": 0}
+    values = [float(value) for value in vector]
+    vector_hash = hashlib.sha256(
+        json.dumps([round(value, 8) for value in values], separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:16]
+    return {
+        "dim": len(values),
+        "norm": round(math.sqrt(sum(value * value for value in values)), 6),
+        "mean": round(sum(values) / len(values), 6),
+        "min": round(min(values), 6),
+        "max": round(max(values), 6),
+        "sample_first_16": [round(value, 6) for value in values[:sample_size]],
+        "sha256_16": vector_hash,
+    }
 
 
 def _normalize_image_base64(image_base64: str) -> str:
@@ -149,6 +193,17 @@ class VisionService:
             vision_base_url=self._base_url,
             has_api_key=bool(self._api_key),
         )
+        _trace(
+            request_id,
+            "pipeline_start",
+            pipeline=["image_decode", "clip_image_embedding", "clip_vector_search", "qwen_vl_review_if_needed", "rag_text_vector_verify"],
+            model=self._model,
+            clip_model="clip-ViT-B-32",
+            vector_backend="ChromaDB",
+            image_vector_collection="smart_campus_images",
+            text_vector_collection=settings.CHROMA_COLLECTION,
+            has_qwen_api_key=bool(self._api_key),
+        )
 
         try:
             image_bytes = base64.b64decode(image_base64, validate=True)
@@ -163,6 +218,15 @@ class VisionService:
                 "image_decoded",
                 byte_length=len(image_bytes),
                 sha256=image_sha,
+            )
+            _trace(
+                request_id,
+                "image_decoded",
+                image={
+                    "base64_length": len(image_base64),
+                    "byte_length": len(image_bytes),
+                    "sha256_16": image_sha,
+                },
             )
         except Exception as exc:
             _audit(request_id, "image_decode_failed", error=str(exc))
@@ -203,6 +267,21 @@ class VisionService:
                 
                 # 提取用户上传图片的视觉特征向量
                 img_embedding = self._clip_model.encode(img, normalize_embeddings=True).tolist()
+                clip_vector_summary = _vector_summary(img_embedding)
+                diagnostics.setdefault("clip", {})["query_embedding"] = clip_vector_summary
+                _trace(
+                    request_id,
+                    "clip_image_embedding",
+                    model="clip-ViT-B-32",
+                    normalized=True,
+                    image={
+                        "width": img.width,
+                        "height": img.height,
+                        "mode": img.mode,
+                        "sha256_16": diagnostics.get("image", {}).get("sha256"),
+                    },
+                    query_embedding=clip_vector_summary,
+                )
                 
                 # 在 ChromaDB 中进行视觉相似度检索
                 results = self._image_collection.query(
@@ -224,6 +303,7 @@ class VisionService:
                         "review_threshold": _CLIP_REVIEW_THRESHOLD,
                         "auto_accept_threshold": _CLIP_AUTO_ACCEPT_THRESHOLD,
                         "auto_accept_margin": _CLIP_AUTO_ACCEPT_MARGIN,
+                        "query_embedding": clip_vector_summary,
                         "top_candidates": visual_candidates,
                     }
                     dist = results['distances'][0][0]
@@ -250,6 +330,29 @@ class VisionService:
                         review_threshold=_CLIP_REVIEW_THRESHOLD,
                         auto_accept_threshold=_CLIP_AUTO_ACCEPT_THRESHOLD,
                         auto_accept_margin=_CLIP_AUTO_ACCEPT_MARGIN,
+                    )
+                    _trace(
+                        request_id,
+                        "clip_vector_search",
+                        collection="smart_campus_images",
+                        top_k=5,
+                        metric_note="ChromaDB distance; lower distance means more similar",
+                        query_embedding=clip_vector_summary,
+                        candidates=[
+                            {
+                                "rank": idx + 1,
+                                **candidate,
+                            }
+                            for idx, candidate in enumerate(visual_candidates)
+                        ],
+                        top1_distance=round(float(dist), 6),
+                        second_distance=round(float(second_dist), 6) if second_dist is not None else None,
+                        margin=round(margin, 6) if margin is not None else None,
+                        thresholds={
+                            "review_threshold": _CLIP_REVIEW_THRESHOLD,
+                            "auto_accept_threshold": _CLIP_AUTO_ACCEPT_THRESHOLD,
+                            "auto_accept_margin": _CLIP_AUTO_ACCEPT_MARGIN,
+                        },
                     )
                     
                     auto_accept = (
@@ -301,6 +404,19 @@ class VisionService:
                             "clip_match",
                             elapsed_ms=round((time.perf_counter() - started_at) * 1000, 2),
                             result=result,
+                        )
+                        _trace(
+                            request_id,
+                            "decision",
+                            source="clip",
+                            accepted=True,
+                            reason=diagnostics["decision"],
+                            result={
+                                "recognized": result["recognized"],
+                                "building_name": result["building_name"],
+                                "match_source": result["match_source"],
+                                "clip_top1_distance": result["clip_top1_distance"],
+                            },
                         )
                         _audit(
                             request_id,
@@ -485,6 +601,20 @@ class VisionService:
             prompt_chars=len(prompt_text),
             max_tokens=500,
         )
+        _trace(
+            request_id,
+            "qwen_request",
+            model=self._model,
+            input_evidence={
+                "visual_candidate_count": len(visual_candidates or []),
+                "visual_candidates": visual_candidates or [],
+                "candidate_library_in_prompt": bool(candidates_str),
+                "prompt_chars": len(prompt_text),
+                "prompt_sha256_16": hashlib.sha256(prompt_text.encode("utf-8")).hexdigest()[:16],
+                "max_tokens": 500,
+            },
+            note="Qwen-VL receives the original image plus CLIP TopK candidates and must return JSON.",
+        )
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{self._base_url}/chat/completions",
@@ -521,6 +651,13 @@ class VisionService:
             data = resp.json()
             text = data["choices"][0]["message"]["content"].strip()
             _audit(request_id, "qwen_raw_output", raw_text=text)
+            _trace(
+                request_id,
+                "qwen_response",
+                status_code=resp.status_code,
+                response_chars=len(resp.text),
+                raw_output=text,
+            )
             qwen_debug: dict[str, Any] = {
                 "qwen": {
                     "called": True,
@@ -547,6 +684,14 @@ class VisionService:
                 evidence = result.get("evidence", "")
                 description = result.get("description", text)
                 _audit(
+                    request_id,
+                    "qwen_parsed_json",
+                    building_name=b_name,
+                    visible_text=visible_text,
+                    evidence=evidence,
+                    description=description,
+                )
+                _trace(
                     request_id,
                     "qwen_parsed_json",
                     building_name=b_name,
@@ -587,6 +732,12 @@ class VisionService:
                 b_name = self._extract_building_name(text)
                 description = text
                 _audit(
+                    request_id,
+                    "qwen_json_parse_failed",
+                    extracted_building_name=b_name,
+                    raw_text=text,
+                )
+                _trace(
                     request_id,
                     "qwen_json_parse_failed",
                     extracted_building_name=b_name,
@@ -669,6 +820,19 @@ class VisionService:
                 raw_building_name=building_name,
                 normalized_name=normalized_name,
             )
+            _trace(
+                request_id,
+                "decision",
+                source="qwen_vl_plus_rag",
+                accepted=False,
+                reason=debug_info["reason"],
+                result={
+                    "recognized": False,
+                    "raw_building_name": building_name,
+                    "normalized_name": normalized_name,
+                    "reject_stage": "name_guard",
+                },
+            )
             return (
                 "未能识别",
                 _UNRECOGNIZED_RESULT["description"],
@@ -677,7 +841,11 @@ class VisionService:
             )
         try:
             from modules.rag.vector_store import vector_store
-            search_results = vector_store.search(normalized_name, top_k=1, threshold=0.4)
+            search_results, rag_trace = vector_store.search_with_trace(
+                normalized_name,
+                top_k=5,
+                threshold=0.4,
+            )
             debug_info["rag_results"] = search_results[:1]
             _audit(
                 request_id,
@@ -685,6 +853,13 @@ class VisionService:
                 query=normalized_name,
                 result_count=len(search_results or []),
                 top_result=search_results[0] if search_results else None,
+            )
+            _trace(
+                request_id,
+                "rag_text_vector_search",
+                query=normalized_name,
+                trace=rag_trace,
+                accepted_top_result=search_results[0] if search_results else None,
             )
             if search_results:
                 verified_name = search_results[0].get("title", building_name)
@@ -699,6 +874,19 @@ class VisionService:
                         "verify_rejected_by_denylist",
                         raw_building_name=building_name,
                         verified_name=verified_name,
+                    )
+                    _trace(
+                        request_id,
+                        "decision",
+                        source="qwen_vl_plus_rag",
+                        accepted=False,
+                        reason=debug_info["reason"],
+                        result={
+                            "recognized": False,
+                            "raw_building_name": building_name,
+                            "verified_name": verified_name,
+                            "reject_stage": "denylist",
+                        },
                     )
                     return (
                         "未能识别",
@@ -721,6 +909,19 @@ class VisionService:
                     raw_building_name=building_name,
                     verified_name=verified_name,
                 )
+                _trace(
+                    request_id,
+                    "decision",
+                    source="qwen_vl_plus_rag",
+                    accepted=True,
+                    reason=debug_info["reason"],
+                    result={
+                        "recognized": True,
+                        "raw_building_name": building_name,
+                        "verified_name": verified_name,
+                        "rag_score": search_results[0].get("score"),
+                    },
+                )
                 return verified_name, verified_desc, True, debug_info
         except Exception as e:
             logger.warning("检索视觉 RAG 验证失败: %s", e)
@@ -730,6 +931,20 @@ class VisionService:
                 "reason": f"RAG 校验异常：{e}",
             })
             _audit(request_id, "verify_error", error=str(e))
+            _trace(
+                request_id,
+                "decision",
+                source="qwen_vl_plus_rag",
+                accepted=False,
+                reason=debug_info["reason"],
+                result={
+                    "recognized": False,
+                    "raw_building_name": building_name,
+                    "normalized_name": normalized_name,
+                    "reject_stage": "rag_error",
+                    "error": str(e),
+                },
+            )
             return (
                 "未能识别",
                 _UNRECOGNIZED_RESULT["description"],
@@ -745,6 +960,18 @@ class VisionService:
             "verify_rejected_no_rag_match",
             raw_building_name=building_name,
             normalized_name=normalized_name,
+        )
+        _trace(
+            request_id,
+            "decision",
+            source="qwen_vl_plus_rag",
+            accepted=False,
+            reason=debug_info["reason"],
+            result={
+                "recognized": False,
+                "raw_building_name": building_name,
+                "normalized_name": normalized_name,
+            },
         )
         return (
             "未能识别",

@@ -28,6 +28,7 @@ class _ChatPageState extends State<ChatPage> {
   List<SpotModel> _spots = [];
   String _routeStatus = '暂无路线';
   String _persona = '新生';
+  _RouteTarget? _focusedRouteTarget;
   final _messages = <_ChatMsg>[
     const _ChatMsg(
       text: '你好，我是西小导。你可以问我校园建筑、路线、校史文化或参观建议，我会结合上下文连续回答。',
@@ -72,6 +73,7 @@ class _ChatPageState extends State<ChatPage> {
 
   Future<void> _sendText(String text) async {
     if (text.isEmpty || _sending) return;
+    final mentionedTarget = _extractMentionedRouteTarget(text);
 
     final routeResponse = _buildRouteAgentResponse(text);
     if (routeResponse != null) {
@@ -85,8 +87,11 @@ class _ChatPageState extends State<ChatPage> {
           ),
         );
         if (routeResponse.plan != null) {
+          _focusedRouteTarget = routeResponse.plan!.destination;
           _routeStatus =
               '${routeResponse.plan!.startLabel} -> ${routeResponse.plan!.destination.destination}';
+        } else if (mentionedTarget != null) {
+          _focusedRouteTarget = mentionedTarget;
         }
       });
       _msgCtrl.clear();
@@ -133,6 +138,11 @@ class _ChatPageState extends State<ChatPage> {
             model: result.model,
           ),
         );
+        _focusedRouteTarget =
+            _routeTargetFromSources(result.sources) ??
+            _extractMentionedRouteTarget('$text\n${result.reply}') ??
+            mentionedTarget ??
+            _focusedRouteTarget;
         _sending = false;
       });
     } on ChatApiException catch (e) {
@@ -320,6 +330,12 @@ class _ChatPageState extends State<ChatPage> {
       destination = fromToMatch.group(1) ?? '';
     }
     if (destination.isEmpty) {
+      final directGoMatch = RegExp(
+        r'^(?:我想|我要|我准备|我打算|帮我|请|麻烦你)?(?:去|到|前往|导航到|带我去)(.+?)[？?。！!，,、\s]*$',
+      ).firstMatch(cleaned);
+      destination = directGoMatch?.group(1) ?? '';
+    }
+    if (destination.isEmpty) {
       for (final word in [
         '导航到',
         '带我去',
@@ -402,21 +418,115 @@ class _ChatPageState extends State<ChatPage> {
 
   String? _extractDestinationText(String text) {
     final fromTo = RegExp(r'从.+?到(.+?)(，|,|。|顺便|$)').firstMatch(text);
-    if (fromTo != null) return _cleanDestination(fromTo.group(1) ?? '');
+    if (fromTo != null) {
+      return _resolveContextualDestination(
+        _cleanDestination(fromTo.group(1) ?? ''),
+      );
+    }
+
+    final directGo = RegExp(
+      r'^(?:我想|我要|我准备|我打算|帮我|请|麻烦你)?(?:去|到|前往|导航到|带我去)(.+?)(，|,|。|顺便|$)',
+    ).firstMatch(text);
+    if (directGo != null) {
+      return _resolveContextualDestination(
+        _cleanDestination(directGo.group(1) ?? ''),
+      );
+    }
 
     final wantTo = RegExp(r'想去(.+?)(，|,|。|顺便|$)').firstMatch(text);
-    if (wantTo != null) return _cleanDestination(wantTo.group(1) ?? '');
+    if (wantTo != null) {
+      return _resolveContextualDestination(
+        _cleanDestination(wantTo.group(1) ?? ''),
+      );
+    }
 
     final routeTarget = _extractRouteTarget(text);
-    return routeTarget?.destination;
+    return _resolveContextualDestination(routeTarget?.destination ?? '');
   }
 
   String _cleanDestination(String value) {
     return value
-        .replaceAll(RegExp(r'(怎么走|怎么去|如何去|如何到|路线|导航|看看.*)$'), '')
+        .replaceAll(RegExp(r'(怎么走|怎么去|如何去|如何到|路线|导航|看看.*|吧|一下)$'), '')
         .replaceAll(RegExp(r'^[去到]'), '')
         .replaceAll(RegExp(r'[？?。！!，,、\s]+$'), '')
         .trim();
+  }
+
+  String? _resolveContextualDestination(String destination) {
+    final cleaned = _cleanDestination(destination);
+    if (cleaned.isEmpty) return null;
+    if (_isContextReference(cleaned)) {
+      return _focusedRouteTarget?.destination;
+    }
+    return cleaned;
+  }
+
+  bool _isContextReference(String value) {
+    final normalized = _normalizeRouteAlias(
+      value,
+    ).replaceAll('目标', '').replaceAll('目的地', '').replaceAll('位置', '');
+    const references = {
+      '这个地方',
+      '这个地点',
+      '这个楼',
+      '这栋楼',
+      '这',
+      '这个',
+      '这里',
+      '这儿',
+      '此处',
+      '那',
+      '那个',
+      '那里',
+      '那儿',
+      '那个地方',
+      '那个地点',
+      '它',
+      '他',
+      '她',
+    };
+    return references.contains(normalized);
+  }
+
+  _RouteTarget? _extractMentionedRouteTarget(String text) {
+    final candidates = <_RouteTarget>[];
+    final normalizedText = _normalizeRouteAlias(text);
+    for (final target in _knownRouteTargets) {
+      if (target.aliases.any((alias) {
+        final normalizedAlias = _normalizeRouteAlias(alias);
+        return normalizedAlias.isNotEmpty &&
+            normalizedText.contains(normalizedAlias);
+      })) {
+        candidates.add(target);
+      }
+    }
+
+    for (final spot in _spots) {
+      final name = _normalizeRouteAlias(spot.name);
+      if (name.isNotEmpty && normalizedText.contains(name)) {
+        candidates.add(
+          _RouteTarget(destination: spot.name, aliases: [spot.name]),
+        );
+      }
+    }
+
+    if (candidates.isEmpty) return null;
+    candidates.sort(
+      (a, b) => b.destination.length.compareTo(a.destination.length),
+    );
+    return candidates.first;
+  }
+
+  _RouteTarget? _routeTargetFromSources(List<String> sources) {
+    for (final source in sources) {
+      final text = source.trim();
+      if (text.isEmpty) {
+        continue;
+      }
+      final target = _extractMentionedRouteTarget(text);
+      if (target != null) return target;
+    }
+    return null;
   }
 
   List<SpotModel> _findCandidateSpots(String keyword) {
@@ -547,6 +657,41 @@ class _ChatPageState extends State<ChatPage> {
         .replaceAll('中心', '')
         .toLowerCase();
   }
+
+  List<_RouteTarget> get _knownRouteTargets => const [
+    _RouteTarget(
+      destination: '计算机与信息科学学院 软件学院',
+      aliases: [
+        '计算机与信息科学学院 软件学院',
+        '计算机与信息科学学院',
+        '计算机学院',
+        '计信院',
+        '软件学院',
+        '明德楼',
+        '第25教学楼',
+        '二十五教',
+        '25教',
+        'jixinyuan',
+        'jxy',
+      ],
+    ),
+    _RouteTarget(
+      destination: '物理科学与技术学院',
+      aliases: ['物理科学与技术学院', '物理学院', '物院', '立惠楼', '第13教学楼', '第十三教学楼', '13教'],
+    ),
+    _RouteTarget(destination: '中心图书馆', aliases: ['中心图书馆', '图书馆', '图书馆中心馆']),
+    _RouteTarget(
+      destination: '学行门（2号门）',
+      aliases: ['学行门（2号门）', '学行门', '二号门', '2号门'],
+    ),
+    _RouteTarget(
+      destination: '橘园',
+      aliases: ['橘园', '桔园', '菊园', 'juyuan', 'jy'],
+    ),
+    _RouteTarget(destination: '杏园', aliases: ['杏园', 'xingyuan', 'xy']),
+    _RouteTarget(destination: '行署楼A栋', aliases: ['行署楼A栋', '行署楼A', '行署楼']),
+    _RouteTarget(destination: '袁隆平雕像', aliases: ['袁隆平雕像', '袁隆平像', '袁隆平']),
+  ];
 
   _RouteTarget? _normalizeRouteTarget(String destination) {
     if (destination.isEmpty) return null;
