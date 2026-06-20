@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/network/network_client.dart';
@@ -17,84 +19,77 @@ class _SearchPageState extends State<SearchPage> {
   final TextEditingController _ctrl = TextEditingController();
   final FocusNode _focus = FocusNode();
   String _query = '';
-  List<SpotModel> _spots = [];
+  Timer? _debounce;
   bool _loadingSpots = false;
+  List<SpotModel> _spotResults = [];
 
-  // 全站功能数据，keywords 字段用于模糊匹配
-  final List<Map<String, dynamic>> _functionData = [
-    {'title': '西小导 AI 对话', 'type': '功能', 'route': '/chat', 'desc': 'AI 虚拟导游，RAG 多轮问答', 'keywords': '西小导 AI 问答 聊天 RAG 导游 虚拟导游 智能体'},
-    {'title': 'AI 探校', 'type': '功能', 'route': '/ai_vision', 'desc': '拍下校园建筑获取详细介绍', 'keywords': 'AI 探校 识图 识别 建筑识别 相机 拍照 视觉'},
-    {'title': '智能讲解', 'type': '功能', 'route': '/guide', 'desc': '基于 LBS 的多语种语音讲解', 'keywords': '讲解 语音 TTS 多语种 播报'},
-    {'title': '路线规划', 'type': '功能', 'route': '/route', 'desc': '校园内智能导航与路线生成', 'keywords': '路线 规划 导航 寻路 步行'},
-    {'title': '景点打卡', 'type': '功能', 'route': '/checkin', 'desc': '点亮地图徽章，记录足迹', 'keywords': '打卡 徽章 足迹 成就'},
-    {'title': '校园地图', 'type': '功能', 'route': '/map', 'desc': '全局高德地图导览', 'keywords': '地图 导览 定位 GPS 高德'},
-    {'title': '校车时刻表', 'type': '服务', 'route': '/bus', 'desc': '查询校园小黄车发车时间', 'keywords': '校车 小黄车 时刻表 班车'},
+  static const Map<String, List<String>> _searchAliases = {
+    '计信院': ['计算机与信息科学学院 软件学院', '计算机与信息科学学院', '软件学院', '25教', '第25教学楼'],
+    '计算机学院': ['计算机与信息科学学院 软件学院', '计算机与信息科学学院', '软件学院'],
+    '二十五教': ['25教', '第25教学楼', '计算机与信息科学学院 软件学院'],
+    '电信院': ['电子信息工程学院', '博学楼', '明德楼'],
+    '数统院': ['数学与统计学院', '数学学院'],
+    '生科院': ['生命科学学院'],
+    '新传院': ['新闻传媒学院', '传媒学院'],
+  };
+
+  // 全站功能数据，景点数据从后端 /spot/list 动态搜索，避免只搜到写死的少数景点。
+  final List<Map<String, dynamic>> _featureData = [
+    {
+      'title': '西小导 AI 对话',
+      'type': '功能',
+      'route': '/chat',
+      'desc': 'AI 虚拟导游，RAG 多轮问答',
+      'keywords': '西小导 AI 问答 聊天 RAG 导游 虚拟导游 智能体',
+    },
+    {
+      'title': 'AI 探校',
+      'type': '功能',
+      'route': '/ai_vision',
+      'desc': '拍下校园建筑获取详细介绍',
+      'keywords': 'AI 探校 识图 识别 建筑识别 相机 拍照 视觉',
+    },
+    {
+      'title': '智能讲解',
+      'type': '功能',
+      'route': '/guide',
+      'desc': '基于 LBS 的多语种语音讲解',
+      'keywords': '讲解 语音 TTS 多语种 播报',
+    },
+    {
+      'title': '路线规划',
+      'type': '功能',
+      'route': '/route',
+      'desc': '校园内智能导航与路线生成',
+      'keywords': '路线 规划 导航 寻路 步行',
+    },
+    {
+      'title': '景点打卡',
+      'type': '功能',
+      'route': '/checkin',
+      'desc': '点亮地图徽章，记录足迹',
+      'keywords': '打卡 徽章 足迹 成就',
+    },
+    {
+      'title': '校园地图',
+      'type': '功能',
+      'route': '/map',
+      'desc': '全局高德地图导览',
+      'keywords': '地图 导览 定位 GPS 高德',
+    },
+    {
+      'title': '校车时刻表',
+      'type': '服务',
+      'route': '/bus',
+      'desc': '查询校园小黄车发车时间',
+      'keywords': '校车 小黄车 时刻表 班车',
+    },
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _loadSpots();
-  }
-
-  Future<void> _loadSpots() async {
-    if (_loadingSpots) return;
-    setState(() => _loadingSpots = true);
-    try {
-      final cachedRecords = await CacheService.getCachedSpots();
-      if (cachedRecords.isNotEmpty && mounted) {
-        setState(() {
-          _spots = cachedRecords
-              .map((e) => SpotModel.fromJson(e))
-              .where((spot) => spot.latitude != 0 && spot.longitude != 0)
-              .toList();
-        });
-      }
-
-      try {
-        final res = await NetworkClient.get('/spot/list', queryParameters: {
-          'page': 1,
-          'size': 1000,
-        });
-        final data = res.data['data'];
-        final records = data is Map ? data['records'] : data;
-        if (records is List && mounted) {
-          setState(() {
-            _spots = records
-                .whereType<Map>()
-                .map((e) => SpotModel.fromJson(Map<String, dynamic>.from(e)))
-                .where((spot) => spot.latitude != 0 && spot.longitude != 0)
-                .toList();
-          });
-          await CacheService.preloadSpots();
-        }
-      } catch (e) {
-        debugPrint('搜索页在线加载失败，使用离线缓存: $e');
-      }
-    } catch (e) {
-      debugPrint('搜索页加载地点失败: $e');
-    } finally {
-      if (mounted) setState(() => _loadingSpots = false);
-    }
-  }
-
-  List<Map<String, dynamic>> get _allData {
-    final spotData = _spots.map((spot) {
-      return {
-        'title': spot.name,
-        'type': '景点',
-        'desc': spot.description,
-        'keywords': '${spot.name} ${spot.category} ${spot.description}',
-        'spot': spot,
-      };
-    });
-    return [..._functionData, ...spotData];
-  }
-
-  List<Map<String, dynamic>> get _results {
+  List<Map<String, dynamic>> get _featureResults {
     if (_query.trim().isEmpty) return [];
     final q = _query.toLowerCase();
-    return _allData.where((item) {
+    return _featureData.where((item) {
       final title = item['title']!.toString().toLowerCase();
       final desc = item['desc']!.toString().toLowerCase();
       final keywords = (item['keywords'] ?? '').toString().toLowerCase();
@@ -102,22 +97,163 @@ class _SearchPageState extends State<SearchPage> {
     }).toList();
   }
 
-  Future<List<Map<String, dynamic>>> _offlineSpotResults(String query) async {
-    final offlineSpots = await CacheService.searchSpotsOffline(query);
-    return offlineSpots.map((spot) {
-      return {
-        'title': spot.name,
-        'type': '景点',
-        'desc': spot.description,
-        'keywords': '${spot.name} ${spot.category} ${spot.description}',
-        'spot': spot,
-        'offline': true,
-      };
-    }).toList();
+  void _onQueryChanged(String value) {
+    final keyword = value.trim();
+    setState(() => _query = value);
+    _debounce?.cancel();
+    if (keyword.isEmpty) {
+      setState(() {
+        _loadingSpots = false;
+        _spotResults = [];
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      _searchSpots(keyword);
+    });
+  }
+
+  Future<void> _searchSpots(String keyword) async {
+    if (!mounted) return;
+    setState(() => _loadingSpots = true);
+    try {
+      final terms = _expandSearchTerms(keyword);
+      final spots = <SpotModel>[];
+      final seenSpotIds = <int>{};
+
+      for (final term in terms.take(4)) {
+        final termSpots = await _fetchSpotResults(term);
+        for (final spot in termSpots) {
+          if (seenSpotIds.add(spot.id)) spots.add(spot);
+        }
+        if (spots.length >= 8) break;
+      }
+
+      if (spots.length < 3) {
+        final knowledgeTerms = await _searchKnowledgeTerms(terms.join(' '));
+        for (final term in knowledgeTerms) {
+          if (terms.contains(term)) continue;
+          final termSpots = await _fetchSpotResults(term);
+          for (final spot in termSpots) {
+            if (seenSpotIds.add(spot.id)) spots.add(spot);
+          }
+          if (spots.length >= 10) break;
+        }
+      }
+
+      if (!mounted || _query.trim() != keyword) return;
+      setState(() {
+        _spotResults = spots;
+        _loadingSpots = false;
+      });
+    } catch (_) {
+      if (!mounted || _query.trim() != keyword) return;
+      setState(() {
+        _spotResults = [];
+        _loadingSpots = false;
+      });
+    }
+  }
+
+  Future<List<SpotModel>> _fetchSpotResults(String keyword) async {
+    final res = await NetworkClient.dio.get(
+      '/spot/list',
+      queryParameters: {'keyword': keyword, 'page': 1, 'size': 20},
+    );
+    final records = res.data['code'] == 200
+        ? (res.data['data']?['records'] as List? ?? const [])
+        : const [];
+    return records.map((e) => SpotModel.fromJson(e)).toList();
+  }
+
+  Future<List<SpotModel>> _offlineSpotResults(String query) async {
+    final spots = await CacheService.searchSpotsOffline(query);
+    return spots
+        .where((spot) => spot.latitude != 0 && spot.longitude != 0)
+        .toList();
+  }
+
+  List<String> _expandSearchTerms(String keyword) {
+    final compact = keyword.trim().replaceAll(RegExp(r'\s+'), '');
+    final terms = <String>[];
+    void add(String value) {
+      final term = value.trim();
+      if (term.isNotEmpty && !terms.contains(term)) terms.add(term);
+    }
+
+    add(keyword);
+    if (compact != keyword.trim()) add(compact);
+    for (final entry in _searchAliases.entries) {
+      final alias = entry.key;
+      final matchesAlias = alias.contains(compact) || compact.contains(alias);
+      final matchesValue = entry.value.any((value) {
+        final normalized = value.replaceAll(RegExp(r'\s+'), '');
+        return normalized.contains(compact) || compact.contains(normalized);
+      });
+      if (matchesAlias || matchesValue) {
+        for (final value in entry.value) {
+          add(value);
+        }
+      }
+    }
+    return terms;
+  }
+
+  Future<List<String>> _searchKnowledgeTerms(String query) async {
+    try {
+      final res = await NetworkClient.dio.get(
+        '/api/rag/search',
+        queryParameters: {'q': query, 'top_k': 5},
+      );
+      final docs = res.data['code'] == 200
+          ? (res.data['data'] as List? ?? const [])
+          : const [];
+      final terms = <String>[];
+      void add(String value) {
+        final term = value.trim();
+        if (term.length >= 2 && !terms.contains(term)) terms.add(term);
+      }
+
+      for (final doc in docs) {
+        if (doc is! Map) continue;
+        final title = doc['title']?.toString() ?? '';
+        add(title);
+        for (final part in title.split(RegExp(r'[\s/、，,]+'))) {
+          add(part);
+        }
+
+        final answer = doc['answer']?.toString() ?? '';
+        for (final building in _extractLocatedBuildings(answer)) {
+          add(building);
+          add(building.replaceAll(RegExp(r'[（(].*?[）)]'), ''));
+        }
+
+        final keywords = doc['keywords'];
+        if (keywords is List) {
+          for (final keyword in keywords.take(8)) {
+            add(keyword.toString());
+          }
+        }
+      }
+      return terms;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  List<String> _extractLocatedBuildings(String text) {
+    final match = RegExp(r'所在楼栋[:：]\s*([^\n]+)').firstMatch(text);
+    if (match == null) return const [];
+    return (match.group(1) ?? '')
+        .split(RegExp(r'[/、，,]| 或 | 和 '))
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _ctrl.dispose();
     _focus.dispose();
     super.dispose();
@@ -156,17 +292,22 @@ class _SearchPageState extends State<SearchPage> {
         focusNode: _focus,
         autofocus: true,
         textInputAction: TextInputAction.search,
-        onChanged: (v) => setState(() => _query = v),
+        onChanged: _onQueryChanged,
+        onSubmitted: (v) => _searchSpots(v.trim()),
         decoration: InputDecoration(
           hintText: '搜索校园功能或景点...',
           hintStyle: const TextStyle(color: Colors.black38, fontSize: 14),
           prefixIcon: const Icon(Icons.search, color: Colors.black38, size: 20),
           suffixIcon: _query.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.cancel, color: Colors.black26, size: 18),
+                  icon: const Icon(
+                    Icons.cancel,
+                    color: Colors.black26,
+                    size: 18,
+                  ),
                   onPressed: () {
                     _ctrl.clear();
-                    setState(() => _query = '');
+                    _onQueryChanged('');
                   },
                 )
               : null,
@@ -185,7 +326,11 @@ class _SearchPageState extends State<SearchPage> {
         children: [
           const Text(
             '常用功能',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppTheme.textMain),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textMain,
+            ),
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -209,6 +354,11 @@ class _SearchPageState extends State<SearchPage> {
     return GestureDetector(
       onTap: () {
         if (route.isNotEmpty) Navigator.pushNamed(context, route);
+        if (route.isEmpty) {
+          _ctrl.text = text;
+          _ctrl.selection = TextSelection.collapsed(offset: text.length);
+          _onQueryChanged(text);
+        }
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -217,72 +367,96 @@ class _SearchPageState extends State<SearchPage> {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        child: Text(text, style: const TextStyle(fontSize: 13, color: AppTheme.textSub)),
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 13, color: AppTheme.textSub),
+        ),
       ),
     );
   }
 
   Widget _buildResults() {
-    final res = _results;
-    if (res.isEmpty && _query.trim().isNotEmpty) {
-      return FutureBuilder<List<Map<String, dynamic>>>(
+    final featureResults = _featureResults;
+    final hasResults = featureResults.isNotEmpty || _spotResults.isNotEmpty;
+    if (!hasResults && !_loadingSpots) {
+      return FutureBuilder<List<SpotModel>>(
         future: _offlineSpotResults(_query),
         builder: (context, snapshot) {
-          final offline = snapshot.data ?? [];
-          if (offline.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.search_off_rounded,
-                      size: 64, color: Colors.grey.withValues(alpha: 0.3)),
-                  const SizedBox(height: 16),
-                  Text(
-                    _loadingSpots ? '正在加载校园地点...' : '暂无搜索结果',
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  if (!_loadingSpots)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8),
-                      child: Text(
-                        '弱网时可先在「离线地图数据」页下载缓存',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ),
-                ],
-              ),
+          final offlineSpots = snapshot.data ?? const <SpotModel>[];
+          if (offlineSpots.isNotEmpty) {
+            return ListView.separated(
+              itemCount: offlineSpots.length,
+              separatorBuilder: (context, index) =>
+                  const Divider(height: 1, indent: 16),
+              itemBuilder: (context, index) =>
+                  _spotTile(offlineSpots[index], offline: true),
             );
           }
-          return _buildResultList(offline, showOfflineBadge: true);
+
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.search_off_rounded,
+                  size: 64,
+                  color: Colors.grey.withValues(alpha: 0.3),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  snapshot.connectionState == ConnectionState.waiting
+                      ? '正在搜索景点...'
+                      : '暂无搜索结果',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                if (snapshot.connectionState != ConnectionState.waiting)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      '可尝试简称、拼音或相近读音',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ),
+              ],
+            ),
+          );
         },
       );
     }
-    if (res.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.search_off_rounded,
-                size: 64, color: Colors.grey.withValues(alpha: 0.3)),
-            const SizedBox(height: 16),
-            Text(
-              _loadingSpots ? '正在加载校园地点...' : '暂无搜索结果',
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-    return _buildResultList(res);
-  }
 
-  Widget _buildResultList(List<Map<String, dynamic>> items,
-      {bool showOfflineBadge = false}) {
     return ListView.separated(
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const Divider(height: 1, indent: 16),
+      itemCount:
+          featureResults.length + _spotResults.length + (_loadingSpots ? 1 : 0),
+      separatorBuilder: (context, index) =>
+          const Divider(height: 1, indent: 16),
       itemBuilder: (context, index) {
-        final item = items[index];
+        if (_loadingSpots && index == 0) {
+          return const ListTile(
+            leading: SizedBox(
+              width: 36,
+              height: 36,
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ),
+            title: Text(
+              '正在搜索景点...',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+          );
+        }
+
+        final effectiveIndex = index - (_loadingSpots ? 1 : 0);
+        if (effectiveIndex < _spotResults.length) {
+          final spot = _spotResults[effectiveIndex];
+          return _spotTile(spot);
+        }
+
+        final item = featureResults[effectiveIndex - _spotResults.length];
         IconData icon;
         Color color;
         if (item['type'] == '功能') {
@@ -305,46 +479,55 @@ class _SearchPageState extends State<SearchPage> {
             ),
             child: Icon(icon, color: color, size: 20),
           ),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(item['title']!,
-                    style: const TextStyle(fontWeight: FontWeight.w500)),
-              ),
-              if (showOfflineBadge || item['offline'] == true)
-                Container(
-                  margin: const EdgeInsets.only(left: 6),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    '离线',
-                    style: TextStyle(fontSize: 10, color: Colors.teal),
-                  ),
-                ),
-            ],
+          title: Text(
+            item['title']!,
+            style: const TextStyle(fontWeight: FontWeight.w500),
           ),
           subtitle: Text(item['desc']!, style: const TextStyle(fontSize: 12)),
-          trailing: const Icon(Icons.chevron_right_rounded, color: Colors.black26),
+          trailing: const Icon(
+            Icons.chevron_right_rounded,
+            color: Colors.black26,
+          ),
           onTap: () {
-            final spot = item['spot'];
-            if (spot is SpotModel) {
-              Navigator.pushNamed(
-                context,
-                AppRouter.map,
-                arguments: {'spotId': spot.id, 'spotName': spot.name},
-              );
-              return;
-            }
-
-            final route = item['route']?.toString() ?? '';
-            if (route.isNotEmpty) {
-              Navigator.pushNamed(context, route);
+            if (item['route']!.isNotEmpty) {
+              Navigator.pushNamed(context, item['route']!);
             }
           },
+        );
+      },
+    );
+  }
+
+  Widget _spotTile(SpotModel spot, {bool offline = false}) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(
+          Icons.account_balance_rounded,
+          color: Colors.orange,
+          size: 20,
+        ),
+      ),
+      title: Text(
+        spot.name,
+        style: const TextStyle(fontWeight: FontWeight.w500),
+      ),
+      subtitle: Text(
+        '${spot.category}${offline ? ' · 离线缓存' : ''} · ${spot.description}',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 12),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded, color: Colors.black26),
+      onTap: () {
+        Navigator.pushNamed(
+          context,
+          AppRouter.map,
+          arguments: {'spotId': spot.id, 'spotName': spot.name},
         );
       },
     );
