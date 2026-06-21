@@ -11,6 +11,9 @@ class LocationService extends ChangeNotifier {
   static const MethodChannel _locationChannel = MethodChannel(
     'smart_campus_guide/location',
   );
+  static const EventChannel _headingChannel = EventChannel(
+    'smart_campus_guide/heading',
+  );
 
   // 私有化构造函数，切断外部通过 () 创建独立新实例的途径
   LocationService._internal();
@@ -33,6 +36,8 @@ class LocationService extends ChangeNotifier {
   String _locationMode = 'simulation';
   double _speedMps = 0;
   double _accuracyMeters = -1;
+  double _headingDegrees = 0;
+  bool _headingAvailable = false;
   DateTime? _lastRealFixAt;
 
   // 手动操作标记位，防止定时器与地图手动点击发生冲突
@@ -40,6 +45,7 @@ class LocationService extends ChangeNotifier {
 
   Timer? _heartbeatTimer;
   Timer? _simulationTimer;
+  StreamSubscription<dynamic>? _headingSubscription;
   final List<_LocationSample> _recentSamples = [];
 
   double get latitude => _latitude;
@@ -54,6 +60,8 @@ class LocationService extends ChangeNotifier {
   String get locationMode => _locationMode;
   double get speedMps => _speedMps;
   double get accuracyMeters => _accuracyMeters;
+  double get headingDegrees => _headingDegrees;
+  bool get headingAvailable => _headingAvailable;
 
   // setter 统一走 updateLocation（内含 0.0 脏数据拦截 + 手动模式标记 + 即时距离同步）
   set latitude(double value) => updateLocation(value, _longitude);
@@ -65,6 +73,7 @@ class LocationService extends ChangeNotifier {
     _geoStatus = '定位中...';
     _isManualMode = false; // 启动时默认恢复为自动模拟行走模式
     notifyListeners();
+    _startHeadingUpdates();
 
     if (!_visitReported) {
       _visitReported = true;
@@ -93,7 +102,35 @@ class LocationService extends ChangeNotifier {
     _geoStatus = 'stopped';
     _simulationTimer?.cancel();
     _heartbeatTimer?.cancel();
+    await _headingSubscription?.cancel();
+    _headingSubscription = null;
     notifyListeners();
+  }
+
+  void _startHeadingUpdates() {
+    if (_headingSubscription != null) return;
+    _headingSubscription = _headingChannel.receiveBroadcastStream().listen(
+      (event) {
+        final heading = _readHeadingDegrees(event);
+        if (heading == null) return;
+        _headingDegrees = _normalizeDegrees(heading);
+        _headingAvailable = true;
+        notifyListeners();
+      },
+      onError: (_) {
+        // iOS 真机支持该通道；其他平台或模拟器缺传感器时静默回退到移动方向推算。
+      },
+      cancelOnError: false,
+    );
+  }
+
+  double? _readHeadingDegrees(dynamic event) {
+    if (event is num) return event.toDouble();
+    if (event is Map) {
+      final raw = event['heading'];
+      if (raw is num) return raw.toDouble();
+    }
+    return null;
   }
 
   void _simulateMove(Timer t) {
@@ -139,11 +176,18 @@ class LocationService extends ChangeNotifier {
 
       _speedMps = (result['speed'] as num?)?.toDouble() ?? 0;
       _accuracyMeters = (result['accuracy'] as num?)?.toDouble() ?? -1;
+      final heading = (result['heading'] as num?)?.toDouble();
       // GPS 返回 WGS-84，而高德底图/后端景点坐标是 GCJ-02，
       // 必须先转换，否则定位蓝点会与底图、景点偏移数百米。
       final gcj = _wgs84ToGcj02(lat, lng);
       // 多采样加权平滑，抑制 GPS 抖动
-      final smoothed = _smoothLocation(gcj[0], gcj[1], _speedMps, _accuracyMeters);
+      final smoothed = _smoothLocation(
+        gcj[0],
+        gcj[1],
+        _speedMps,
+        _accuracyMeters,
+      );
+      _updateHeading(heading, smoothed.latitude, smoothed.longitude);
       _latitude = smoothed.latitude;
       _longitude = smoothed.longitude;
       _realLocationAvailable = true;
@@ -177,6 +221,7 @@ class LocationService extends ChangeNotifier {
           'lat': _latitude,
           'speedMps': _speedMps,
           'accuracyMeters': _accuracyMeters,
+          'headingDegrees': _headingAvailable ? _headingDegrees : null,
           'locationMode': _locationMode,
           'lastFixAt': _lastRealFixAt?.toIso8601String(),
         },
@@ -253,6 +298,7 @@ class LocationService extends ChangeNotifier {
 
   void updateLocation(double lat, double lng) {
     if (lat == 0.0 || lng == 0.0) return; // 拦截模拟器 0.0 脏数据
+    _updateHeading(null, lat, lng);
     _latitude = lat;
     _longitude = lng;
     _isManualMode = true; // 标记为用户手动控点模式，暂停自动模拟
@@ -261,6 +307,41 @@ class LocationService extends ChangeNotifier {
     _accuracyMeters = 0;
     _simulateProximity(); // 立即触发一次本地距离检测，让首页和讲解页秒级同步
     notifyListeners();
+  }
+
+  void _updateHeading(double? sensorHeading, double nextLat, double nextLng) {
+    if (sensorHeading != null && sensorHeading.isFinite && sensorHeading >= 0) {
+      _headingDegrees = _normalizeDegrees(sensorHeading);
+      _headingAvailable = true;
+      return;
+    }
+
+    final movedMeters = _distanceMeters(
+      _latitude,
+      _longitude,
+      nextLat,
+      nextLng,
+    );
+    if (movedMeters < 1.5) return;
+    _headingDegrees = _bearingDegrees(_latitude, _longitude, nextLat, nextLng);
+    _headingAvailable = true;
+  }
+
+  double _bearingDegrees(double lat1, double lng1, double lat2, double lng2) {
+    final phi1 = lat1 * math.pi / 180;
+    final phi2 = lat2 * math.pi / 180;
+    final lambda1 = lng1 * math.pi / 180;
+    final lambda2 = lng2 * math.pi / 180;
+    final y = math.sin(lambda2 - lambda1) * math.cos(phi2);
+    final x =
+        math.cos(phi1) * math.sin(phi2) -
+        math.sin(phi1) * math.cos(phi2) * math.cos(lambda2 - lambda1);
+    return _normalizeDegrees(math.atan2(y, x) * 180 / math.pi);
+  }
+
+  double _normalizeDegrees(double degrees) {
+    final normalized = degrees % 360;
+    return normalized < 0 ? normalized + 360 : normalized;
   }
 
   _LocationSample _smoothLocation(
@@ -273,10 +354,16 @@ class LocationService extends ChangeNotifier {
     if (_recentSamples.isNotEmpty) {
       final last = _recentSamples.last;
       final seconds = math.max(1, now.difference(last.time).inSeconds);
-      final jumpMeters =
-          _distanceMeters(last.latitude, last.longitude, lat, lng);
-      final allowedJump =
-          math.max(45.0, (speedMps + 2.0) * seconds + math.max(accuracyMeters, 0));
+      final jumpMeters = _distanceMeters(
+        last.latitude,
+        last.longitude,
+        lat,
+        lng,
+      );
+      final allowedJump = math.max(
+        45.0,
+        (speedMps + 2.0) * seconds + math.max(accuracyMeters, 0),
+      );
       if (jumpMeters > allowedJump) {
         return last;
       }
@@ -296,22 +383,29 @@ class LocationService extends ChangeNotifier {
     var lngSum = 0.0;
     for (var i = 0; i < samples.length; i++) {
       final sample = samples[i];
-      final accuracyWeight =
-          sample.accuracyMeters <= 0 ? 1.0 : 1 / math.max(8.0, sample.accuracyMeters);
+      final accuracyWeight = sample.accuracyMeters <= 0
+          ? 1.0
+          : 1 / math.max(8.0, sample.accuracyMeters);
       final recencyWeight = 1.0 + i * 0.18;
       final weight = accuracyWeight * recencyWeight;
       weightSum += weight;
       latSum += sample.latitude * weight;
       lngSum += sample.longitude * weight;
     }
-    return _LocationSample(latSum / weightSum, lngSum / weightSum, accuracyMeters, now);
+    return _LocationSample(
+      latSum / weightSum,
+      lngSum / weightSum,
+      accuracyMeters,
+      now,
+    );
   }
 
   double _distanceMeters(double lat1, double lng1, double lat2, double lng2) {
     const r = 6371000.0;
     final dLat = (lat2 - lat1) * math.pi / 180;
     final dLng = (lng2 - lng1) * math.pi / 180;
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(lat1 * math.pi / 180) *
             math.cos(lat2 * math.pi / 180) *
             math.sin(dLng / 2) *
@@ -333,7 +427,8 @@ class LocationService extends ChangeNotifier {
     magic = 1 - _gcjEe * magic * magic;
     final sqrtMagic = math.sqrt(magic);
     dLat =
-        (dLat * 180.0) / ((_gcjA * (1 - _gcjEe)) / (magic * sqrtMagic) * math.pi);
+        (dLat * 180.0) /
+        ((_gcjA * (1 - _gcjEe)) / (magic * sqrtMagic) * math.pi);
     dLng = (dLng * 180.0) / (_gcjA / sqrtMagic * math.cos(radLat) * math.pi);
     return [lat + dLat, lng + dLng];
   }
@@ -343,19 +438,24 @@ class LocationService extends ChangeNotifier {
   }
 
   double _transformLat(double x, double y) {
-    var ret = -100.0 +
+    var ret =
+        -100.0 +
         2.0 * x +
         3.0 * y +
         0.2 * y * y +
         0.1 * x * y +
         0.2 * math.sqrt(x.abs());
-    ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) *
+    ret +=
+        (20.0 * math.sin(6.0 * x * math.pi) +
+            20.0 * math.sin(2.0 * x * math.pi)) *
         2.0 /
         3.0;
-    ret += (20.0 * math.sin(y * math.pi) + 40.0 * math.sin(y / 3.0 * math.pi)) *
+    ret +=
+        (20.0 * math.sin(y * math.pi) + 40.0 * math.sin(y / 3.0 * math.pi)) *
         2.0 /
         3.0;
-    ret += (160.0 * math.sin(y / 12.0 * math.pi) +
+    ret +=
+        (160.0 * math.sin(y / 12.0 * math.pi) +
             320 * math.sin(y * math.pi / 30.0)) *
         2.0 /
         3.0;
@@ -363,19 +463,24 @@ class LocationService extends ChangeNotifier {
   }
 
   double _transformLng(double x, double y) {
-    var ret = 300.0 +
+    var ret =
+        300.0 +
         x +
         2.0 * y +
         0.1 * x * x +
         0.1 * x * y +
         0.1 * math.sqrt(x.abs());
-    ret += (20.0 * math.sin(6.0 * x * math.pi) + 20.0 * math.sin(2.0 * x * math.pi)) *
+    ret +=
+        (20.0 * math.sin(6.0 * x * math.pi) +
+            20.0 * math.sin(2.0 * x * math.pi)) *
         2.0 /
         3.0;
-    ret += (20.0 * math.sin(x * math.pi) + 40.0 * math.sin(x / 3.0 * math.pi)) *
+    ret +=
+        (20.0 * math.sin(x * math.pi) + 40.0 * math.sin(x / 3.0 * math.pi)) *
         2.0 /
         3.0;
-    ret += (150.0 * math.sin(x / 12.0 * math.pi) +
+    ret +=
+        (150.0 * math.sin(x / 12.0 * math.pi) +
             300.0 * math.sin(x / 30.0 * math.pi)) *
         2.0 /
         3.0;

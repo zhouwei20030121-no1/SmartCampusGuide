@@ -13,6 +13,7 @@ import '../../core/theme/app_theme.dart';
 import '../user/profile_page.dart';
 import '../map/map_page.dart';
 import '../map/campus_vector_map_layer.dart';
+import '../map/user_location_marker.dart';
 import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
 import '../spot/spot_model.dart'; // 引入数据模型
@@ -510,12 +511,12 @@ class _TabHomeState extends State<_TabHome> {
           _GridButton(
             icon: Icons.workspace_premium_outlined,
             label: '景点打卡',
-            onTap: () => widget.onTabSelected(3),
+            onTap: () => Navigator.pushNamed(context, '/checkin'),
           ),
           _GridButton(
             icon: Icons.auto_stories_outlined,
             label: '校园故事',
-            onTap: () => Navigator.pushNamed(context, '/checkin'),
+            onTap: () => Navigator.pushNamed(context, '/story'),
           ),
           _GridButton(
             icon: Icons.directions_bus_filled_outlined,
@@ -525,7 +526,7 @@ class _TabHomeState extends State<_TabHome> {
           _GridButton(
             icon: Icons.cloud_download_outlined,
             label: '离线下载',
-            onTap: () {},
+            onTap: () => Navigator.pushNamed(context, '/offline_download'),
           ),
           _GridButton(
             icon: Icons.campaign_outlined,
@@ -608,7 +609,7 @@ class _TabHomeState extends State<_TabHome> {
             final SpotModel spot = item['spot'];
             String distStr = (item['distance'] as double).toStringAsFixed(0);
             return _spotTile(
-              '${spot.name} (距您约${distStr}米)',
+              '${spot.name} (距您约$distStr米)',
               spot.description.isNotEmpty ? spot.description : '暂无简介',
               () {
                 // 此时传入的绝对是后端的真实 ID
@@ -838,6 +839,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   void _triggerGuide(String spotName, {LatLng? position, double? distance}) {
     final shouldFetchGuide = spotName != _triggeredSpot;
+    final metricStart = DateTime.now();
+    debugPrint('[TTS_METRIC] click_start spot=$spotName');
     _stopGuideSpeech();
     if (position != null) {
       _moveUserTo(position, triggerNearest: false, clearGuide: false);
@@ -850,9 +853,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     });
     _autoCheckin(spotName);
     if (shouldFetchGuide) {
-      _fetchGuideContent(spotName);
+      _fetchGuideContent(spotName, metricStart: metricStart);
     } else {
-      _playGuide(spotName);
+      _playGuide(spotName, metricStart: metricStart);
     }
   }
 
@@ -925,7 +928,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     setState(() => _zoom = nextZoom);
   }
 
-  Future<void> _fetchGuideContent(String spot) async {
+  Future<void> _fetchGuideContent(String spot, {DateTime? metricStart}) async {
+    final requestLanguage = _language;
+    final requestPersona = _persona;
+    final requestVoice = _voice;
+    final requestMode = _guideMode;
     setState(() {
       _loadingGuide = true;
       _guideText = '';
@@ -937,12 +944,12 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         '/ai/guide/dynamic',
         data: {
           'spotName': spot,
-          'persona': _persona,
-          'language': _language,
-          'voice': _voice,
-          'style': _guideMode,
-          'guideMode': _guideMode,
-          'forceRefresh': true,
+          'persona': requestPersona,
+          'language': requestLanguage,
+          'voice': requestVoice,
+          'style': requestMode,
+          'guideMode': requestMode,
+          'forceRefresh': false,
           'environment': {
             'client': 'mobile_app',
             'scene': 'smart_audio_guide',
@@ -962,8 +969,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
           '/ai/guide/generate',
           queryParameters: {
             'spotName': spot,
-            'persona': _persona,
-            'language': _language,
+            'persona': requestPersona,
+            'language': requestLanguage,
           },
         );
         if (res.data['code'] == 200) {
@@ -973,15 +980,17 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         }
       } catch (_) {}
     }
-    if (text.isEmpty) text = _sanitizeGuideText(_getGuideText(spot));
-    if (mounted) {
+    if (text.isEmpty) {
+      text = _sanitizeGuideText(_getGuideText(spot, requestLanguage));
+    }
+    if (mounted && _triggeredSpot == spot && _language == requestLanguage) {
       setState(() {
         _guideText = text;
         _loadingGuide = false;
       });
     }
     if (mounted && _triggeredSpot == spot && _playing) {
-      _playGuide(spot);
+      _playGuide(spot, metricStart: metricStart);
     }
   }
 
@@ -989,47 +998,65 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final generated = _sanitizeGuideText(_guideText);
     return generated.isNotEmpty
         ? generated
-        : _sanitizeGuideText(_getGuideText(spot));
+        : _sanitizeGuideText(_getGuideText(spot, _language));
   }
 
-  Future<bool> _speakGuideText(String text, int playbackSerial) async {
+  Future<bool> _speakGuideText(
+    String text,
+    int playbackSerial, {
+    required DateTime metricStart,
+  }) async {
     final content = _sanitizeGuideText(text);
     if (content.isEmpty) return false;
     final voice = _voice;
     final language = _language;
     final rate = _speechRate;
-    try {
-      final res = await NetworkClient.aiDio.post(
-        '/api/tts/synthesize',
-        data: {
-          'text': content,
-          'voice': voice,
-          'language': language,
-          'rate': rate,
-        },
+    final elapsedMs = DateTime.now().difference(metricStart).inMilliseconds;
+    debugPrint(
+      '[TTS_METRIC] tts_request_start serial=$playbackSerial elapsed_ms=$elapsedMs chars=${content.length} voice=$voice language=$language',
+    );
+    if (_shouldUseNativeTts(language)) {
+      return _playNativeTts(
+        content,
+        playbackSerial,
+        voice: voice,
+        language: language,
+        rate: rate,
       );
-      final payload = res.data['data'];
-      final audioUrl = payload is Map ? payload['url']?.toString() : null;
-      if (audioUrl != null && audioUrl.isNotEmpty) {
-        if (!mounted || playbackSerial != _playbackSerial) return false;
-        final resolvedUrl = _resolveTtsAudioUrl(audioUrl);
-        await _stopGuideSpeech(invalidate: false);
-        if (!mounted || playbackSerial != _playbackSerial) return false;
-        await _audioPlayer.setReleaseMode(ReleaseMode.stop);
-        _audioCompleteSub?.cancel();
-        _audioCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
-          if (mounted && playbackSerial == _playbackSerial) {
-            setState(() => _playing = false);
-          }
-        });
-        await _audioPlayer.play(UrlSource(resolvedUrl));
-        return true;
-      }
-    } catch (e) {
-      debugPrint('云端 TTS 播放失败，回退系统 TTS: $e');
     }
-    if (!mounted || playbackSerial != _playbackSerial) return false;
-    await _stopGuideSpeech(invalidate: false);
+    try {
+      final ok = await _playCloudTtsChunks(
+        content,
+        playbackSerial,
+        metricStart: metricStart,
+        voice: voice,
+        language: language,
+        rate: rate,
+      );
+      if (ok) return true;
+    } catch (e) {
+      debugPrint('云端 TTS 播放失败，不使用系统 TTS: $e');
+    }
+    if (mounted && playbackSerial == _playbackSerial) {
+      _showTtsNotice('云端语音暂不可用，请稍后重试');
+    }
+    return false;
+  }
+
+  bool _shouldUseNativeTts(String language) {
+    final normalized = language.toLowerCase();
+    return normalized.startsWith('ja') ||
+        normalized.startsWith('fr') ||
+        normalized.startsWith('ko');
+  }
+
+  Future<bool> _playNativeTts(
+    String content,
+    int playbackSerial, {
+    required String voice,
+    required String language,
+    required double rate,
+  }) async {
     if (!mounted || playbackSerial != _playbackSerial) return false;
     try {
       final result = await _ttsChannel.invokeMapMethod<String, dynamic>(
@@ -1045,6 +1072,129 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       debugPrint('TTS 播放失败: $e');
     }
     return false;
+  }
+
+  Future<bool> _playCloudTtsChunks(
+    String text,
+    int playbackSerial, {
+    required DateTime metricStart,
+    required String voice,
+    required String language,
+    required double rate,
+  }) async {
+    final chunks = _splitTtsChunks(text);
+    if (chunks.isEmpty) return false;
+
+    await _audioPlayer.setReleaseMode(ReleaseMode.stop);
+    _audioCompleteSub?.cancel();
+    _audioCompleteSub = null;
+
+    Future<String?> synthesize(int index) {
+      return _synthesizeTtsAudioUrl(
+        chunks[index],
+        voice: voice,
+        language: language,
+        rate: rate,
+      );
+    }
+
+    var nextAudio = synthesize(0);
+    for (var index = 0; index < chunks.length; index++) {
+      final audioUrl = await nextAudio;
+      if (!mounted || playbackSerial != _playbackSerial) return false;
+      if (audioUrl == null || audioUrl.isEmpty) {
+        if (index == 0) return false;
+        break;
+      }
+
+      nextAudio = index + 1 < chunks.length
+          ? synthesize(index + 1)
+          : Future<String?>.value(null);
+
+      final completed = await _playTtsAudioUrlAndWait(
+        audioUrl,
+        playbackSerial,
+        metricStart,
+        chunkIndex: index,
+      );
+      if (!completed) return false;
+    }
+
+    if (mounted && playbackSerial == _playbackSerial) {
+      setState(() => _playing = false);
+    }
+    return true;
+  }
+
+  Future<String?> _synthesizeTtsAudioUrl(
+    String text, {
+    required String voice,
+    required String language,
+    required double rate,
+  }) async {
+    final res = await NetworkClient.aiDio.post(
+      '/api/tts/synthesize',
+      data: {'text': text, 'voice': voice, 'language': language, 'rate': rate},
+    );
+    final payload = res.data['data'];
+    final audioUrl = payload is Map ? payload['url']?.toString() : null;
+    if (audioUrl == null || audioUrl.isEmpty) return null;
+    return _resolveTtsAudioUrl(audioUrl);
+  }
+
+  Future<bool> _playTtsAudioUrlAndWait(
+    String audioUrl,
+    int playbackSerial,
+    DateTime metricStart, {
+    required int chunkIndex,
+  }) async {
+    final completed = Completer<void>();
+    _audioCompleteSub?.cancel();
+    _audioCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
+      if (!completed.isCompleted) completed.complete();
+    });
+    final elapsedMs = DateTime.now().difference(metricStart).inMilliseconds;
+    debugPrint(
+      '[TTS_METRIC] audio_play_start serial=$playbackSerial chunk=${chunkIndex + 1} elapsed_ms=$elapsedMs url=$audioUrl',
+    );
+    await _audioPlayer.play(UrlSource(audioUrl));
+
+    while (!completed.isCompleted) {
+      if (!mounted || playbackSerial != _playbackSerial) return false;
+      await Future.any([
+        completed.future,
+        Future<void>.delayed(const Duration(milliseconds: 180)),
+      ]);
+    }
+    return mounted && playbackSerial == _playbackSerial;
+  }
+
+  List<String> _splitTtsChunks(String text) {
+    final normalized = _sanitizeGuideText(
+      text,
+    ).replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (normalized.isEmpty) return const [];
+
+    final chunks = <String>[];
+    final buffer = StringBuffer();
+    final sentencePattern = RegExp(r'[^。！？!?；;]+[。！？!?；;]?');
+    for (final match in sentencePattern.allMatches(normalized)) {
+      final sentence = match.group(0)?.trim() ?? '';
+      if (sentence.isEmpty) continue;
+      final wouldExceed = buffer.length + sentence.length > 90;
+      if (wouldExceed && buffer.isNotEmpty) {
+        chunks.add(buffer.toString().trim());
+        buffer.clear();
+      }
+      buffer.write(sentence);
+      if (buffer.length >= 70) {
+        chunks.add(buffer.toString().trim());
+        buffer.clear();
+      }
+    }
+    if (buffer.isNotEmpty) chunks.add(buffer.toString().trim());
+    if (chunks.isEmpty && normalized.isNotEmpty) return [normalized];
+    return chunks;
   }
 
   String _sanitizeGuideText(String text) {
@@ -1087,12 +1237,17 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     }
   }
 
-  Future<void> _playGuide(String spot) async {
+  Future<void> _playGuide(String spot, {DateTime? metricStart}) async {
+    final effectiveMetricStart = metricStart ?? DateTime.now();
     final playbackSerial = ++_playbackSerial;
     await _stopGuideSpeech(invalidate: false);
     if (!mounted || playbackSerial != _playbackSerial) return;
     setState(() => _playing = true);
-    final ok = await _speakGuideText(_currentGuideText(spot), playbackSerial);
+    final ok = await _speakGuideText(
+      _currentGuideText(spot),
+      playbackSerial,
+      metricStart: effectiveMetricStart,
+    );
     if (!mounted ||
         playbackSerial != _playbackSerial ||
         _triggeredSpot != spot) {
@@ -1108,11 +1263,13 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   Future<void> _restartGuideAudioIfNeeded(String spot) async {
     final shouldReplay = _playing;
+    final metricStart = DateTime.now();
     await _stopGuideSpeech();
     if (!mounted) return;
     setState(() => _playing = false);
     if (shouldReplay) {
-      await _playGuide(spot);
+      debugPrint('[TTS_METRIC] click_start spot=$spot reason=reload');
+      await _playGuide(spot, metricStart: metricStart);
     }
   }
 
@@ -1354,9 +1511,12 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                   ),
                 Marker(
                   point: LatLng(_loc.latitude, _loc.longitude),
-                  width: 34,
-                  height: 34,
-                  child: const _UserLocationDot(),
+                  width: 46,
+                  height: 46,
+                  child: UserLocationMarker(
+                    headingDegrees: _loc.headingDegrees,
+                    showHeading: _loc.headingAvailable,
+                  ),
                 ),
               ],
             ),
@@ -1548,7 +1708,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                       if (_playing) {
                         _pauseGuide();
                       } else {
-                        _playGuide(spot);
+                        final metricStart = DateTime.now();
+                        debugPrint('[TTS_METRIC] click_start spot=$spot');
+                        _playGuide(spot, metricStart: metricStart);
                       }
                     },
                     child: Container(
@@ -1603,7 +1765,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                                 Text(
                                   _guideText.isNotEmpty
                                       ? _guideText
-                                      : _getGuideText(spot),
+                                      : _getGuideText(spot, _language),
                                   style: TextStyle(
                                     fontSize: expanded ? 14 : 13,
                                     color: AppTheme.textMain,
@@ -1899,7 +2061,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     };
   }
 
-  String _getGuideText(String spot) {
+  String _getGuideText(String spot, [String language = 'zh']) {
+    if (language != 'zh') return _fallbackGuideText(spot, language);
     const texts = {
       '中心图书馆':
           '欢迎来到西南大学中心图书馆！这里是西南地区最大的高校图书馆之一，馆藏丰富，环境优雅。配备了阅览区、自习区、电子阅览室等多个功能区域，是同学们学习、研究的最佳场所。',
@@ -1919,6 +2082,21 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     };
     return texts[spot] ??
         '欢迎来到$spot！这里是西南大学校园内的重要地点。请跟随AI导游的讲解，慢慢探索这片美丽的校园，感受百年学府的深厚底蕴与独特魅力。';
+  }
+
+  String _fallbackGuideText(String spot, String language) {
+    return switch (language) {
+      'en' =>
+        'Welcome to $spot. This is an important place on Southwest University campus. Notice its daily function, nearby buildings, and how students use this space for study, meetings, and campus life.',
+      'ja' =>
+        '$spotへようこそ。ここは西南大学キャンパスの大切な場所です。周囲の建物や人の流れを見ながら、学びと生活が重なる雰囲気を感じてください。',
+      'fr' =>
+        'Bienvenue a $spot. C est un lieu important du campus de l Universite du Sud-Ouest. Observez ses usages quotidiens, les batiments voisins et la vie etudiante autour de vous.',
+      'ko' =>
+        '$spot에 오신 것을 환영합니다. 이곳은 서남대학교 캠퍼스의 중요한 장소입니다. 주변 건물과 학생들의 일상을 살펴보며 캠퍼스의 분위기를 느껴 보세요.',
+      _ =>
+        'Welcome to $spot. This is an important campus place. Please enjoy the atmosphere and continue exploring Southwest University.',
+    };
   }
 }
 
@@ -1987,32 +2165,6 @@ class _SmartGuideMarker extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _UserLocationDot extends StatelessWidget {
-  const _UserLocationDot();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.blue.shade600,
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 3),
-        boxShadow: const [BoxShadow(color: Color(0x55000000), blurRadius: 8)],
-      ),
-      child: Center(
-        child: Container(
-          width: 7,
-          height: 7,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-          ),
-        ),
-      ),
     );
   }
 }

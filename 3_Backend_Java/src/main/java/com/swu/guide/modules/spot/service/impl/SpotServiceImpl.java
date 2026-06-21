@@ -22,6 +22,8 @@ public class SpotServiceImpl
         extends ServiceImpl<SpotMapper, Spot>
         implements SpotService {
 
+    private static final int SEARCH_CANDIDATE_LIMIT = 300;
+
     private static final List<SearchAlias> SEARCH_ALIASES = List.of(
             new SearchAlias("计信院", "计算机与信息科学学院 软件学院", "计算机与信息科学学院", "软件学院", "25教", "第25教学楼"),
             new SearchAlias("jixinyuan", "计算机与信息科学学院 软件学院", "计算机与信息科学学院", "软件学院", "25教", "第25教学楼"),
@@ -55,7 +57,7 @@ public class SpotServiceImpl
 
         Set<String> terms = expandKeyword(keyword);
         List<ScoredSpot> scoredSpots = new ArrayList<>();
-        for (Spot spot : this.list()) {
+        for (Spot spot : loadSearchCandidates(terms)) {
             int score = scoreSpot(spot, terms);
             if (score > 0) {
                 scoredSpots.add(new ScoredSpot(spot, score));
@@ -81,6 +83,61 @@ public class SpotServiceImpl
         result.setTotal(scoredSpots.size());
         result.setPages((scoredSpots.size() + safeSize - 1L) / safeSize);
         return result;
+    }
+
+    private List<Spot> loadSearchCandidates(Set<String> terms) {
+        List<String> databaseTerms = buildDatabaseTerms(terms);
+        if (databaseTerms.isEmpty()) {
+            return latestCandidateSpots();
+        }
+
+        LambdaQueryWrapper<Spot> wrapper = new LambdaQueryWrapper<>();
+        wrapper.and(nested -> {
+            for (String term : databaseTerms) {
+                nested.or(item -> item
+                        .like(Spot::getName, term)
+                        .or()
+                        .like(Spot::getDescription, term)
+                        .or()
+                        .like(Spot::getCategory, term));
+            }
+        });
+        wrapper.orderByDesc(Spot::getId);
+        wrapper.last("LIMIT " + SEARCH_CANDIDATE_LIMIT);
+
+        List<Spot> candidates = this.list(wrapper);
+        if (!candidates.isEmpty()) {
+            return candidates;
+        }
+
+        return latestCandidateSpots();
+    }
+
+    private List<Spot> latestCandidateSpots() {
+        LambdaQueryWrapper<Spot> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(Spot::getId);
+        wrapper.last("LIMIT " + SEARCH_CANDIDATE_LIMIT);
+        return this.list(wrapper);
+    }
+
+    private List<String> buildDatabaseTerms(Set<String> terms) {
+        Set<String> databaseTerms = new LinkedHashSet<>();
+        for (String term : terms) {
+            if (!StringUtils.hasText(term)) {
+                continue;
+            }
+            String trimmed = term.trim();
+            databaseTerms.add(trimmed);
+
+            String normalized = normalizeSearchText(trimmed);
+            if (StringUtils.hasText(normalized)) {
+                databaseTerms.add(normalized);
+            }
+        }
+        return databaseTerms.stream()
+                .filter(term -> term.length() >= 2)
+                .limit(24)
+                .toList();
     }
 
     private Set<String> expandKeyword(String keyword) {

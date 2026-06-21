@@ -4,14 +4,18 @@ import AVFoundation
 import CoreLocation
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, CLLocationManagerDelegate, AVSpeechSynthesizerDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate, CLLocationManagerDelegate, AVSpeechSynthesizerDelegate, FlutterStreamHandler {
   private let ttsChannelName = "smart_campus_guide/tts"
   private let locationChannelName = "smart_campus_guide/location"
+  private let headingChannelName = "smart_campus_guide/heading"
   private let speechSynthesizer = AVSpeechSynthesizer()
   private let locationManager = CLLocationManager()
   private var ttsChannel: FlutterMethodChannel?
   private var locationChannel: FlutterMethodChannel?
+  private var headingEventChannel: FlutterEventChannel?
+  private var headingEventSink: FlutterEventSink?
   private var pendingLocationResult: FlutterResult?
+  private var latestHeadingDegrees: CLLocationDirection?
   private var didLogSpeechVoices = false
 
   override func application(
@@ -22,10 +26,12 @@ import CoreLocation
     if let controller = window?.rootViewController as? FlutterViewController {
       setupTtsChannel(messenger: controller.binaryMessenger)
       setupLocationChannel(messenger: controller.binaryMessenger)
+      setupHeadingChannel(messenger: controller.binaryMessenger)
     }
     speechSynthesizer.delegate = self
     locationManager.delegate = self
     locationManager.desiredAccuracy = kCLLocationAccuracyBest
+    locationManager.headingFilter = kCLHeadingFilterNone
     return launched
   }
 
@@ -33,6 +39,7 @@ import CoreLocation
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     setupTtsChannel(messenger: engineBridge.applicationRegistrar.messenger())
     setupLocationChannel(messenger: engineBridge.applicationRegistrar.messenger())
+    setupHeadingChannel(messenger: engineBridge.applicationRegistrar.messenger())
   }
 
   private func setupTtsChannel(messenger: FlutterBinaryMessenger) {
@@ -79,6 +86,25 @@ import CoreLocation
     locationChannel = channel
   }
 
+  private func setupHeadingChannel(messenger: FlutterBinaryMessenger) {
+    guard headingEventChannel == nil else { return }
+    let channel = FlutterEventChannel(name: headingChannelName, binaryMessenger: messenger)
+    channel.setStreamHandler(self)
+    headingEventChannel = channel
+  }
+
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    headingEventSink = events
+    startHeadingUpdatesIfAvailable()
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    headingEventSink = nil
+    locationManager.stopUpdatingHeading()
+    return nil
+  }
+
   private func getCurrentLocation(result: @escaping FlutterResult) {
     guard CLLocationManager.locationServicesEnabled() else {
       result(["ok": false, "reason": "系统定位服务未开启"])
@@ -91,6 +117,7 @@ import CoreLocation
       pendingLocationResult = result
       locationManager.requestWhenInUseAuthorization()
     case .authorizedWhenInUse, .authorizedAlways:
+      startHeadingUpdatesIfAvailable()
       pendingLocationResult = result
       locationManager.requestLocation()
     case .denied, .restricted:
@@ -104,6 +131,7 @@ import CoreLocation
     guard let result = pendingLocationResult else { return }
     switch currentLocationAuthorizationStatus() {
     case .authorizedWhenInUse, .authorizedAlways:
+      startHeadingUpdatesIfAvailable()
       manager.requestLocation()
     case .denied, .restricted:
       pendingLocationResult = nil
@@ -135,14 +163,60 @@ import CoreLocation
       "latitude": location.coordinate.latitude,
       "longitude": location.coordinate.longitude,
       "accuracy": location.horizontalAccuracy,
+      "heading": currentHeadingDegrees(for: location),
       "timestamp": location.timestamp.timeIntervalSince1970
     ])
+  }
+
+  func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+    let trueHeading = newHeading.trueHeading
+    let magneticHeading = newHeading.magneticHeading
+    var heading: CLLocationDirection = -1
+    if trueHeading >= 0 {
+      heading = trueHeading
+    } else if magneticHeading >= 0 {
+      heading = magneticHeading
+    }
+    guard heading >= 0 else { return }
+    latestHeadingDegrees = heading
+    headingEventSink?([
+      "heading": heading,
+      "accuracy": newHeading.headingAccuracy,
+      "timestamp": newHeading.timestamp.timeIntervalSince1970
+    ])
+  }
+
+  func locationManagerShouldDisplayHeadingCalibration(_ manager: CLLocationManager) -> Bool {
+    return true
+  }
+
+  override func applicationWillEnterForeground(_ application: UIApplication) {
+    super.applicationWillEnterForeground(application)
+    if headingEventSink != nil {
+      startHeadingUpdatesIfAvailable()
+    }
   }
 
   func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
     guard let result = pendingLocationResult else { return }
     pendingLocationResult = nil
     result(["ok": false, "reason": "定位失败：\(error.localizedDescription)"])
+  }
+
+  private func startHeadingUpdatesIfAvailable() {
+    guard CLLocationManager.headingAvailable() else { return }
+    locationManager.headingOrientation = .portrait
+    locationManager.startUpdatingHeading()
+  }
+
+  private func currentHeadingDegrees(for location: CLLocation) -> Double {
+    if let heading = latestHeadingDegrees, heading >= 0 {
+      return heading
+    }
+    if location.course >= 0 {
+      return location.course
+    }
+    return -1
   }
 
   private func speak(text: String, voice: String, language: String, rate: Double) -> [String: Any] {

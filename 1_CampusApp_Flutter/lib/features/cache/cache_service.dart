@@ -4,10 +4,10 @@ import '../../core/network/network_client.dart';
 class CacheService {
   static Future<bool> preloadSpots() async {
     try {
-      final res = await NetworkClient.get('/spot/list', queryParameters: {
-        'page': 1,
-        'size': 1000,
-      });
+      final res = await NetworkClient.get(
+        '/spot/list',
+        queryParameters: {'page': 1, 'size': 1000},
+      );
 
       final responseData = res.data;
       if (responseData['code'] == 200) {
@@ -23,11 +23,12 @@ class CacheService {
               'name': json['name'] ?? '',
               'category': json['category'],
               'description': json['description'],
-              'coverImage': json['coverImage'] ?? '',
-              'images': json['images'],
+              'cover_image': json['coverImage'] ?? json['cover_image'] ?? '',
               // 安全解析可能传过来的 BigDecimal 数字或字符串
-              'longitude': double.tryParse(json['longitude']?.toString() ?? '0') ?? 0.0,
-              'latitude': double.tryParse(json['latitude']?.toString() ?? '0') ?? 0.0,
+              'longitude':
+                  double.tryParse(json['longitude']?.toString() ?? '0') ?? 0.0,
+              'latitude':
+                  double.tryParse(json['latitude']?.toString() ?? '0') ?? 0.0,
             };
           }).toList();
 

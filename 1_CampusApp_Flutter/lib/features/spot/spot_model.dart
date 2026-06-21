@@ -46,7 +46,7 @@ class SpotModel {
       category: json['category'] ?? 'default',
       visitCount: int.tryParse(json['visitCount']?.toString() ?? '0') ?? 0,
 
-      coverImage: json['coverImage'] ?? '',
+      coverImage: json['coverImage'] ?? json['cover_image'] ?? '',
       images: parsedImages,
       videoUrl: json['videoUrl'], // 当前接口暂不返回该字段
       rating:

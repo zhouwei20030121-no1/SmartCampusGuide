@@ -11,6 +11,7 @@ import '../cache/cache_service.dart';
 import '../location/location_service.dart';
 import '../spot/spot_model.dart';
 import 'campus_vector_map_layer.dart';
+import 'user_location_marker.dart';
 
 class MapPage extends StatefulWidget {
   const MapPage({super.key});
@@ -418,17 +419,11 @@ class _MapPageState extends State<MapPage> {
                     markers: [
                       Marker(
                         point: LatLng(loc.latitude, loc.longitude),
-                        width: 24,
-                        height: 24,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade600,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: const [
-                              BoxShadow(color: Colors.black26, blurRadius: 6),
-                            ],
-                          ),
+                        width: 46,
+                        height: 46,
+                        child: UserLocationMarker(
+                          headingDegrees: loc.headingDegrees,
+                          showHeading: loc.headingAvailable,
                         ),
                       ),
                     ],

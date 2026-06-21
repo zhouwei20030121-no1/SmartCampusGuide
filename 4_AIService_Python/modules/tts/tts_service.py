@@ -1,6 +1,7 @@
 import os
-import uuid
 import logging
+import hashlib
+import json
 import httpx
 from config import settings
 
@@ -63,7 +64,7 @@ class TTSService:
         voice: str = "gentle_guide",
         rate: float = 1.0,
     ) -> dict:
-        """调用百炼 Qwen-TTS/CosyVoice 合成语音，并缓存为本地 mp3 文件。"""
+        """调用百炼 Qwen-TTS/CosyVoice 合成语音，并缓存为本地音频文件。"""
         content = text.strip()
         if not content:
             raise ValueError("合成文本不能为空")
@@ -76,8 +77,24 @@ class TTSService:
         language_hint = self._language_hint(language)
         audio_dir = os.path.join(os.path.dirname(__file__), "..", "..", "audio_output")
         os.makedirs(audio_dir, exist_ok=True)
-        filename = f"tts_{uuid.uuid4().hex[:8]}.mp3"
-        filepath = os.path.join(audio_dir, filename)
+        cache_key = self._cache_key(content, language_hint, profile_key, speech_rate)
+        cached = self._find_cached_audio(audio_dir, cache_key)
+        if cached:
+            filename, filepath, media_type = cached
+            return self._build_result(
+                filename=filename,
+                filepath=filepath,
+                text=text,
+                language=language,
+                profile_key=profile_key,
+                profile=profile,
+                speech_rate=speech_rate,
+                request_id=None,
+                expires_at=None,
+                usage={},
+                media_type=media_type,
+                cached=True,
+            )
 
         payload = self._build_tts_payload(
             content=content,
@@ -108,6 +125,9 @@ class TTSService:
             audio_response = await client.get(remote_url)
             if audio_response.status_code >= 400 or not audio_response.content:
                 raise RuntimeError(f"音频下载失败：HTTP {audio_response.status_code}")
+            ext, media_type = self._detect_audio_format(audio_response.content)
+            filename = f"tts_{cache_key}.{ext}"
+            filepath = os.path.join(audio_dir, filename)
             with open(filepath, "wb") as f:
                 f.write(audio_response.content)
 
@@ -128,6 +148,73 @@ class TTSService:
             data.get("request_id"),
         )
 
+        return self._build_result(
+            filename=filename,
+            filepath=filepath,
+            text=text,
+            language=language,
+            profile_key=profile_key,
+            profile=profile,
+            speech_rate=speech_rate,
+            request_id=data.get("request_id"),
+            expires_at=audio.get("expires_at"),
+            usage=usage,
+            media_type=media_type,
+            cached=False,
+        )
+
+    def _cache_key(
+        self,
+        content: str,
+        language_hint: str,
+        profile_key: str,
+        speech_rate: float,
+    ) -> str:
+        raw = json.dumps(
+            {
+                "model": settings.TTS_MODEL,
+                "text": content,
+                "language": language_hint,
+                "voice": profile_key,
+                "rate": round(speech_rate, 3),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+    def _find_cached_audio(self, audio_dir: str, cache_key: str) -> tuple[str, str, str] | None:
+        for ext, media_type in (("wav", "audio/wav"), ("mp3", "audio/mpeg")):
+            filename = f"tts_{cache_key}.{ext}"
+            filepath = os.path.join(audio_dir, filename)
+            if os.path.exists(filepath) and os.path.getsize(filepath) > 44:
+                return filename, filepath, media_type
+        return None
+
+    def _detect_audio_format(self, content: bytes) -> tuple[str, str]:
+        if content.startswith(b"RIFF") and content[8:12] == b"WAVE":
+            return "wav", "audio/wav"
+        if content.startswith(b"ID3") or content[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+            return "mp3", "audio/mpeg"
+        return "bin", "application/octet-stream"
+
+    def _build_result(
+        self,
+        *,
+        filename: str,
+        filepath: str,
+        text: str,
+        language: str,
+        profile_key: str,
+        profile: dict,
+        speech_rate: float,
+        request_id: str | None,
+        expires_at: str | None,
+        usage: dict,
+        media_type: str,
+        cached: bool,
+    ) -> dict:
         return {
             "filename": filename,
             "filepath": filepath,
@@ -141,13 +228,15 @@ class TTSService:
             "voice_gender": profile["gender"],
             "model": settings.TTS_MODEL,
             "rate": speech_rate,
-            "request_id": data.get("request_id"),
-            "expires_at": audio.get("expires_at"),
+            "request_id": request_id,
+            "expires_at": expires_at,
             "usage": usage,
             "characters": usage.get("characters"),
             "input_tokens": usage.get("input_tokens"),
             "output_tokens": usage.get("output_tokens"),
             "total_tokens": usage.get("total_tokens"),
+            "media_type": media_type,
+            "cached": cached,
         }
 
     def list_voices(self) -> dict:
