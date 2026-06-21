@@ -949,6 +949,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   StreamSubscription<void>? _audioCompleteSub;
   int _playbackSerial = 0;
   bool _playing = false;
+  bool _guidePlaying = false;
   String _guideText = '';
   bool _loadingGuide = false;
   bool _loadingStory = false;
@@ -1496,45 +1497,56 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     final chunks = _splitTtsChunks(text);
     if (chunks.isEmpty) return false;
 
-    await _audioPlayer.setReleaseMode(ReleaseMode.stop);
-    _audioCompleteSub?.cancel();
-    _audioCompleteSub = null;
+    _guidePlaying = true;
+    try {
+      await _audioPlayer.setReleaseMode(ReleaseMode.stop);
+      _audioCompleteSub?.cancel();
+      _audioCompleteSub = null;
 
-    Future<String?> synthesize(int index) {
-      return _synthesizeTtsAudioUrl(
-        chunks[index],
-        voice: voice,
-        language: language,
-        rate: rate,
-      );
-    }
-
-    var nextAudio = synthesize(0);
-    for (var index = 0; index < chunks.length; index++) {
-      final audioUrl = await nextAudio;
-      if (!mounted || playbackSerial != _playbackSerial) return false;
-      if (audioUrl == null || audioUrl.isEmpty) {
-        if (index == 0) return false;
-        break;
+      Future<String?> synthesize(int index) {
+        return _synthesizeTtsAudioUrl(
+          chunks[index],
+          voice: voice,
+          language: language,
+          rate: rate,
+        );
       }
 
-      nextAudio = index + 1 < chunks.length
-          ? synthesize(index + 1)
-          : Future<String?>.value(null);
+      var nextAudio = synthesize(0);
+      for (var index = 0; index < chunks.length; index++) {
+        // 等待用户恢复播放（暂停状态下不发起下一段）
+        while (!_playing) {
+          if (!mounted || playbackSerial != _playbackSerial) return false;
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+        }
 
-      final completed = await _playTtsAudioUrlAndWait(
-        audioUrl,
-        playbackSerial,
-        metricStart,
-        chunkIndex: index,
-      );
-      if (!completed) return false;
-    }
+        final audioUrl = await nextAudio;
+        if (!mounted || playbackSerial != _playbackSerial) return false;
+        if (audioUrl == null || audioUrl.isEmpty) {
+          if (index == 0) return false;
+          break;
+        }
 
-    if (mounted && playbackSerial == _playbackSerial) {
-      setState(() => _playing = false);
+        nextAudio = index + 1 < chunks.length
+            ? synthesize(index + 1)
+            : Future<String?>.value(null);
+
+        final completed = await _playTtsAudioUrlAndWait(
+          audioUrl,
+          playbackSerial,
+          metricStart,
+          chunkIndex: index,
+        );
+        if (!completed) return false;
+      }
+
+      if (mounted && playbackSerial == _playbackSerial) {
+        setState(() => _playing = false);
+      }
+      return true;
+    } finally {
+      _guidePlaying = false;
     }
-    return true;
   }
 
   Future<String?> _synthesizeTtsAudioUrl(
@@ -1633,7 +1645,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   Future<void> _stopGuideSpeech({bool invalidate = true}) async {
-    if (invalidate) _playbackSerial++;
+    if (invalidate) {
+      _playbackSerial++;
+      _guidePlaying = false;
+    }
     _audioCompleteSub?.cancel();
     _audioCompleteSub = null;
     try {
@@ -1651,6 +1666,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   Future<void> _playGuide(String spot, {DateTime? metricStart}) async {
     final effectiveMetricStart = metricStart ?? DateTime.now();
     final playbackSerial = ++_playbackSerial;
+    _guidePlaying = false;
     await _stopGuideSpeech(invalidate: false);
     if (!mounted || playbackSerial != _playbackSerial) return;
     setState(() => _playing = true);
@@ -1659,14 +1675,34 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       playbackSerial,
       metricStart: effectiveMetricStart,
     );
-    if (mounted && !ok) {
+    if (mounted && !ok && playbackSerial == _playbackSerial) {
       setState(() => _playing = false);
     }
   }
 
   Future<void> _pauseGuide() async {
     setState(() => _playing = false);
-    await _stopGuideSpeech();
+    try {
+      await _audioPlayer.pause();
+    } catch (e) {
+      debugPrint('TTS 暂停失败: $e');
+    }
+    try {
+      await _ttsChannel.invokeMethod('stop');
+    } catch (_) {}
+  }
+
+  Future<void> _resumeGuide(String spot) async {
+    setState(() => _playing = true);
+    if (_guidePlaying) {
+      // chunk 循环仍在运行，直接恢复当前音频位置
+      try {
+        await _audioPlayer.resume();
+      } catch (_) {}
+    } else {
+      // 循环已结束（播完了），重新开始
+      await _playGuide(spot, metricStart: DateTime.now());
+    }
   }
 
   void _showTtsNotice(String message) {
@@ -2417,7 +2453,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               value: _persona,
               items: const {'新生': '新生', '校友': '校友', '游客': '游客'},
               onChanged: (value) {
-                setState(() => _persona = value);
+                _stopGuideSpeech();
+                setState(() { _persona = value; _playing = true; });
                 _fetchGuideContent(spot);
               },
             ),
@@ -2432,7 +2469,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 'ko': '한국어',
               },
               onChanged: (value) {
-                setState(() => _language = value);
+                _stopGuideSpeech();
+                setState(() { _language = value; _playing = true; });
                 _fetchGuideContent(spot);
               },
             ),
@@ -2462,7 +2500,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 'practical': '实用信息',
               },
               onChanged: (value) {
-                setState(() => _guideMode = value);
+                _stopGuideSpeech();
+                setState(() { _guideMode = value; _playing = true; });
                 _fetchGuideContent(spot);
               },
             ),
@@ -2493,19 +2532,32 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               icon: Icons.more_time_rounded,
               label: '讲详细点',
               onTap: () {
-                setState(() => _guideMode = 'deep');
+                _stopGuideSpeech();
+                setState(() { _guideMode = 'deep'; _playing = true; });
                 _fetchGuideContent(spot);
               },
             ),
             _actionChip(
-              icon: Icons.swap_calls_rounded,
-              label: '换个角度',
-              onTap: () {
-                setState(() {
-                  _guideMode = _persona == '新生' ? 'practical' : 'standard';
-                  _persona = _persona == '游客' ? '校友' : '游客';
-                });
-                _fetchGuideContent(spot);
+              icon: Icons.info_outline_rounded,
+              label: '景点详情',
+              onTap: () async {
+                try {
+                  final res = await NetworkClient.dio.get(
+                    '/spot/list',
+                    queryParameters: {'keyword': spot, 'size': 1},
+                  );
+                  if (res.data['code'] == 200) {
+                    final records = (res.data['data']['records'] as List?) ?? [];
+                    if (records.isNotEmpty && context.mounted) {
+                      final spotId = records.first['id'] as int;
+                      Navigator.pushNamed(
+                        context,
+                        '/spot/detail',
+                        arguments: {'spotId': spotId},
+                      );
+                    }
+                  }
+                } catch (_) {}
               },
             ),
           ]),
@@ -2515,7 +2567,8 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
               icon: Icons.theater_comedy_outlined,
               label: '讲个故事',
               onTap: () {
-                setState(() => _guideMode = 'story');
+                _stopGuideSpeech();
+                setState(() { _guideMode = 'story'; _playing = true; });
                 _fetchGuideContent(spot);
               },
             ),
@@ -2590,14 +2643,13 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   Future<void> _changeGuideVoice(String spot, String voice) async {
     if (_voice == voice) return;
-    final wasPlaying = _playing;
     setState(() {
       _voice = voice;
-      _playing = false;
+      _playing = true;
     });
     await _stopGuideSpeech();
     _showTtsNotice('已切换为${_voiceLabel(voice)}，将使用云端音色重新合成');
-    if (wasPlaying && mounted) {
+    if (mounted) {
       await _playGuide(spot, metricStart: DateTime.now());
     }
   }
@@ -2858,9 +2910,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                             if (_playing) {
                               _pauseGuide();
                             } else {
-                              final metricStart = DateTime.now();
-                              debugPrint('[TTS_METRIC] click_start spot=$spot');
-                              _playGuide(spot!, metricStart: metricStart);
+                              _resumeGuide(spot!);
                             }
                           }
                         : null,

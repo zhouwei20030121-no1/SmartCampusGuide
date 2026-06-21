@@ -104,7 +104,7 @@ public class AiGuideService {
                 Map<String, Object> result = normalizeMap(data);
                 String text = stripStageDirections(String.valueOf(result.getOrDefault("text", "")));
                 result.put("text", translateIfNeeded(spotName, text, language));
-                persistGuideResource(spotName, style, language, voice, String.valueOf(result.getOrDefault("text", "")));
+                persistGuideResource(spotName, style + "_" + persona, language, voice, String.valueOf(result.getOrDefault("text", "")));
                 return result;
             }
         } catch (Exception ignored) {}
@@ -120,7 +120,7 @@ public class AiGuideService {
         fallback.put("voice", voice);
         fallback.put("style", style);
         fallback.put("fallback", true);
-        persistGuideResource(spotName, style, language, voice, stripStageDirections(text));
+        persistGuideResource(spotName, style + "_" + persona, language, voice, stripStageDirections(text));
         return fallback;
     }
 
@@ -133,16 +133,8 @@ public class AiGuideService {
                     "select content, style_type, language, voice_type from ai_explanation "
                             + "where spot_id = ? and style_type = ? and language = ? and voice_type = ? "
                             + "order by id desc limit 1",
-                    spotId, style, language, voice
+                    spotId, style + "_" + persona, language, voice
             );
-            if (rows.isEmpty()) {
-                rows = jdbcTemplate.queryForList(
-                        "select content, style_type, language, voice_type from ai_explanation "
-                                + "where spot_id = ? and style_type = ? and language = ? and voice_type = ? "
-                                + "order by id desc limit 1",
-                        spotId, persona, language, voice
-                );
-            }
             if (!rows.isEmpty()) {
                 Map<String, Object> row = rows.get(0);
                 result.put("spotName", spotName);

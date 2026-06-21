@@ -198,12 +198,13 @@ class TTSService:
                 },
             }
 
+        # qwen-tts-latest (CosyVoice 2) auto-detects language from text;
+        # language_type field with Chinese voice IDs causes API errors for non-zh.
         return {
             "model": settings.TTS_MODEL,
             "input": {
                 "text": content,
                 "voice": voice_id,
-                "language_type": self._language_type(language),
             },
         }
 
