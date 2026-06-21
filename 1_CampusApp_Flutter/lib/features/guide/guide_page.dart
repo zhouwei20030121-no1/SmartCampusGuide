@@ -139,30 +139,16 @@ class _GuidePageState extends State<GuidePage> {
       if (ok) {
         return;
       }
-    } catch (e) {
-      debugPrint('云端 TTS 播放失败，回退系统 TTS: $e');
-    }
-
-    if (!mounted || playbackSerial != _playbackSerial) return;
-    await _stop(updateState: false, invalidate: false, markStopped: false);
-    if (!mounted || playbackSerial != _playbackSerial) return;
-    try {
-      final result = await _ttsChannel.invokeMapMethod<String, dynamic>(
-        'speak',
-        {'text': text, 'voice': voice, 'language': language, 'rate': rate},
-      );
-      if (result?['ok'] != true && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result?['reason']?.toString() ?? 'TTS 播放失败')),
-        );
-        setState(() => _isPlaying = false);
-      }
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('TTS 通道不可用')));
+      if (!mounted || playbackSerial != _playbackSerial) return;
+      _showCloudTtsUnavailable();
       setState(() => _isPlaying = false);
+      return;
+    } catch (e) {
+      debugPrint('云端 TTS 播放失败: $e');
+      if (!mounted || playbackSerial != _playbackSerial) return;
+      _showCloudTtsUnavailable();
+      setState(() => _isPlaying = false);
+      return;
     }
   }
 
@@ -336,6 +322,17 @@ class _GuidePageState extends State<GuidePage> {
         await _startPlayback(metricStart: metricStart);
       }
     });
+  }
+
+  void _showCloudTtsUnavailable() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('云端音色合成不可用，请确认 Python AI 服务已启动'),
+        ),
+      );
   }
 
   String _sanitizeGuideText(String text) {

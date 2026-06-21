@@ -1472,27 +1472,17 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         rate: rate,
       );
       if (ok) return true;
-    } catch (e) {
-      debugPrint('云端 TTS 播放失败，回退系统 TTS: $e');
-    }
-
-    if (!mounted || playbackSerial != _playbackSerial) return false;
-    await _stopGuideSpeech(invalidate: false);
-    if (!mounted || playbackSerial != _playbackSerial) return false;
-    try {
-      final result = await _ttsChannel.invokeMapMethod<String, dynamic>(
-        'speak',
-        {'text': content, 'voice': voice, 'language': language, 'rate': rate},
-      );
-      if (result?['ok'] == true) {
-        return true;
+      if (mounted && playbackSerial == _playbackSerial) {
+        _showCloudTtsUnavailable();
       }
-      _showTtsNotice(result?['reason']?.toString() ?? 'TTS 播放失败');
+      return false;
     } catch (e) {
-      _showTtsNotice('TTS 通道未生效，请停止 App 后重新 Run');
-      debugPrint('TTS 播放失败: $e');
+      debugPrint('云端 TTS 播放失败: $e');
+      if (mounted && playbackSerial == _playbackSerial) {
+        _showCloudTtsUnavailable();
+      }
+      return false;
     }
-    return false;
   }
 
   Future<bool> _playCloudTtsChunks(
@@ -1684,6 +1674,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showCloudTtsUnavailable() {
+    _showTtsNotice('云端音色合成不可用，请确认 Python AI 服务已启动');
   }
 
   @override
@@ -2455,10 +2449,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                 'calm_male': '京腔男声',
               },
               onChanged: (value) {
-                setState(() => _voice = value);
-                if (_playing) {
-                  _playGuide(spot);
-                }
+                _changeGuideVoice(spot, value);
               },
             ),
             _optionMenu(
@@ -2595,6 +2586,20 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         ),
       ),
     );
+  }
+
+  Future<void> _changeGuideVoice(String spot, String voice) async {
+    if (_voice == voice) return;
+    final wasPlaying = _playing;
+    setState(() {
+      _voice = voice;
+      _playing = false;
+    });
+    await _stopGuideSpeech();
+    _showTtsNotice('已切换为${_voiceLabel(voice)}，将使用云端音色重新合成');
+    if (wasPlaying && mounted) {
+      await _playGuide(spot, metricStart: DateTime.now());
+    }
   }
 
   Widget _actionChip({
