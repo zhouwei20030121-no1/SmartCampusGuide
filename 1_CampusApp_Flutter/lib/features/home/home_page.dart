@@ -17,6 +17,7 @@ import '../map/map_user_location_controller.dart';
 import '../location/location_service.dart';
 import '../../core/network/network_client.dart';
 import '../guide/guide_coordination_service.dart';
+import '../guide/tts_chunker.dart';
 import '../route/amap_route_api.dart';
 import '../spot/spot_model.dart';
 import '../story/campus_story_page.dart';
@@ -951,6 +952,9 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   bool _playing = false;
   bool _guidePlaying = false;
   String _guideText = '';
+  String? _guideTextSpot;
+  String _guideTextLanguage = 'zh';
+  int _guideRequestSeq = 0;
   bool _loadingGuide = false;
   bool _loadingStory = false;
   String _persona = '新生';
@@ -1099,6 +1103,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       _triggeredSpot = null;
       _playing = false;
       _guideText = '';
+      _guideTextSpot = null;
       _routePriorityNotice = '';
     });
   }
@@ -1108,7 +1113,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     if (autoPlay) {
       debugPrint('[TTS_METRIC] click_start spot=$spot trigger=map');
     }
-    final shouldFetchGuide = spot != _triggeredSpot;
+    final shouldFetchGuide =
+        spot != _triggeredSpot ||
+        _guideTextSpot != spot ||
+        _guideTextLanguage != _language;
     _stopGuideSpeech();
     _cancelDwellTimer();
 
@@ -1386,6 +1394,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       _pendingRemainingSeconds = 0;
       _playing = false;
       _guideText = '';
+      _guideTextSpot = null;
     });
   }
 
@@ -1443,10 +1452,15 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   String _currentGuideText(String spot) {
-    final generated = _sanitizeGuideText(_guideText);
+    final generated = _visibleGuideText(spot);
     return generated.isNotEmpty
         ? generated
-        : _sanitizeGuideText(_getGuideText(spot));
+        : _sanitizeGuideText(_getGuideText(spot, language: _language));
+  }
+
+  String _visibleGuideText(String spot) {
+    if (_guideTextSpot != spot || _guideTextLanguage != _language) return '';
+    return _sanitizeGuideText(_guideText);
   }
 
   Future<bool> _speakGuideText(
@@ -1593,31 +1607,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   }
 
   List<String> _splitTtsChunks(String text) {
-    final normalized = _sanitizeGuideText(
-      text,
-    ).replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (normalized.isEmpty) return const [];
-
-    final chunks = <String>[];
-    final buffer = StringBuffer();
-    final sentencePattern = RegExp(r'[^。！？!?；;]+[。！？!?；;]?');
-    for (final match in sentencePattern.allMatches(normalized)) {
-      final sentence = match.group(0)?.trim() ?? '';
-      if (sentence.isEmpty) continue;
-      final wouldExceed = buffer.length + sentence.length > 90;
-      if (wouldExceed && buffer.isNotEmpty) {
-        chunks.add(buffer.toString().trim());
-        buffer.clear();
-      }
-      buffer.write(sentence);
-      if (buffer.length >= 70) {
-        chunks.add(buffer.toString().trim());
-        buffer.clear();
-      }
-    }
-    if (buffer.isNotEmpty) chunks.add(buffer.toString().trim());
-    if (chunks.isEmpty && normalized.isNotEmpty) return [normalized];
-    return chunks;
+    return splitTtsChunks(_sanitizeGuideText(text));
   }
 
   String _sanitizeGuideText(String text) {
@@ -1856,9 +1846,22 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
 
   Future<void> _fetchGuideContent(String spot, {DateTime? metricStart}) async {
     final effectiveMetricStart = metricStart ?? DateTime.now();
+    final requestSeq = ++_guideRequestSeq;
+    final requestLanguage = _language;
+    final requestPersona = _persona;
+    final requestVoice = _voice;
+    final requestGuideMode = _guideMode;
+    bool isStaleRequest() {
+      return !mounted ||
+          requestSeq != _guideRequestSeq ||
+          _triggeredSpot != spot ||
+          _language != requestLanguage;
+    }
+
     setState(() {
       _loadingGuide = true;
       _guideText = '';
+      _guideTextSpot = null;
     });
     var text = '';
     try {
@@ -1866,11 +1869,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         '/ai/guide/dynamic',
         data: {
           'spotName': spot,
-          'persona': _persona,
-          'language': _language,
-          'voice': _voice,
-          'style': _guideMode,
-          'guideMode': _guideMode,
+          'persona': requestPersona,
+          'language': requestLanguage,
+          'voice': requestVoice,
+          'style': requestGuideMode,
+          'guideMode': requestGuideMode,
           'environment': {
             'client': 'mobile_app',
             'scene': 'smart_audio_guide',
@@ -1885,9 +1888,11 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
       }
     } catch (_) {}
     if (text.isNotEmpty) {
-      if (!mounted) return;
+      if (isStaleRequest()) return;
       setState(() {
         _guideText = _sanitizeGuideText(text);
+        _guideTextSpot = spot;
+        _guideTextLanguage = requestLanguage;
         _loadingGuide = false;
       });
       if (_triggeredSpot == spot && _playing) {
@@ -1901,22 +1906,24 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
         '/ai/guide/generate',
         queryParameters: {
           'spotName': spot,
-          'persona': _persona,
-          'language': _language,
+          'persona': requestPersona,
+          'language': requestLanguage,
         },
       );
       if (res.data['code'] == 200) {
         text = (res.data['data']['text'] ?? '').toString().trim();
       }
     } catch (_) {
-      text = _getGuideText(spot);
+      text = _getGuideText(spot, language: requestLanguage);
     } finally {
-      if (!mounted) return;
+      if (isStaleRequest()) return;
       if (text.isEmpty) {
-        text = _getGuideText(spot);
+        text = _getGuideText(spot, language: requestLanguage);
       }
       setState(() {
         _guideText = _sanitizeGuideText(text);
+        _guideTextSpot = spot;
+        _guideTextLanguage = requestLanguage;
         _loadingGuide = false;
       });
       if (_triggeredSpot == spot && _playing) {
@@ -2461,13 +2468,7 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
             _optionMenu(
               icon: Icons.translate,
               value: _languageLabel(_language),
-              items: const {
-                'zh': '中文',
-                'en': 'EN',
-                'ja': '日本語',
-                'fr': 'FR',
-                'ko': '한국어',
-              },
+              items: const {'zh': '中文', 'en': 'EN'},
               onChanged: (value) {
                 _stopGuideSpeech();
                 setState(() { _language = value; _playing = true; });
@@ -2817,9 +2818,6 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
   String _languageLabel(String language) {
     return switch (language) {
       'en' => 'EN',
-      'ja' => '日本語',
-      'fr' => 'FR',
-      'ko' => '한국어',
       _ => '中文',
     };
   }
@@ -2964,9 +2962,12 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _guideText.isNotEmpty
-                                      ? _guideText
-                                      : _getGuideText(spot),
+                                  _visibleGuideText(spot).isNotEmpty
+                                      ? _visibleGuideText(spot)
+                                      : _getGuideText(
+                                          spot,
+                                          language: _language,
+                                        ),
                                   style: TextStyle(
                                     fontSize: expanded ? 14 : 13,
                                     color: AppTheme.textMain,
@@ -3014,7 +3015,10 @@ class _TabSmartAudioState extends State<_TabSmartAudio> {
     );
   }
 
-  String _getGuideText(String spot) {
+  String _getGuideText(String spot, {String language = 'zh'}) {
+    if (language == 'en') {
+      return 'Welcome to $spot. This is an important place on Southwest University campus. Follow the AI guide to learn about its functions, campus life around it, and the stories connected with this location.';
+    }
     const texts = {
       '中心图书馆':
           '欢迎来到西南大学中心图书馆！这里是西南地区最大的高校图书馆之一，馆藏丰富，环境优雅。配备了阅览区、自习区、电子阅览室等多个功能区域，是同学们学习、研究的最佳场所。',

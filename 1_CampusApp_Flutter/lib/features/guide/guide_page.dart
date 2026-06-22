@@ -7,6 +7,7 @@ import 'package:audioplayers/audioplayers.dart';
 import '../../core/network/network_client.dart';
 import '../../core/theme/app_theme.dart';
 import '../cache/cache_service.dart';
+import 'tts_chunker.dart';
 
 class GuidePage extends StatefulWidget {
   final String? spotName;
@@ -248,31 +249,7 @@ class _GuidePageState extends State<GuidePage> {
   }
 
   List<String> _splitTtsChunks(String text) {
-    final normalized = _sanitizeGuideText(
-      text,
-    ).replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (normalized.isEmpty) return const [];
-
-    final chunks = <String>[];
-    final buffer = StringBuffer();
-    final sentencePattern = RegExp(r'[^。！？!?；;]+[。！？!?；;]?');
-    for (final match in sentencePattern.allMatches(normalized)) {
-      final sentence = match.group(0)?.trim() ?? '';
-      if (sentence.isEmpty) continue;
-      final wouldExceed = buffer.length + sentence.length > 90;
-      if (wouldExceed && buffer.isNotEmpty) {
-        chunks.add(buffer.toString().trim());
-        buffer.clear();
-      }
-      buffer.write(sentence);
-      if (buffer.length >= 70) {
-        chunks.add(buffer.toString().trim());
-        buffer.clear();
-      }
-    }
-    if (buffer.isNotEmpty) chunks.add(buffer.toString().trim());
-    if (chunks.isEmpty && normalized.isNotEmpty) return [normalized];
-    return chunks;
+    return splitTtsChunks(_sanitizeGuideText(text));
   }
 
   Future<void> _stop({
